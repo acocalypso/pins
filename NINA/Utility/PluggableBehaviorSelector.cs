@@ -124,6 +124,28 @@ namespace NINA.Utility {
         }
 
         public T GetBehavior() {
+            // Force HocusFocus for star detection, annotation, and autofocus
+            string interfaceTypeName = typeof(T).FullName;
+            
+            // Hardcoded selections for HocusFocus
+            if (interfaceTypeName == "NINA.Image.ImageAnalysis.IStarDetection") {
+                var hocusFocusBehavior = behaviors.FirstOrDefault(b => b.ContentId == "NINA.Joko.Plugins.HocusFocus.StarDetection.HocusFocusStarDetection");
+                if (hocusFocusBehavior != null) {
+                    return hocusFocusBehavior;
+                }
+            } else if (interfaceTypeName == "NINA.Image.ImageAnalysis.IStarAnnotator") {
+                var hocusFocusBehavior = behaviors.FirstOrDefault(b => b.ContentId == "NINA.Joko.Plugins.HocusFocus.StarDetection.HocusFocusStarAnnotator");
+                if (hocusFocusBehavior != null) {
+                    return hocusFocusBehavior;
+                }
+            } else if (interfaceTypeName == "NINA.WPF.Base.Interfaces.IAutoFocusVMFactory") {
+                var hocusFocusBehavior = behaviors.FirstOrDefault(b => b.ContentId == "NINA.Joko.Plugins.HocusFocus.AutoFocus.HocusFocusVMFactory");
+                if (hocusFocusBehavior != null) {
+                    return hocusFocusBehavior;
+                }
+            }
+            
+            // Fallback to profile settings or default
             profileService.ActiveProfile.ApplicationSettings.SelectedPluggableBehaviorsLookup.TryGetValue(typeof(T).FullName, out string contentId);
             return GetBehavior(contentId);
         }
