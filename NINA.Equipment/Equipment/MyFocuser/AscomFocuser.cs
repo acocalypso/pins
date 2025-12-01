@@ -49,7 +49,7 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         public bool CanReverse => false;
 
         public bool Reverse {
-            get => ((IFocuser)device).Reverse;
+            get => false;
             set {
                 // Not supported
             }
