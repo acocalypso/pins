@@ -73,10 +73,23 @@ namespace NINA.INDI.Devices {
         public bool Absolute { get; private set; }
         public bool IsMoving { get; private set; }
         public int MaxIncrement => MaxStep;
-        public int MaxStep {
+
+        public bool CanSetMaxStep
+        {
+            get
+            {
+                var prop = GetNumberProperty("FOCUS_MAX");
+                return prop != null;
+            }
+        }
+
+        public int MaxStep
+        {
             get => (int)GetNumberPropertyValue("FOCUS_MAX", "FOCUS_MAX_VALUE");
-            set {
-                if (!Connected) {
+            set
+            {
+                if (!Connected)
+                {
                     Logger.Warning("Cannot set MaxStep: not connected");
                     return;
                 }
@@ -92,14 +105,26 @@ namespace NINA.INDI.Devices {
         public bool TempCompAvailable => false;
         public double Temperature => GetNumberPropertyValue("FOCUS_TEMPERATURE", "TEMPERATURE") ?? double.NaN;
 
+        public bool CanReverse {
+            get {
+                var prop = GetSwitchProperty("FOCUS_REVERSE_MOTION");
+                return prop != null;
+            }
+        }
 
         public bool Reverse {
-            get => GetSwitchPropertyValue("FOCUS_REVERSE_MOTION", "ENABLED") ?? false;
+            get => GetSwitchPropertyValue("FOCUS_REVERSE_MOTION", "INDI_ENABLED") ?? false;
             set {
-                try {
-                    SetSwitchValue("FOCUS_REVERSE_MOTION", "ENABLED", value);
-                } catch (ArgumentException) {
-                    throw new NotImplementedException();
+                if (CanReverse && Connected) {
+                    try {
+                        if (value) {
+                            SetSwitchValue("FOCUS_REVERSE_MOTION", "INDI_ENABLED", true);
+                        } else {
+                            SetSwitchValue("FOCUS_REVERSE_MOTION", "INDI_DISABLED", true);
+                        }
+                    } catch (ArgumentException) {
+                        throw new NotImplementedException();
+                    }
                 }
             }
         }

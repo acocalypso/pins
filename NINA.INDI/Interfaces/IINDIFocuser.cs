@@ -20,12 +20,14 @@ namespace NINA.INDI.Interfaces {
         bool Absolute { get; }
         bool IsMoving { get; }
         int MaxIncrement { get; }
+        bool CanSetMaxStep { get; }
         int MaxStep { get; set; }
         int Position { get; }
         double StepSize { get; }
         bool TempComp { get; }
         bool TempCompAvailable { get; }
         double Temperature { get; }
+        bool CanReverse { get; }
         bool Reverse { get; set; }
 
         void Halt();

@@ -63,6 +63,7 @@ namespace NINA.Equipment.Equipment.MyFocuser {
 
         public int MaxIncrement => MaxStep;
 
+        public bool CanSetMaxStep => true;
         public int MaxStep {
             get {
                 var err = ASIEAF.GetMaxStep(id, out var maxStep);
@@ -72,6 +73,31 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                     Logger.Error($"EAF Communication error to get MaxStep {err}");
                     return -1;
                 }
+            }
+            set {
+                ASIEAF.SetMaxStep(id, value);
+                RaisePropertyChanged(nameof(MaxStep));
+                RaisePropertyChanged(nameof(MaxIncrement));
+            }
+        }
+
+        public bool CanReverse => true;
+        public bool Reverse {
+            get {
+                if(!Connected) {
+                    return false;
+                }
+                var err = ASIEAF.GetReverse(id, out var reverse);
+                if (err == ASIEAF.EAF_ERROR_CODE.EAF_SUCCESS) {
+                    return reverse;
+                } else {
+                    Logger.Error($"EAF Communication error to get Reverse {err}");
+                    return false;
+                }
+            }
+            set {
+                ASIEAF.SetReverse(id, value);
+                RaisePropertyChanged(nameof(Reverse));
             }
         }
 
@@ -186,16 +212,14 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         private bool reversed = false;
 
         partial void OnReversedChanged(bool value) {
-            ASIEAF.SetReverse(id, value);
+            Reverse = value;
         }
 
         [ObservableProperty]
         private int targetMaxStep;
 
         partial void OnTargetMaxStepChanged(int value) {
-            ASIEAF.SetMaxStep(id, value);
-            RaisePropertyChanged(nameof(MaxStep));
-            RaisePropertyChanged(nameof(MaxIncrement));
+            MaxStep = value;
         }
 
         [RelayCommand]

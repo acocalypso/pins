@@ -34,11 +34,35 @@ namespace NINA.Equipment.Equipment.MyFocuser {
 
         public int MaxIncrement => GetProperty(nameof(IINDIFocuser.MaxIncrement), -1);
 
+        public bool CanSetMaxStep => GetProperty(nameof(IINDIFocuser.CanSetMaxStep), false);
         public int MaxStep {
-            get => GetProperty(nameof(IINDIFocuser.MaxStep), -1);
+            get {
+                if (CanSetMaxStep) {
+                    return GetProperty(nameof(IINDIFocuser.MaxStep), -1);
+                }
+                return -1;
+            }
             set {
-                if (ShouldBeConnected) {
+                if (CanSetMaxStep && ShouldBeConnected) {
                     SetProperty(nameof(IINDIFocuser.MaxStep), value);
+                }
+            }
+        }
+
+        public bool CanReverse => GetProperty(nameof(IINDIFocuser.CanReverse), false);
+        public bool Reverse
+        {
+            get
+            {
+                if (CanReverse) {
+                    return GetProperty(nameof(IINDIFocuser.Reverse), false);
+                }
+                return false;
+            }
+            set
+            {
+                if (CanReverse && ShouldBeConnected) {
+                    SetProperty(nameof(IINDIFocuser.Reverse), value);
                 }
             }
         }
@@ -79,23 +103,6 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         }
 
         public double Temperature => GetProperty(nameof(IINDIFocuser.Temperature), double.NaN);
-
-        private bool _canReverse = true;
-
-        [ObservableProperty]
-        private bool reversed = false;
-
-        partial void OnReversedChanged(bool value) {
-            if (ShouldBeConnected && _canReverse) {
-                try {
-                    device.Reverse = value;
-                } catch (NotImplementedException) {
-                    _canReverse = false;
-                } catch (Exception ex) {
-                    Logger.Error(ex);
-                }
-            }
-        }
 
         [RelayCommand]
         public void ResetPosition() {

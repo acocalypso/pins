@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -46,7 +46,13 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Focuser {
 
         public int MaxIncrement => this.focuser.MaxIncrement;
 
-        public int MaxStep => this.focuser.MaxStep;
+        public bool CanSetMaxStep => this.focuser.CanSetMaxStep;
+
+        public int MaxStep { get => this.focuser.MaxStep; set => this.focuser.MaxStep = value; }
+
+        public bool CanReverse => this.focuser.CanReverse;
+
+        public bool Reverse { get => this.focuser.Reverse; set => this.focuser.Reverse = value; }
 
         public virtual int Position => this.focuser.Position;
 

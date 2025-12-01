@@ -76,6 +76,7 @@ namespace NINA.Equipment.Equipment.MyFocuser {
 
         public int MaxIncrement => MaxStep;
 
+        public bool CanSetMaxStep => true;
         public int MaxStep {
             get {
                 if (!Connected) {
@@ -96,6 +97,29 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 _ = FocuserSetConfig(id, ref config);
                 RaisePropertyChanged(nameof(MaxStep));
                 RaisePropertyChanged(nameof(MaxIncrement));
+            }
+        }
+
+        public bool CanReverse => true;
+        public bool Reverse {
+            get {
+                if (!Connected) {
+                    return false;
+                }
+                var err = FocuserGetConfig(id, out var config);
+                if (err == AOReturn.AO_SUCCESS) {
+                    return config.reverseDirection == 1;
+                } else {
+                    Logger.Error($"Oasis error to get Reverse {err}");
+                    return false;
+                }
+            }
+            set {
+                AOFocuserConfig config = new AOFocuserConfig();
+                config.mask = (uint)AOConfig.MASK_REVERSE_DIRECTION;
+                config.reverseDirection = value ? 1 : 0;
+                _ = FocuserSetConfig(id, ref config);
+                RaisePropertyChanged(nameof(Reverse));
             }
         }
 
@@ -203,10 +227,7 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         private bool reversed = false;
 
         partial void OnReversedChanged(bool value) {
-            AOFocuserConfig config = new AOFocuserConfig();
-            config.mask = (uint)AOConfig.MASK_REVERSE_DIRECTION;
-            config.reverseDirection = value ? 1 : 0;
-            _ = FocuserSetConfig(id, ref config);
+            Reverse = value;
         }
 
         [ObservableProperty]
