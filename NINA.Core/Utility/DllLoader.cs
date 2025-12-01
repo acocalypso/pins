@@ -32,27 +32,40 @@ namespace NINA.Core.Utility {
         private const int RTLD_GLOBAL = 0x100;
 
         private static object lockobj = new object();
+        private static System.Collections.Generic.HashSet<string> loadedDlls = new System.Collections.Generic.HashSet<string>();
 
         public static void LoadDll(string dllSubPath) {
-            var arch = RuntimeInformation.ProcessArchitecture.ToString().ToLower();
-            var platformFolder = IsX86() ? $"linux-{arch}" : $"linux-{arch}";
-            var extension = ".so";
+            lock (lockobj) {
+                // Check if already loaded
+                if (loadedDlls.Contains(dllSubPath)) {
+                    return;
+                }
 
-            // Add extension if not present
-            if (!Path.HasExtension(dllSubPath)) {
-                dllSubPath = Path.ChangeExtension(dllSubPath, extension);
-            }
+                var arch = RuntimeInformation.ProcessArchitecture.ToString().ToLower();
+                var platformFolder = IsX86() ? $"linux-{arch}" : $"linux-{arch}";
+                var extension = ".so";
 
-            // On Linux, try system libraries first (using LD_LIBRARY_PATH)
-            var libraryName = Path.GetFileName(dllSubPath);
-            Logger.Info($"DllLoader: Trying system library via LD_LIBRARY_PATH: {libraryName}");
+                // Add extension if not present
+                if (!Path.HasExtension(dllSubPath)) {
+                    dllSubPath = Path.ChangeExtension(dllSubPath, extension);
+                }
 
-            if (!LoadDllFromAbsolutePath(libraryName, global: true)) {
-                // If system library loading failed, fall back to bundled library
+                // Try bundled library first
                 var path = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "External", platformFolder, dllSubPath);
                 if (File.Exists(path)) {
-                    Logger.Info($"DllLoader: Falling back to bundled library: {path}");
-                    LoadDllFromAbsolutePath(path);
+                    Logger.Info($"DllLoader: Loading bundled library: {path}");
+                    if (LoadDllFromAbsolutePath(path)) {
+                        loadedDlls.Add(dllSubPath);
+                        return;
+                    }
+                }
+
+                // Fallback to system libraries (using LD_LIBRARY_PATH)
+                var libraryName = Path.GetFileName(dllSubPath);
+                Logger.Info($"DllLoader: Trying system library via LD_LIBRARY_PATH: {libraryName}");
+
+                if (LoadDllFromAbsolutePath(libraryName, global: true)) {
+                    loadedDlls.Add(dllSubPath);
                 }
             }
         }

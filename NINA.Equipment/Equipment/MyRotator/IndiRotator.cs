@@ -82,7 +82,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
             offset = skyAngle - MechanicalPosition;
             RaisePropertyChanged(nameof(Position));
             Synced = true;
-            Logger.Debug($"ASCOM - Mechanical Position is {MechanicalPosition}� - Sync Position to Sky Angle {skyAngle}� using offset {offset}");
+            Logger.Debug($"INDI - Mechanical Position is {MechanicalPosition}� - Sync Position to Sky Angle {skyAngle}� using offset {offset}");
         }
 
         public async Task<bool> Move(float angle, CancellationToken ct) {
@@ -94,7 +94,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
                     angle = AstroUtil.EuclidianModulus(angle, -360);
                 }
 
-                Logger.Debug($"ASCOM - Move relative by {angle}� - Mechanical Position reported by rotator {MechanicalPosition}� and offset {offset}");
+                Logger.Debug($"INDI - Move relative by {angle}� - Mechanical Position reported by rotator {MechanicalPosition}� and offset {offset}");
                 await device.MoveAsync(angle, ct);
                 InvalidatePropertyCache();
 
