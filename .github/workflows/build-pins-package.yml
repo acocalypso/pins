@@ -28,7 +28,12 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore linux-arm64 dependencies
-        run: dotnet restore NINA/NINA.csproj -r ${{ env.TARGET_RUNTIME }}
+        run: |
+          dotnet restore NINA/NINA.csproj -r ${{ env.TARGET_RUNTIME }}
+          dotnet restore System.Windows.Compat/System.Windows.Compat.csproj
+
+      - name: Build System.Windows.Compat
+        run: dotnet build System.Windows.Compat/System.Windows.Compat.csproj -c ${{ env.BUILD_CONFIGURATION }} --no-restore
 
       - name: Build linux-arm64 binaries
         run: dotnet build NINA/NINA.csproj -c ${{ env.BUILD_CONFIGURATION }} -r ${{ env.TARGET_RUNTIME }} --no-restore
@@ -44,6 +49,20 @@ jobs:
           mkdir -p "$package_root/pins"
           rsync -a "$publish_root/" "$package_root/pins/"
           echo "${{ env.INSTALL_DIRECTORY }}" > "$package_root/pins/.install_path"
+
+      - name: Replace System.Windows.dll
+        run: |
+          compat_dll="System.Windows.Compat/bin/${{ env.BUILD_CONFIGURATION }}/net10.0/System.Windows.dll"
+          target_dir="${{ env.PACKAGE_ROOT }}/pins"
+          if [ ! -f "$compat_dll" ]; then
+            echo "Compat build missing at $compat_dll" >&2
+            exit 1
+          fi
+          if [ ! -d "$target_dir" ]; then
+            echo "Target directory $target_dir not found" >&2
+            exit 1
+          fi
+          cp -f "$compat_dll" "$target_dir/System.Windows.dll"
 
       - name: Create install archive
         run: |
