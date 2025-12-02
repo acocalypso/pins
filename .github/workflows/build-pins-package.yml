@@ -1,9 +1,6 @@
 name: Build Linux ARM64 Package
 
 on:
-  push:
-    branches:
-      - develop
   workflow_dispatch:
 
 env:
@@ -30,8 +27,8 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore dependencies
-        run: dotnet restore NINA.sln
+      - name: Restore linux-arm64 dependencies
+        run: dotnet restore NINA/NINA.csproj -r ${{ env.TARGET_RUNTIME }}
 
       - name: Build linux-arm64 binaries
         run: dotnet build NINA/NINA.csproj -c ${{ env.BUILD_CONFIGURATION }} -r ${{ env.TARGET_RUNTIME }} --no-restore
