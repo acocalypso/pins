@@ -1,0 +1,67 @@
+name: Build Linux ARM64 Package
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+env:
+  BUILD_CONFIGURATION: Release
+  TARGET_RUNTIME: linux-arm64
+  INSTALL_DIRECTORY: /home/pi/pins
+  PUBLISH_DIRECTORY: artifacts/publish
+  PACKAGE_ROOT: artifacts/package
+  PACKAGE_NAME: pins-linux-arm64
+
+jobs:
+  build-linux-arm64:
+    name: Build Raspberry Pi package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: nschloe/action-cached-lfs-checkout@v1
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore NINA.sln
+
+      - name: Build linux-arm64 binaries
+        run: dotnet build NINA/NINA.csproj -c ${{ env.BUILD_CONFIGURATION }} -r ${{ env.TARGET_RUNTIME }} --no-restore
+
+      - name: Publish linux-arm64 payload
+        run: dotnet publish NINA/NINA.csproj -c ${{ env.BUILD_CONFIGURATION }} -r ${{ env.TARGET_RUNTIME }} --no-build -o ${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}
+
+      - name: Stage /home/pi/pins layout
+        run: |
+          publish_root="${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}"
+          package_root="${{ env.PACKAGE_ROOT }}"
+          rm -rf "$package_root"
+          mkdir -p "$package_root/pins"
+          rsync -a "$publish_root/" "$package_root/pins/"
+          echo "${{ env.INSTALL_DIRECTORY }}" > "$package_root/pins/.install_path"
+
+      - name: Create install archive
+        run: |
+          mkdir -p artifacts
+          tar -czf "artifacts/${{ env.PACKAGE_NAME }}.tar.gz" -C "${{ env.PACKAGE_ROOT }}" pins
+
+      - name: Generate SHA256 checksum
+        run: |
+          sha256sum "artifacts/${{ env.PACKAGE_NAME }}.tar.gz" > "artifacts/${{ env.PACKAGE_NAME }}.tar.gz.sha256"
+
+      - name: Upload Raspberry Pi package
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-package
+          path: |
+            artifacts/${{ env.PACKAGE_NAME }}.tar.gz
+            artifacts/${{ env.PACKAGE_NAME }}.tar.gz.sha256
+          retention-days: 30
