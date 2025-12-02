@@ -10,6 +10,9 @@ env:
   PUBLISH_DIRECTORY: artifacts/publish
   PACKAGE_ROOT: artifacts/package
   PACKAGE_NAME: pins-linux-arm64
+  DEB_ROOT: artifacts/debroot
+  DEB_PACKAGE: pins
+  DEB_ARCH: arm64
 
 jobs:
   build-linux-arm64:
@@ -41,6 +44,17 @@ jobs:
       - name: Publish linux-arm64 payload
         run: dotnet publish NINA/NINA.csproj -c ${{ env.BUILD_CONFIGURATION }} -r ${{ env.TARGET_RUNTIME }} --no-build -o ${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}
 
+      - name: Determine package version
+        id: version
+        run: |
+          version=$(grep -m1 'AssemblyInformationalVersion' CommonAssemblyInfo.cs | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$version" ]; then
+            echo "Failed to determine version from CommonAssemblyInfo.cs" >&2
+            exit 1
+          fi
+          echo "Package version: $version"
+          echo "package_version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Stage /home/pi/pins layout
         run: |
           publish_root="${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}"
@@ -64,14 +78,41 @@ jobs:
           fi
           cp -f "$compat_dll" "$target_dir/System.Windows.dll"
 
+      - name: Prepare Debian filesystem
+        run: |
+          deb_root="${{ env.DEB_ROOT }}"
+          install_root="$deb_root/home/pi/pins"
+          rm -rf "$deb_root"
+          mkdir -p "$install_root"
+          rsync -a "${{ env.PACKAGE_ROOT }}/pins/" "$install_root/"
+
+      - name: Build Debian package
+        run: |
+          deb_root="${{ env.DEB_ROOT }}"
+          control_dir="$deb_root/DEBIAN"
+          mkdir -p "$control_dir"
+          installed_size=$(du -sk "$deb_root/home/pi/pins" | cut -f1)
+          {
+            echo "Package: ${{ env.DEB_PACKAGE }}"
+            echo "Version: ${{ steps.version.outputs.package_version }}"
+            echo "Section: misc"
+            echo "Priority: optional"
+            echo "Architecture: ${{ env.DEB_ARCH }}"
+            echo "Maintainer: N.I.N.A. Team"
+            echo "Installed-Size: $installed_size"
+            echo "Description: Pins build for Raspberry Pi"
+          } > "$control_dir/control"
+          dpkg-deb --build "$deb_root" "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb"
+
       - name: Create install archive
         run: |
           mkdir -p artifacts
           tar -czf "artifacts/${{ env.PACKAGE_NAME }}.tar.gz" -C "${{ env.PACKAGE_ROOT }}" pins
 
-      - name: Generate SHA256 checksum
+      - name: Generate SHA256 checksums
         run: |
           sha256sum "artifacts/${{ env.PACKAGE_NAME }}.tar.gz" > "artifacts/${{ env.PACKAGE_NAME }}.tar.gz.sha256"
+          sha256sum "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb" > "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb.sha256"
 
       - name: Upload Raspberry Pi package
         uses: actions/upload-artifact@v4
@@ -80,4 +121,6 @@ jobs:
           path: |
             artifacts/${{ env.PACKAGE_NAME }}.tar.gz
             artifacts/${{ env.PACKAGE_NAME }}.tar.gz.sha256
+            artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb
+            artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb.sha256
           retention-days: 30
