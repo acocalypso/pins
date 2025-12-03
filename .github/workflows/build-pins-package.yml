@@ -16,6 +16,7 @@ env:
   PLUGINS_INSTALL_BASE: /home/pi/.local/share/NINA/Plugins/3.0.0
   PLUGIN_DEB_BASE: artifacts/plugin-debroot
   PLUGIN_ARTIFACT_DIR: artifacts/plugins
+  PLUGIN_MSBUILD_ARGS: -p:DisableImplicitSystemDrawingReference=true
 
 jobs:
   build-linux-arm64:
@@ -168,7 +169,7 @@ jobs:
           deb_package="pins-plugin-joko"
           plugin_dir=$(dirname "$project_path")
           dotnet restore "$project_path"
-          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore
+          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
           build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
           tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
           if [ -z "$tfm_dir" ]; then
@@ -217,7 +218,7 @@ jobs:
           deb_package="pins-plugin-livestack"
           plugin_dir=$(dirname "$project_path")
           dotnet restore "$project_path"
-          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore
+          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
           build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
           tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
           if [ -z "$tfm_dir" ]; then
@@ -266,7 +267,7 @@ jobs:
           deb_package="pins-plugin-ninaapi"
           plugin_dir=$(dirname "$project_path")
           dotnet restore "$project_path"
-          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore
+          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
           build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
           tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
           if [ -z "$tfm_dir" ]; then
@@ -315,7 +316,7 @@ jobs:
           deb_package="pins-plugin-polaralignment"
           plugin_dir=$(dirname "$project_path")
           dotnet restore "$project_path"
-          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore
+          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
           build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
           tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
           if [ -z "$tfm_dir" ]; then
@@ -372,7 +373,7 @@ jobs:
           popd >/dev/null
           mv "$tmp_dir/dist" "$plugin_dir/app"
           dotnet restore "$project_path"
-          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore
+          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
           build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
           tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
           if [ -z "$tfm_dir" ]; then
