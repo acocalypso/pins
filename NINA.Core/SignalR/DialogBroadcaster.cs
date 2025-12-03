@@ -39,7 +39,17 @@ namespace NINA.Core.SignalR {
         public async Task BroadcastDialogAsync(DialogData data) {
             try {
                 if (data != null && _hubContext != null) {
-                    Logger.Info($"Broadcasting dialog: {data.Title} (ContentType: {data.ContentType})");
+                    // Count connected clients
+                    var clientsCount = "unknown";
+                    try {
+                        // Try to get connection count (this is tricky with SignalR Core)
+                        var clientsProperty = _hubContext.Clients.GetType().GetProperty("Count");
+                        if (clientsProperty != null) {
+                            clientsCount = clientsProperty.GetValue(_hubContext.Clients)?.ToString();
+                        }
+                    } catch { }
+                    
+                    Logger.Info($"Broadcasting dialog: {data.Title} (ContentType: {data.ContentType}) - Clients: {clientsCount}");
                     await _hubContext.Clients.All.SendAsync("ReceiveDialog", data);
                     Logger.Info($"Dialog broadcast completed for: {data.Title}");
                 } else {

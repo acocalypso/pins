@@ -78,7 +78,6 @@ namespace System.Windows {
 
                 _activeDialogs[dialogId] = dialog;
 
-                Console.WriteLine($"DialogService: Registered dialog #{dialogId} - {title}");
                 return dialogId;
             }
         }
@@ -94,7 +93,6 @@ namespace System.Windows {
 
                 _activeDialogs[dialog.DialogId] = dialog;
 
-                Console.WriteLine($"DialogService: Registered dialog #{dialog.DialogId} - {dialog.Title}");
                 return dialog.DialogId;
             }
         }
@@ -146,15 +144,22 @@ namespace System.Windows {
         /// </summary>
         public static bool CloseDialog(int dialogId, bool result = true) {
             string contentType = null;
+            object dataContext = null;
             lock (_lock) {
                 if (_activeDialogs.TryGetValue(dialogId, out var dialog)) {
                     contentType = dialog.ContentType;
+                    dataContext = dialog.DataContext;
                     
                     // Call the result callback if provided
                     dialog.ResultCallback?.Invoke(result);
 
                     _activeDialogs.Remove(dialogId);
                 }
+            }
+            
+            // Clean up event handlers for this content
+            if (dataContext != null) {
+                CleanupEventHandlers(dataContext);
             }
             
             // Broadcast close event via SignalR (outside lock to avoid deadlock)
@@ -283,7 +288,6 @@ namespace System.Windows {
                     CloseDialog(id, result);
                 }
 
-                Console.WriteLine($"DialogService: Closed all {count} dialogs with result: {result}");
                 return count;
             }
         }
@@ -313,13 +317,34 @@ namespace System.Windows {
         }
 
         /// <summary>
+        /// Clean up event handlers for a content object
+        /// Called by WindowService through reflection
+        /// </summary>
+        internal static void CleanupEventHandlers(object content) {
+            if (content == null) return;
+            
+            try {
+                // Use reflection to call WindowService.CleanupEventHandlersForContent
+                var windowServiceType = System.Type.GetType("NINA.Core.Utility.WindowService.WindowService, NINA.Core");
+                if (windowServiceType != null) {
+                    var method = windowServiceType.GetMethod("CleanupEventHandlersForContent", 
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                    if (method != null) {
+                        method.Invoke(null, new object[] { content });
+                    }
+                }
+            } catch {
+                // Silently ignore cleanup failures
+            }
+        }
+
+        /// <summary>
         /// Check if running in headless mode (no WPF UI)
         /// Detects Unix/Linux environment for headless operation
         /// </summary>
         public static bool IsHeadless() {
             // On Linux, we're always in headless mode
             var isUnix = Environment.OSVersion.Platform == PlatformID.Unix;
-            Console.WriteLine($"DialogService.IsHeadless(): Platform={Environment.OSVersion.Platform}, IsUnix={isUnix}");
             return isUnix;
         }
     }
