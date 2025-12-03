@@ -49,9 +49,7 @@ namespace NINA.Core.SignalR {
                         }
                     } catch { }
                     
-                    Logger.Info($"Broadcasting dialog: {data.Title} (ContentType: {data.ContentType}) - Clients: {clientsCount}");
                     await _hubContext.Clients.All.SendAsync("ReceiveDialog", data);
-                    Logger.Info($"Dialog broadcast completed for: {data.Title}");
                 } else {
                     Logger.Warning($"Cannot broadcast dialog: data={data != null}, hubContext={_hubContext != null}");
                 }
@@ -63,7 +61,6 @@ namespace NINA.Core.SignalR {
         public async Task BroadcastMeasurementAsync(DialogMeasurement measurement) {
             try {
                 if (measurement != null && _hubContext != null) {
-                    Logger.Info($"Broadcasting measurement: Success={measurement.Success}, ErrorDistance={measurement.ErrorDistance}, Time={measurement.Time}");
                     await _hubContext.Clients.All.SendAsync("ReceiveMeasurement", measurement);
                 }
             } catch (Exception ex) {
@@ -74,7 +71,6 @@ namespace NINA.Core.SignalR {
         public async Task BroadcastStatusAsync(string status) {
             try {
                 if (!string.IsNullOrEmpty(status) && _hubContext != null) {
-                    Logger.Info($"Broadcasting status: {status}");
                     await _hubContext.Clients.All.SendAsync("ReceiveDialogStatus", status);
                 }
             } catch (Exception ex) {
@@ -85,7 +81,6 @@ namespace NINA.Core.SignalR {
         public async Task ClearDialogAsync(string contentType) {
             try {
                 if (_hubContext != null) {
-                    Logger.Info($"Broadcasting clear dialog: {contentType}");
                     await _hubContext.Clients.All.SendAsync("ClearDialog", contentType);
                 }
             } catch (Exception ex) {
