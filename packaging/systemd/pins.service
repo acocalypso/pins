@@ -1,0 +1,15 @@
+[Unit]
+Description=NINA Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/pi/pins/NINA
+WorkingDirectory=/home/pi/pins/
+User=pi
+Group=pi
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

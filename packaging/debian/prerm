@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+if command -v systemctl >/dev/null 2>&1; then
+  if [ "$1" = "remove" ] || [ "$1" = "upgrade" ]; then
+    systemctl stop pins.service || true
+    systemctl disable pins.service >/dev/null 2>&1 || true
+  fi
+  systemctl daemon-reload || true
+fi
+exit 0
