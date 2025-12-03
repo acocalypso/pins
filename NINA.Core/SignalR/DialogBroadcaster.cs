@@ -16,6 +16,8 @@ using Microsoft.AspNetCore.SignalR;
 using NINA.Core.Model;
 using NINA.Core.Utility;
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace NINA.Core.SignalR {
@@ -25,6 +27,7 @@ namespace NINA.Core.SignalR {
     public class DialogBroadcaster : IDialogBroadcaster {
         private readonly IHubContext<DialogHub> _hubContext;
         private static IDialogBroadcaster _instance;
+        private static readonly ConcurrentDictionary<string, DialogData> _activeDialogs = new();
 
         public DialogBroadcaster(IHubContext<DialogHub> hubContext) {
             _hubContext = hubContext;
@@ -35,19 +38,21 @@ namespace NINA.Core.SignalR {
         /// Get the singleton instance (for use by plugins that don't have DI access)
         /// </summary>
         public static IDialogBroadcaster Instance => _instance;
+        
+        /// <summary>
+        /// Get all currently active dialogs (for sending to newly connected clients)
+        /// </summary>
+        public static IList<DialogData> GetActiveDialogs() {
+            return new List<DialogData>(_activeDialogs.Values);
+        }
 
         public async Task BroadcastDialogAsync(DialogData data) {
             try {
                 if (data != null && _hubContext != null) {
-                    // Count connected clients
-                    var clientsCount = "unknown";
-                    try {
-                        // Try to get connection count (this is tricky with SignalR Core)
-                        var clientsProperty = _hubContext.Clients.GetType().GetProperty("Count");
-                        if (clientsProperty != null) {
-                            clientsCount = clientsProperty.GetValue(_hubContext.Clients)?.ToString();
-                        }
-                    } catch { }
+                    // Track active dialog
+                    if (data.Active) {
+                        _activeDialogs[data.ContentType] = data;
+                    }
                     
                     await _hubContext.Clients.All.SendAsync("ReceiveDialog", data);
                 } else {
@@ -81,6 +86,9 @@ namespace NINA.Core.SignalR {
         public async Task ClearDialogAsync(string contentType) {
             try {
                 if (_hubContext != null) {
+                    // Remove from active dialogs
+                    _activeDialogs.TryRemove(contentType, out _);
+                    
                     await _hubContext.Clients.All.SendAsync("ClearDialog", contentType);
                 }
             } catch (Exception ex) {
