@@ -197,6 +197,27 @@ jobs:
         with:
           node-version: '20.x'
 
+      - name: Disable System.Drawing.Common reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="${DOTNET_ROOT:-$HOME/.dotnet}"
+          ref_dir=$(find "$root/packs/Microsoft.NETCore.App.Ref" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort | tail -n1)
+          if [ -z "$ref_dir" ]; then
+            echo "No reference pack directory found; skipping"
+            echo "SYSTEM_DRAWING_REF=" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          ref_path="$ref_dir/ref/net10.0/System.Drawing.Common.dll"
+          if [ ! -f "$ref_path" ]; then
+            echo "System.Drawing.Common reference not found at $ref_path"
+            echo "SYSTEM_DRAWING_REF=" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          mv "$ref_path" "$ref_path.disabled"
+          echo "SYSTEM_DRAWING_REF=$ref_path" >> "$GITHUB_ENV"
+          echo "Temporarily moved $ref_path"
+
       - name: Determine package version
         id: version
         run: |
@@ -293,3 +314,13 @@ jobs:
             ${{ steps.build_deb.outputs.deb_path }}
             ${{ steps.checksum.outputs.sha_path }}
           retention-days: 30
+
+      - name: Restore System.Drawing.Common reference
+        if: always()
+        shell: bash
+        run: |
+          ref_path="${SYSTEM_DRAWING_REF:-}"
+          if [ -n "$ref_path" ] && [ -f "$ref_path.disabled" ]; then
+            mv "$ref_path.disabled" "$ref_path"
+            echo "Restored $ref_path"
+          fi
