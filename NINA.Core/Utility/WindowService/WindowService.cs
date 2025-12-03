@@ -76,6 +76,17 @@ namespace NINA.Core.Utility.WindowService {
         }
 
         public async Task Close() {
+            // In headless mode, we need to close via DialogService
+            if (System.Windows.DialogService.IsHeadless()) {
+                // Find and close any dialogs associated with this WindowService instance
+                var allDialogs = System.Windows.DialogService.GetAllDialogs();
+                foreach (var dialog in allDialogs) {
+                    // Close each dialog - this will trigger ClearDialogAsync
+                    System.Windows.DialogService.CloseDialog(dialog.DialogId, result: true);
+                }
+                return;
+            }
+            
             await dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => {
                 try { 
                     window?.Close(); 
@@ -149,19 +160,25 @@ namespace NINA.Core.Utility.WindowService {
         public static void CleanupEventHandlersForContent(object content) {
             if (content == null) return;
             
-            // Remove from subscription tracking
+            // Remove from subscription tracking FIRST (this stops pending timer callbacks)
             _subscribedContent.TryRemove(content, out _);
+            
+            // Stop and dispose the debounce timer if it exists
+            if (_debounceTimers.TryRemove(content, out var timer)) {
+                try {
+                    // Stop the timer from firing (change to Infinite delay)
+                    timer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+                    timer?.Dispose();
+                } catch {
+                    // Timer might already be disposed or firing, ignore
+                }
+            }
             
             // Unsubscribe the event handler if it exists
             if (_eventHandlers.TryRemove(content, out var handler)) {
                 if (content is INotifyPropertyChanged notifyObj) {
                     notifyObj.PropertyChanged -= handler;
                 }
-            }
-            
-            // Dispose and remove debounce timer if it exists
-            if (_debounceTimers.TryRemove(content, out var timer)) {
-                timer?.Dispose();
             }
         }
 
@@ -195,6 +212,11 @@ namespace NINA.Core.Utility.WindowService {
                             key => new System.Threading.Timer(_ => {
                                 _ = Task.Run(async () => {
                                     try {
+                                        // Check if this content is still subscribed (dialog not closed)
+                                        if (!_subscribedContent.ContainsKey(content)) {
+                                            return; // Dialog was closed, don't broadcast
+                                        }
+                                        
                                         var broadcaster = SignalR.DialogBroadcaster.Instance;
                                         if (broadcaster != null) {
                                             var parameters = dialog.Content.ToDictionary(
@@ -249,6 +271,11 @@ namespace NINA.Core.Utility.WindowService {
                             collectionChanged.CollectionChanged += (sender, e) => {
                                 _ = Task.Run(async () => {
                                     try {
+                                        // Check if this content is still subscribed (dialog not closed)
+                                        if (!_subscribedContent.ContainsKey(content)) {
+                                            return; // Dialog was closed, don't broadcast
+                                        }
+                                        
                                         var broadcaster = NINA.Core.SignalR.DialogBroadcaster.Instance;
                                         if (broadcaster != null) {
                                             var parameters = dialog.Content.ToDictionary(
@@ -283,6 +310,11 @@ namespace NINA.Core.Utility.WindowService {
                 // Broadcast via SignalR immediately
                 _ = Task.Run(async () => {
                     try {
+                        // Check if this content is still subscribed (dialog not closed immediately)
+                        if (!_subscribedContent.ContainsKey(content)) {
+                            return; // Dialog was closed before broadcast, don't broadcast
+                        }
+                        
                         var broadcaster = SignalR.DialogBroadcaster.Instance;
                         if (broadcaster != null) {
                             // Convert object dictionary to string dictionary for Parameters
