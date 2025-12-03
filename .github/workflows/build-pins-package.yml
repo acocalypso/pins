@@ -197,26 +197,35 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Disable System.Drawing.Common reference
+      - name: Build System.Windows.Compat for plugins
+        run: dotnet build System.Windows.Compat/System.Windows.Compat.csproj -c ${{ env.BUILD_CONFIGURATION }}
+
+      - name: Replace SDK System.Windows.dll
+        id: replace_system_windows
         shell: bash
         run: |
           set -euo pipefail
+          compat_dll="System.Windows.Compat/bin/${{ env.BUILD_CONFIGURATION }}/net10.0/System.Windows.dll"
+          if [ ! -f "$compat_dll" ]; then
+            echo "Compat assembly not found at $compat_dll" >&2
+            exit 1
+          fi
           root="${DOTNET_ROOT:-$HOME/.dotnet}"
           ref_dir=$(find "$root/packs/Microsoft.NETCore.App.Ref" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort | tail -n1)
           if [ -z "$ref_dir" ]; then
-            echo "No reference pack directory found; skipping"
-            echo "SYSTEM_DRAWING_REF=" >> "$GITHUB_ENV"
-            exit 0
+            echo "No reference pack directory found under $root" >&2
+            exit 1
           fi
-          ref_path="$ref_dir/ref/net10.0/System.Drawing.Common.dll"
+          ref_path="$ref_dir/ref/net10.0/System.Windows.dll"
           if [ ! -f "$ref_path" ]; then
-            echo "System.Drawing.Common reference not found at $ref_path"
-            echo "SYSTEM_DRAWING_REF=" >> "$GITHUB_ENV"
-            exit 0
+            echo "Reference System.Windows.dll not found at $ref_path" >&2
+            exit 1
           fi
-          mv "$ref_path" "$ref_path.disabled"
-          echo "SYSTEM_DRAWING_REF=$ref_path" >> "$GITHUB_ENV"
-          echo "Temporarily moved $ref_path"
+          backup="$ref_path.ghbackup"
+          cp "$ref_path" "$backup"
+          cp "$compat_dll" "$ref_path"
+          echo "Replaced $ref_path with compat build"
+          echo "backup_path=$backup" >> "$GITHUB_OUTPUT"
 
       - name: Determine package version
         id: version
@@ -315,12 +324,13 @@ jobs:
             ${{ steps.checksum.outputs.sha_path }}
           retention-days: 30
 
-      - name: Restore System.Drawing.Common reference
+      - name: Restore SDK System.Windows.dll
         if: always()
         shell: bash
         run: |
-          ref_path="${SYSTEM_DRAWING_REF:-}"
-          if [ -n "$ref_path" ] && [ -f "$ref_path.disabled" ]; then
-            mv "$ref_path.disabled" "$ref_path"
+          backup="${{ steps.replace_system_windows.outputs.backup_path }}"
+          if [ -n "$backup" ] && [ -f "$backup" ]; then
+            ref_path="${backup%.ghbackup}"
+            mv "$backup" "$ref_path"
             echo "Restored $ref_path"
           fi
