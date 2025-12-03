@@ -200,6 +200,28 @@ jobs:
       - name: Build System.Windows.Compat for plugins
         run: dotnet build System.Windows.Compat/System.Windows.Compat.csproj -c ${{ env.BUILD_CONFIGURATION }}
 
+      - name: Remove System.Drawing.Common references
+        id: disable_sdc
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="${DOTNET_ROOT:-$HOME/.dotnet}"
+          refs=$(find "$root/packs" -path '*ref*' -name 'System.Drawing.Common.dll' 2>/dev/null)
+          if [ -z "$refs" ]; then
+            echo "No System.Drawing.Common reference assemblies found; skipping"
+            echo "disabled_refs=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          disabled_list=""
+          while IFS= read -r ref_path; do
+            [ -z "$ref_path" ] && continue
+            mv "$ref_path" "$ref_path.disabled"
+            disabled_list="$disabled_list $ref_path.disabled"
+            echo "Disabled $ref_path"
+          done <<< "$refs"
+          disabled_list=${disabled_list# }
+          echo "disabled_refs=$disabled_list" >> "$GITHUB_OUTPUT"
+
       - name: Replace SDK System.Windows.dll
         id: replace_system_windows
         shell: bash
@@ -330,3 +352,19 @@ jobs:
             mv "$backup" "$ref_path"
             echo "Restored $ref_path"
           fi
+
+      - name: Restore System.Drawing.Common references
+        if: always()
+        shell: bash
+        run: |
+          disabled="${{ steps.disable_sdc.outputs.disabled_refs }}"
+          if [ -z "$disabled" ]; then
+            exit 0
+          fi
+          for ref_disabled in $disabled; do
+            orig="${ref_disabled%.disabled}"
+            if [ -f "$ref_disabled" ]; then
+              mv "$ref_disabled" "$orig"
+              echo "Restored $orig"
+            fi
+          done
