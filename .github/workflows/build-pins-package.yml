@@ -163,8 +163,6 @@ jobs:
 
       - name: Build HocusFocus plugin deb
         shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.package_version }}
         run: |
           set -euo pipefail
           project_path="NINA.Plugins/joko.nina.plugins/Joko.NINA.Plugins/Joko.NINA.Plugins.HocusFocus/Joko.NINA.Plugins.HocusFocus.csproj"
@@ -173,6 +171,20 @@ jobs:
           plugin_dir=$(dirname "$project_path")
           if ! (
             set -euo pipefail
+            assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
+            if [ ! -f "$assembly_info" ]; then
+              assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
+            fi
+            if [ -z "$assembly_info" ] || [ ! -f "$assembly_info" ]; then
+              echo "AssemblyInfo.cs not found for $deb_package" >&2
+              exit 1
+            fi
+            assembly_version_line=$(grep -E 'AssemblyVersion' "$assembly_info" || true)
+            plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^\"]+)".*/\1/')
+            if [ -z "$plugin_version" ]; then
+              echo "AssemblyVersion not found in $assembly_info" >&2
+              exit 1
+            fi
             dotnet restore "$project_path"
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
@@ -200,7 +212,7 @@ jobs:
             installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
             {
               echo "Package: $deb_package"
-              echo "Version: $VERSION"
+              echo "Version: $plugin_version"
               echo "Section: misc"
               echo "Priority: optional"
               echo "Architecture: ${{ env.DEB_ARCH }}"
@@ -208,7 +220,7 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
-            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}.deb"
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
@@ -217,8 +229,6 @@ jobs:
 
       - name: Build LiveStack plugin deb
         shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.package_version }}
         run: |
           set -euo pipefail
           project_path="NINA.Plugins/LiveStack/nina.plugin.livestack.csproj"
@@ -227,6 +237,20 @@ jobs:
           plugin_dir=$(dirname "$project_path")
           if ! (
             set -euo pipefail
+            assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
+            if [ ! -f "$assembly_info" ]; then
+              assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
+            fi
+            if [ -z "$assembly_info" ] || [ ! -f "$assembly_info" ]; then
+              echo "AssemblyInfo.cs not found for $deb_package" >&2
+              exit 1
+            fi
+            assembly_version_line=$(grep -E 'AssemblyVersion' "$assembly_info" || true)
+            plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^\"]+)".*/\1/')
+            if [ -z "$plugin_version" ]; then
+              echo "AssemblyVersion not found in $assembly_info" >&2
+              exit 1
+            fi
             dotnet restore "$project_path"
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
@@ -254,7 +278,7 @@ jobs:
             installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
             {
               echo "Package: $deb_package"
-              echo "Version: $VERSION"
+              echo "Version: $plugin_version"
               echo "Section: misc"
               echo "Priority: optional"
               echo "Architecture: ${{ env.DEB_ARCH }}"
@@ -262,7 +286,7 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
-            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}.deb"
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
@@ -271,8 +295,6 @@ jobs:
 
       - name: Build ninaAPI plugin deb
         shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.package_version }}
         run: |
           set -euo pipefail
           project_path="NINA.Plugins/ninaAPI/ninaAPI/ninaAPI.csproj"
@@ -281,6 +303,20 @@ jobs:
           plugin_dir=$(dirname "$project_path")
           if ! (
             set -euo pipefail
+            assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
+            if [ ! -f "$assembly_info" ]; then
+              assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
+            fi
+            if [ -z "$assembly_info" ] || [ ! -f "$assembly_info" ]; then
+              echo "AssemblyInfo.cs not found for $deb_package" >&2
+              exit 1
+            fi
+            assembly_version_line=$(grep -E 'AssemblyVersion' "$assembly_info" || true)
+            plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^\"]+)".*/\1/')
+            if [ -z "$plugin_version" ]; then
+              echo "AssemblyVersion not found in $assembly_info" >&2
+              exit 1
+            fi
             dotnet restore "$project_path"
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
@@ -308,7 +344,7 @@ jobs:
             installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
             {
               echo "Package: $deb_package"
-              echo "Version: $VERSION"
+              echo "Version: $plugin_version"
               echo "Section: misc"
               echo "Priority: optional"
               echo "Architecture: ${{ env.DEB_ARCH }}"
@@ -316,7 +352,7 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
-            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}.deb"
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
@@ -325,8 +361,6 @@ jobs:
 
       - name: Build PolarAlignment plugin deb
         shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.package_version }}
         run: |
           set -euo pipefail
           project_path="NINA.Plugins/PolarAlignment/PolarAlignment/NINA.Plugins.PolarAlignment.csproj"
@@ -335,6 +369,20 @@ jobs:
           plugin_dir=$(dirname "$project_path")
           if ! (
             set -euo pipefail
+            assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
+            if [ ! -f "$assembly_info" ]; then
+              assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
+            fi
+            if [ -z "$assembly_info" ] || [ ! -f "$assembly_info" ]; then
+              echo "AssemblyInfo.cs not found for $deb_package" >&2
+              exit 1
+            fi
+            assembly_version_line=$(grep -E 'AssemblyVersion' "$assembly_info" || true)
+            plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^\"]+)".*/\1/')
+            if [ -z "$plugin_version" ]; then
+              echo "AssemblyVersion not found in $assembly_info" >&2
+              exit 1
+            fi
             dotnet restore "$project_path"
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
@@ -362,7 +410,7 @@ jobs:
             installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
             {
               echo "Package: $deb_package"
-              echo "Version: $VERSION"
+              echo "Version: $plugin_version"
               echo "Section: misc"
               echo "Priority: optional"
               echo "Architecture: ${{ env.DEB_ARCH }}"
@@ -370,7 +418,7 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
-            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}.deb"
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
@@ -379,8 +427,6 @@ jobs:
 
       - name: Build Touch-N-Stars plugin deb
         shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.package_version }}
         run: |
           set -euo pipefail
           project_path="NINA.Plugins/Touch-N-Stars/Touch-N-Stars/Touch-N-Stars.csproj"
@@ -390,6 +436,20 @@ jobs:
           tmp_dir="$plugin_dir/frontend-build"
           if ! (
             set -euo pipefail
+            assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
+            if [ ! -f "$assembly_info" ]; then
+              assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
+            fi
+            if [ -z "$assembly_info" ] || [ ! -f "$assembly_info" ]; then
+              echo "AssemblyInfo.cs not found for $deb_package" >&2
+              exit 1
+            fi
+            assembly_version_line=$(grep -E 'AssemblyVersion' "$assembly_info" || true)
+            plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^\"]+)".*/\1/')
+            if [ -z "$plugin_version" ]; then
+              echo "AssemblyVersion not found in $assembly_info" >&2
+              exit 1
+            fi
             rm -rf "$tmp_dir" "$plugin_dir/app"
             git clone --branch pins --single-branch https://github.com/Touch-N-Stars/Touch-N-Stars.git "$tmp_dir"
             pushd "$tmp_dir" >/dev/null
@@ -424,7 +484,7 @@ jobs:
             installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
             {
               echo "Package: $deb_package"
-              echo "Version: $VERSION"
+              echo "Version: $plugin_version"
               echo "Section: misc"
               echo "Priority: optional"
               echo "Architecture: ${{ env.DEB_ARCH }}"
@@ -432,7 +492,7 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
-            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}.deb"
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
