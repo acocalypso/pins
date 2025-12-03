@@ -78,10 +78,14 @@ jobs:
       - name: Determine release version
         id: release_tag
         run: |
-          release_version="v$(date +%d%m%Y)"
+          release_date=$(date +%d%m%Y)
+          release_version="v${release_date}"
           echo "Release version: $release_version"
+          echo "Release date: $release_date"
+          echo "RELEASE_DATE=$release_date" >> "$GITHUB_ENV"
           echo "RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
           echo "value=$release_version" >> "$GITHUB_OUTPUT"
+          echo "date=$release_date" >> "$GITHUB_OUTPUT"
 
       - name: Stage /home/pi/pins layout
         run: |
@@ -148,19 +152,19 @@ jobs:
             echo "Installed-Size: $installed_size"
             echo "Description: Pins build for Raspberry Pi"
           } > "$control_dir/control"
-          dpkg-deb --build "$deb_root" "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb"
+          dpkg-deb --build "$deb_root" "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
 
       - name: Generate SHA256 checksums
         run: |
-          sha256sum "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb" > "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb.sha256"
+          sha256sum "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb" > "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb.sha256"
 
       - name: Upload Raspberry Pi package
         uses: actions/upload-artifact@v4
         with:
           name: linux-arm64-package
           path: |
-            artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb
-            artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb.sha256
+            artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb
+            artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb.sha256
           retention-days: 30
       - name: Prepare plugin packaging workspace
         run: |
@@ -228,7 +232,7 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
-            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}.deb"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
@@ -294,7 +298,7 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
-            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}.deb"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
@@ -360,7 +364,7 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
-            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}.deb"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
@@ -426,7 +430,7 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
-            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}.deb"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
@@ -500,7 +504,7 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
-            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}.deb"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
@@ -526,7 +530,7 @@ jobs:
           body: |
             Automated release ${{ steps.release_tag.outputs.value }} containing the Raspberry Pi build and plugin Debian packages.
           files: |
-            artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb
+            artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb
             artifacts/plugins/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
