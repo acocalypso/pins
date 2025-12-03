@@ -28,6 +28,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Update submodules to latest commits
+        run: git submodule update --init --recursive --remote
+
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v4
         with:
