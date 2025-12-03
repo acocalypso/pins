@@ -29,30 +29,30 @@ namespace NINA.Test.Utility {
 
         [Test]
         public void Primitives_Blittable() {
-            ClassicAssert.IsTrue(Blittable<int>.IsBlittable);
-            ClassicAssert.IsTrue(Blittable<uint>.IsBlittable);
-            ClassicAssert.IsTrue(Blittable<float>.IsBlittable);
-            ClassicAssert.IsTrue(Blittable<bool>.IsBlittable);
+            Assert.That(Blittable<int>.IsBlittable, Is.True);
+            Assert.That(Blittable<uint>.IsBlittable, Is.True);
+            Assert.That(Blittable<float>.IsBlittable, Is.True);
+            Assert.That(Blittable<bool>.IsBlittable, Is.True);
         }
 
         [Test]
         public void Array_of_Primitives_Blittable() {
-            ClassicAssert.IsTrue(Blittable<int[]>.IsBlittable);
-            ClassicAssert.IsTrue(Blittable<uint[]>.IsBlittable);
-            ClassicAssert.IsTrue(Blittable<float[]>.IsBlittable);
-            ClassicAssert.IsTrue(Blittable<bool[]>.IsBlittable);
+            Assert.That(Blittable<int[]>.IsBlittable, Is.True);
+            Assert.That(Blittable<uint[]>.IsBlittable, Is.True);
+            Assert.That(Blittable<float[]>.IsBlittable, Is.True);
+            Assert.That(Blittable<bool[]>.IsBlittable, Is.True);
         }
 
         [Test]
         public void Struct_and_Class_with_layout_Blittable() {
             // Both classes and structs (reference and value) are blittable if they are laid out property, with StructLayout if necessary
-            ClassicAssert.IsTrue(Blittable<Point>.IsBlittable);
+            Assert.That(Blittable<Point>.IsBlittable, Is.True);
         }
 
         [Test]
         public void Array_of_Struct_with_layout_Blittable() {
             // An array of blittable value types is also blittable
-            ClassicAssert.IsTrue(Blittable<Point[]>.IsBlittable);
+            Assert.That(Blittable<Point[]>.IsBlittable, Is.True);
         }
     }
 }
