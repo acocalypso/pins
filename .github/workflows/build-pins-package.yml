@@ -16,10 +16,50 @@ env:
   PLUGINS_INSTALL_BASE: /home/pi/.local/share/NINA/Plugins/3.0.0
   PLUGIN_DEB_BASE: artifacts/plugin-debroot
   PLUGIN_ARTIFACT_DIR: artifacts/plugins
+  PLUGIN_MATRIX_JSON: |
+    [
+      {
+        "plugin_id": "joko",
+        "install_folder": "joko.nina.plugins",
+        "project_path": "NINA.Plugins/joko.nina.plugins/Joko.NINA.Plugins/Joko.NINA.Plugins.HocusFocus/Joko.NINA.Plugins.HocusFocus.csproj",
+        "deb_package": "pins-plugin-joko",
+        "needs_frontend": false
+      },
+      {
+        "plugin_id": "livestack",
+        "install_folder": "LiveStack",
+        "project_path": "NINA.Plugins/LiveStack/nina.plugin.livestack.csproj",
+        "deb_package": "pins-plugin-livestack",
+        "needs_frontend": false
+      },
+      {
+        "plugin_id": "ninaapi",
+        "install_folder": "ninaAPI",
+        "project_path": "NINA.Plugins/ninaAPI/ninaAPI/ninaAPI.csproj",
+        "deb_package": "pins-plugin-ninaapi",
+        "needs_frontend": false
+      },
+      {
+        "plugin_id": "polaralignment",
+        "install_folder": "PolarAlignment",
+        "project_path": "NINA.Plugins/PolarAlignment/PolarAlignment/NINA.Plugins.PolarAlignment.csproj",
+        "deb_package": "pins-plugin-polaralignment",
+        "needs_frontend": false
+      },
+      {
+        "plugin_id": "touchnstars",
+        "install_folder": "Touch-N-Stars",
+        "project_path": "NINA.Plugins/Touch-N-Stars/Touch-N-Stars/Touch-N-Stars.csproj",
+        "deb_package": "pins-plugin-touch-n-stars",
+        "needs_frontend": true,
+        "frontend_repo": "https://github.com/Touch-N-Stars/Touch-N-Stars.git",
+        "frontend_branch": "pins"
+      }
+    ]
 
 jobs:
   build-linux-arm64:
-    name: Build Raspberry Pi package
+    name: Build Raspberry Pi package and plugin debs
     runs-on: ubuntu-latest
 
     steps:
@@ -32,6 +72,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
 
       - name: Restore linux-arm64 dependencies
         run: |
@@ -67,7 +112,7 @@ jobs:
           rsync -a "$publish_root/" "$package_root/pins/"
           echo "${{ env.INSTALL_DIRECTORY }}" > "$package_root/pins/.install_path"
 
-      - name: Replace System.Windows.dll
+      - name: Replace System.Windows.dll in payload
         run: |
           compat_dll="System.Windows.Compat/bin/${{ env.BUILD_CONFIGURATION }}/net10.0/System.Windows.dll"
           target_dir="${{ env.PACKAGE_ROOT }}/pins"
@@ -146,60 +191,6 @@ jobs:
             artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb.sha256
           retention-days: 30
 
-  plugin-debs:
-    name: Build Plugin Debian Packages
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - plugin_id: joko
-            install_folder: joko.nina.plugins
-            project_path: NINA.Plugins/joko.nina.plugins/Joko.NINA.Plugins/Joko.NINA.Plugins.HocusFocus/Joko.NINA.Plugins.HocusFocus.csproj
-            deb_package: pins-plugin-joko
-            needs_frontend: false
-          - plugin_id: livestack
-            install_folder: LiveStack
-            project_path: NINA.Plugins/LiveStack/nina.plugin.livestack.csproj
-            deb_package: pins-plugin-livestack
-            needs_frontend: false
-          - plugin_id: ninaapi
-            install_folder: ninaAPI
-            project_path: NINA.Plugins/ninaAPI/ninaAPI/ninaAPI.csproj
-            deb_package: pins-plugin-ninaapi
-            needs_frontend: false
-          - plugin_id: polaralignment
-            install_folder: PolarAlignment
-            project_path: NINA.Plugins/PolarAlignment/PolarAlignment/NINA.Plugins.PolarAlignment.csproj
-            deb_package: pins-plugin-polaralignment
-            needs_frontend: false
-          - plugin_id: touchnstars
-            install_folder: Touch-N-Stars
-            project_path: NINA.Plugins/Touch-N-Stars/Touch-N-Stars/Touch-N-Stars.csproj
-            deb_package: pins-plugin-touch-n-stars
-            needs_frontend: true
-            frontend_repo: https://github.com/Touch-N-Stars/Touch-N-Stars.git
-            frontend_branch: pins
-
-    steps:
-      - name: Checkout repository
-        uses: nschloe/action-cached-lfs-checkout@v1
-        with:
-          submodules: recursive
-
-      - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-
-      - name: Build System.Windows.Compat for plugins
-        run: dotnet build System.Windows.Compat/System.Windows.Compat.csproj -c ${{ env.BUILD_CONFIGURATION }}
-
       - name: Remove System.Drawing.Common references
         id: disable_sdc
         shell: bash
@@ -245,101 +236,103 @@ jobs:
           echo "Replaced $ref_path with compat build"
           echo "backup_path=$backup" >> "$GITHUB_OUTPUT"
 
-      - name: Determine package version
-        id: version
+      - name: Build plugin Debian packages
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.package_version }}
         run: |
-          version=$(grep -m1 'AssemblyInformationalVersion' CommonAssemblyInfo.cs | sed -E 's/.*"([^"]+)".*/\1/')
-          if [ -z "$version" ]; then
-            echo "Failed to determine version from CommonAssemblyInfo.cs" >&2
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          fi
+          plugins_json="${PLUGIN_MATRIX_JSON}"
+          trimmed=$(echo "$plugins_json" | tr -d '\n\r\t ')
+          if [ -z "$trimmed" ]; then
+            echo "No plugin metadata defined" >&2
             exit 1
           fi
-          echo "Plugin package version: $version"
-          echo "package_version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare Touch-N-Stars frontend
-        if: ${{ matrix.needs_frontend == true }}
-        run: |
-          plugin_dir=$(dirname "${{ matrix.project_path }}")
-          tmp_dir="$plugin_dir/frontend-build"
-          rm -rf "$tmp_dir" "$plugin_dir/app"
-          git clone --branch "${{ matrix.frontend_branch }}" --single-branch "${{ matrix.frontend_repo }}" "$tmp_dir"
-          pushd "$tmp_dir" >/dev/null
-          npm install
-          npm run build
-          popd >/dev/null
-          mv "$tmp_dir/dist" "$plugin_dir/app"
-
-      - name: Restore plugin dependencies
-        run: dotnet restore "${{ matrix.project_path }}"
-
-      - name: Build plugin assemblies
-        run: dotnet build "${{ matrix.project_path }}" -c ${{ env.BUILD_CONFIGURATION }} --no-restore
-
-      - name: Stage plugin payload
-        run: |
-          plugin_dir=$(dirname "${{ matrix.project_path }}")
-          build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-          tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-          if [ -z "$tfm_dir" ]; then
-            echo "Could not locate target framework output under $build_root" >&2
-            exit 1
-          fi
-          deb_root="${{ env.PLUGIN_DEB_BASE }}/${{ matrix.deb_package }}"
-          install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/${{ matrix.install_folder }}"
-          rm -rf "$deb_root"
-          mkdir -p "$install_root"
-          rsync -a "$tfm_dir/" "$install_root/"
-          extra_libs="$plugin_dir/extra-libs"
-          if [ -d "$extra_libs" ]; then
-            find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
-          fi
-          app_dir="$plugin_dir/app"
-          if [ -d "$app_dir" ]; then
-            rm -rf "$install_root/app"
-            cp -a "$app_dir" "$install_root/app"
-          fi
-
-      - name: Build Debian package
-        id: build_deb
-        run: |
-          deb_root="${{ env.PLUGIN_DEB_BASE }}/${{ matrix.deb_package }}"
-          control_dir="$deb_root/DEBIAN"
-          mkdir -p "$control_dir"
-          installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
-          {
-            echo "Package: ${{ matrix.deb_package }}"
-            echo "Version: ${{ steps.version.outputs.package_version }}"
-            echo "Section: misc"
-            echo "Priority: optional"
-            echo "Architecture: ${{ env.DEB_ARCH }}"
-            echo "Maintainer: N.I.N.A. Team"
-            echo "Installed-Size: $installed_size"
-            echo "Description: NINA plugin package for ${{ matrix.install_folder }}"
-          } > "$control_dir/control"
           mkdir -p "${{ env.PLUGIN_ARTIFACT_DIR }}"
-          deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${{ matrix.deb_package }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb"
-          dpkg-deb --build "$deb_root" "$deb_path"
-          echo "deb_path=$deb_path" >> "$GITHUB_OUTPUT"
+          echo "$plugins_json" | jq -c '.[]' | while read -r plugin; do
+            plugin_id=$(jq -r '.plugin_id' <<<"$plugin")
+            install_folder=$(jq -r '.install_folder' <<<"$plugin")
+            project_path=$(jq -r '.project_path' <<<"$plugin")
+            deb_package=$(jq -r '.deb_package' <<<"$plugin")
+            needs_frontend=$(jq -r '.needs_frontend // false' <<<"$plugin")
+            frontend_repo=$(jq -r '.frontend_repo // ""' <<<"$plugin")
+            frontend_branch=$(jq -r '.frontend_branch // ""' <<<"$plugin")
 
-      - name: Generate plugin checksum
-        id: checksum
-        run: |
-          deb_path="${{ steps.build_deb.outputs.deb_path }}"
-          if [ ! -f "$deb_path" ]; then
-            echo "Missing deb artifact at $deb_path" >&2
-            exit 1
-          fi
-          sha_path="$deb_path.sha256"
-          sha256sum "$deb_path" > "$sha_path"
-          echo "sha_path=$sha_path" >> "$GITHUB_OUTPUT"
+            echo "::group::Building plugin $plugin_id"
+            plugin_dir=$(dirname "$project_path")
 
-      - name: Upload plugin deb artifact
+            if [ "$needs_frontend" = "true" ]; then
+              if [ -z "$frontend_repo" ] || [ -z "$frontend_branch" ]; then
+                echo "Frontend configuration missing for $plugin_id" >&2
+                exit 1
+              fi
+              tmp_dir="$plugin_dir/frontend-build"
+              rm -rf "$tmp_dir" "$plugin_dir/app"
+              git clone --branch "$frontend_branch" --single-branch "$frontend_repo" "$tmp_dir"
+              pushd "$tmp_dir" >/dev/null
+              npm install
+              npm run build
+              popd >/dev/null
+              mv "$tmp_dir/dist" "$plugin_dir/app"
+            fi
+
+            dotnet restore "$project_path"
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore
+
+            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+            if [ -z "$tfm_dir" ]; then
+              echo "Could not locate target framework output under $build_root" >&2
+              exit 1
+            fi
+
+            deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
+            install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
+            rm -rf "$deb_root"
+            mkdir -p "$install_root"
+            rsync -a "$tfm_dir/" "$install_root/"
+
+            extra_libs="$plugin_dir/extra-libs"
+            if [ -d "$extra_libs" ]; then
+              find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
+            fi
+
+            app_dir="$plugin_dir/app"
+            if [ -d "$app_dir" ]; then
+              rm -rf "$install_root/app"
+              cp -a "$app_dir" "$install_root/app"
+            fi
+
+            control_dir="$deb_root/DEBIAN"
+            mkdir -p "$control_dir"
+            installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
+            {
+              echo "Package: $deb_package"
+              echo "Version: $VERSION"
+              echo "Section: misc"
+              echo "Priority: optional"
+              echo "Architecture: ${{ env.DEB_ARCH }}"
+              echo "Maintainer: N.I.N.A. Team"
+              echo "Installed-Size: $installed_size"
+              echo "Description: NINA plugin package for $install_folder"
+            } > "$control_dir/control"
+
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            dpkg-deb --build "$deb_root" "$deb_path"
+            sha256sum "$deb_path" > "$deb_path.sha256"
+            echo "Created $deb_path"
+            echo "::endgroup::"
+          done
+
+      - name: Upload plugin deb artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: plugin-${{ matrix.install_folder }}
-          path: |
-            ${{ steps.build_deb.outputs.deb_path }}
-            ${{ steps.checksum.outputs.sha_path }}
+          name: plugin-debs
+          path: ${{ env.PLUGIN_ARTIFACT_DIR }}
           retention-days: 30
 
       - name: Restore SDK System.Windows.dll
