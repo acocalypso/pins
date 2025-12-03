@@ -17,6 +17,7 @@ env:
   PLUGIN_DEB_BASE: artifacts/plugin-debroot
   PLUGIN_ARTIFACT_DIR: artifacts/plugins
   PLUGIN_MSBUILD_ARGS: -p:DisableImplicitSystemDrawingReference=true
+  PLUGIN_FAILURES_FILE: artifacts/plugin-build-failures.log
 
 jobs:
   build-linux-arm64:
@@ -157,6 +158,8 @@ jobs:
         run: |
           rm -rf "${{ env.PLUGIN_DEB_BASE }}"
           mkdir -p "${{ env.PLUGIN_ARTIFACT_DIR }}"
+          mkdir -p "$(dirname "${{ env.PLUGIN_FAILURES_FILE }}")"
+          rm -f "${{ env.PLUGIN_FAILURES_FILE }}"
 
       - name: Build HocusFocus plugin deb
         shell: bash
@@ -168,44 +171,49 @@ jobs:
           install_folder="joko.nina.plugins"
           deb_package="pins-plugin-joko"
           plugin_dir=$(dirname "$project_path")
-          dotnet restore "$project_path"
-          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
-          build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-          tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-          if [ -z "$tfm_dir" ]; then
-            echo "Could not locate target framework output under $build_root" >&2
-            exit 1
+          if ! (
+            set -euo pipefail
+            dotnet restore "$project_path"
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+            if [ -z "$tfm_dir" ]; then
+              echo "Could not locate target framework output under $build_root" >&2
+              exit 1
+            fi
+            deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
+            install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
+            rm -rf "$deb_root"
+            mkdir -p "$install_root"
+            rsync -a "$tfm_dir/" "$install_root/"
+            extra_libs="$plugin_dir/extra-libs"
+            if [ -d "$extra_libs" ]; then
+              find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
+            fi
+            app_dir="$plugin_dir/app"
+            if [ -d "$app_dir" ]; then
+              rm -rf "$install_root/app"
+              cp -a "$app_dir" "$install_root/app"
+            fi
+            control_dir="$deb_root/DEBIAN"
+            mkdir -p "$control_dir"
+            installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
+            {
+              echo "Package: $deb_package"
+              echo "Version: $VERSION"
+              echo "Section: misc"
+              echo "Priority: optional"
+              echo "Architecture: ${{ env.DEB_ARCH }}"
+              echo "Maintainer: N.I.N.A. Team"
+              echo "Installed-Size: $installed_size"
+              echo "Description: NINA plugin package for $install_folder"
+            } > "$control_dir/control"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            dpkg-deb --build "$deb_root" "$deb_path"
+            sha256sum "$deb_path" > "$deb_path.sha256"
+          ); then
+            echo "$deb_package" | tee -a "${{ env.PLUGIN_FAILURES_FILE }}"
           fi
-          deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
-          install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
-          rm -rf "$deb_root"
-          mkdir -p "$install_root"
-          rsync -a "$tfm_dir/" "$install_root/"
-          extra_libs="$plugin_dir/extra-libs"
-          if [ -d "$extra_libs" ]; then
-            find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
-          fi
-          app_dir="$plugin_dir/app"
-          if [ -d "$app_dir" ]; then
-            rm -rf "$install_root/app"
-            cp -a "$app_dir" "$install_root/app"
-          fi
-          control_dir="$deb_root/DEBIAN"
-          mkdir -p "$control_dir"
-          installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
-          {
-            echo "Package: $deb_package"
-            echo "Version: $VERSION"
-            echo "Section: misc"
-            echo "Priority: optional"
-            echo "Architecture: ${{ env.DEB_ARCH }}"
-            echo "Maintainer: N.I.N.A. Team"
-            echo "Installed-Size: $installed_size"
-            echo "Description: NINA plugin package for $install_folder"
-          } > "$control_dir/control"
-          deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
-          dpkg-deb --build "$deb_root" "$deb_path"
-          sha256sum "$deb_path" > "$deb_path.sha256"
 
       - name: Build LiveStack plugin deb
         shell: bash
@@ -217,44 +225,49 @@ jobs:
           install_folder="LiveStack"
           deb_package="pins-plugin-livestack"
           plugin_dir=$(dirname "$project_path")
-          dotnet restore "$project_path"
-          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
-          build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-          tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-          if [ -z "$tfm_dir" ]; then
-            echo "Could not locate target framework output under $build_root" >&2
-            exit 1
+          if ! (
+            set -euo pipefail
+            dotnet restore "$project_path"
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+            if [ -z "$tfm_dir" ]; then
+              echo "Could not locate target framework output under $build_root" >&2
+              exit 1
+            fi
+            deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
+            install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
+            rm -rf "$deb_root"
+            mkdir -p "$install_root"
+            rsync -a "$tfm_dir/" "$install_root/"
+            extra_libs="$plugin_dir/extra-libs"
+            if [ -d "$extra_libs" ]; then
+              find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
+            fi
+            app_dir="$plugin_dir/app"
+            if [ -d "$app_dir" ]; then
+              rm -rf "$install_root/app"
+              cp -a "$app_dir" "$install_root/app"
+            fi
+            control_dir="$deb_root/DEBIAN"
+            mkdir -p "$control_dir"
+            installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
+            {
+              echo "Package: $deb_package"
+              echo "Version: $VERSION"
+              echo "Section: misc"
+              echo "Priority: optional"
+              echo "Architecture: ${{ env.DEB_ARCH }}"
+              echo "Maintainer: N.I.N.A. Team"
+              echo "Installed-Size: $installed_size"
+              echo "Description: NINA plugin package for $install_folder"
+            } > "$control_dir/control"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            dpkg-deb --build "$deb_root" "$deb_path"
+            sha256sum "$deb_path" > "$deb_path.sha256"
+          ); then
+            echo "$deb_package" | tee -a "${{ env.PLUGIN_FAILURES_FILE }}"
           fi
-          deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
-          install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
-          rm -rf "$deb_root"
-          mkdir -p "$install_root"
-          rsync -a "$tfm_dir/" "$install_root/"
-          extra_libs="$plugin_dir/extra-libs"
-          if [ -d "$extra_libs" ]; then
-            find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
-          fi
-          app_dir="$plugin_dir/app"
-          if [ -d "$app_dir" ]; then
-            rm -rf "$install_root/app"
-            cp -a "$app_dir" "$install_root/app"
-          fi
-          control_dir="$deb_root/DEBIAN"
-          mkdir -p "$control_dir"
-          installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
-          {
-            echo "Package: $deb_package"
-            echo "Version: $VERSION"
-            echo "Section: misc"
-            echo "Priority: optional"
-            echo "Architecture: ${{ env.DEB_ARCH }}"
-            echo "Maintainer: N.I.N.A. Team"
-            echo "Installed-Size: $installed_size"
-            echo "Description: NINA plugin package for $install_folder"
-          } > "$control_dir/control"
-          deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
-          dpkg-deb --build "$deb_root" "$deb_path"
-          sha256sum "$deb_path" > "$deb_path.sha256"
 
       - name: Build ninaAPI plugin deb
         shell: bash
@@ -266,44 +279,49 @@ jobs:
           install_folder="ninaAPI"
           deb_package="pins-plugin-ninaapi"
           plugin_dir=$(dirname "$project_path")
-          dotnet restore "$project_path"
-          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
-          build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-          tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-          if [ -z "$tfm_dir" ]; then
-            echo "Could not locate target framework output under $build_root" >&2
-            exit 1
+          if ! (
+            set -euo pipefail
+            dotnet restore "$project_path"
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+            if [ -z "$tfm_dir" ]; then
+              echo "Could not locate target framework output under $build_root" >&2
+              exit 1
+            fi
+            deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
+            install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
+            rm -rf "$deb_root"
+            mkdir -p "$install_root"
+            rsync -a "$tfm_dir/" "$install_root/"
+            extra_libs="$plugin_dir/extra-libs"
+            if [ -d "$extra_libs" ]; then
+              find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
+            fi
+            app_dir="$plugin_dir/app"
+            if [ -d "$app_dir" ]; then
+              rm -rf "$install_root/app"
+              cp -a "$app_dir" "$install_root/app"
+            fi
+            control_dir="$deb_root/DEBIAN"
+            mkdir -p "$control_dir"
+            installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
+            {
+              echo "Package: $deb_package"
+              echo "Version: $VERSION"
+              echo "Section: misc"
+              echo "Priority: optional"
+              echo "Architecture: ${{ env.DEB_ARCH }}"
+              echo "Maintainer: N.I.N.A. Team"
+              echo "Installed-Size: $installed_size"
+              echo "Description: NINA plugin package for $install_folder"
+            } > "$control_dir/control"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            dpkg-deb --build "$deb_root" "$deb_path"
+            sha256sum "$deb_path" > "$deb_path.sha256"
+          ); then
+            echo "$deb_package" | tee -a "${{ env.PLUGIN_FAILURES_FILE }}"
           fi
-          deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
-          install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
-          rm -rf "$deb_root"
-          mkdir -p "$install_root"
-          rsync -a "$tfm_dir/" "$install_root/"
-          extra_libs="$plugin_dir/extra-libs"
-          if [ -d "$extra_libs" ]; then
-            find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
-          fi
-          app_dir="$plugin_dir/app"
-          if [ -d "$app_dir" ]; then
-            rm -rf "$install_root/app"
-            cp -a "$app_dir" "$install_root/app"
-          fi
-          control_dir="$deb_root/DEBIAN"
-          mkdir -p "$control_dir"
-          installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
-          {
-            echo "Package: $deb_package"
-            echo "Version: $VERSION"
-            echo "Section: misc"
-            echo "Priority: optional"
-            echo "Architecture: ${{ env.DEB_ARCH }}"
-            echo "Maintainer: N.I.N.A. Team"
-            echo "Installed-Size: $installed_size"
-            echo "Description: NINA plugin package for $install_folder"
-          } > "$control_dir/control"
-          deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
-          dpkg-deb --build "$deb_root" "$deb_path"
-          sha256sum "$deb_path" > "$deb_path.sha256"
 
       - name: Build PolarAlignment plugin deb
         shell: bash
@@ -315,44 +333,49 @@ jobs:
           install_folder="PolarAlignment"
           deb_package="pins-plugin-polaralignment"
           plugin_dir=$(dirname "$project_path")
-          dotnet restore "$project_path"
-          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
-          build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-          tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-          if [ -z "$tfm_dir" ]; then
-            echo "Could not locate target framework output under $build_root" >&2
-            exit 1
+          if ! (
+            set -euo pipefail
+            dotnet restore "$project_path"
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+            if [ -z "$tfm_dir" ]; then
+              echo "Could not locate target framework output under $build_root" >&2
+              exit 1
+            fi
+            deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
+            install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
+            rm -rf "$deb_root"
+            mkdir -p "$install_root"
+            rsync -a "$tfm_dir/" "$install_root/"
+            extra_libs="$plugin_dir/extra-libs"
+            if [ -d "$extra_libs" ]; then
+              find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
+            fi
+            app_dir="$plugin_dir/app"
+            if [ -d "$app_dir" ]; then
+              rm -rf "$install_root/app"
+              cp -a "$app_dir" "$install_root/app"
+            fi
+            control_dir="$deb_root/DEBIAN"
+            mkdir -p "$control_dir"
+            installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
+            {
+              echo "Package: $deb_package"
+              echo "Version: $VERSION"
+              echo "Section: misc"
+              echo "Priority: optional"
+              echo "Architecture: ${{ env.DEB_ARCH }}"
+              echo "Maintainer: N.I.N.A. Team"
+              echo "Installed-Size: $installed_size"
+              echo "Description: NINA plugin package for $install_folder"
+            } > "$control_dir/control"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            dpkg-deb --build "$deb_root" "$deb_path"
+            sha256sum "$deb_path" > "$deb_path.sha256"
+          ); then
+            echo "$deb_package" | tee -a "${{ env.PLUGIN_FAILURES_FILE }}"
           fi
-          deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
-          install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
-          rm -rf "$deb_root"
-          mkdir -p "$install_root"
-          rsync -a "$tfm_dir/" "$install_root/"
-          extra_libs="$plugin_dir/extra-libs"
-          if [ -d "$extra_libs" ]; then
-            find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
-          fi
-          app_dir="$plugin_dir/app"
-          if [ -d "$app_dir" ]; then
-            rm -rf "$install_root/app"
-            cp -a "$app_dir" "$install_root/app"
-          fi
-          control_dir="$deb_root/DEBIAN"
-          mkdir -p "$control_dir"
-          installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
-          {
-            echo "Package: $deb_package"
-            echo "Version: $VERSION"
-            echo "Section: misc"
-            echo "Priority: optional"
-            echo "Architecture: ${{ env.DEB_ARCH }}"
-            echo "Maintainer: N.I.N.A. Team"
-            echo "Installed-Size: $installed_size"
-            echo "Description: NINA plugin package for $install_folder"
-          } > "$control_dir/control"
-          deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
-          dpkg-deb --build "$deb_root" "$deb_path"
-          sha256sum "$deb_path" > "$deb_path.sha256"
 
       - name: Build Touch-N-Stars plugin deb
         shell: bash
@@ -365,51 +388,66 @@ jobs:
           deb_package="pins-plugin-touch-n-stars"
           plugin_dir=$(dirname "$project_path")
           tmp_dir="$plugin_dir/frontend-build"
-          rm -rf "$tmp_dir" "$plugin_dir/app"
-          git clone --branch pins --single-branch https://github.com/Touch-N-Stars/Touch-N-Stars.git "$tmp_dir"
-          pushd "$tmp_dir" >/dev/null
-          npm install
-          npm run build
-          popd >/dev/null
-          mv "$tmp_dir/dist" "$plugin_dir/app"
-          dotnet restore "$project_path"
-          dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
-          build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-          tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-          if [ -z "$tfm_dir" ]; then
-            echo "Could not locate target framework output under $build_root" >&2
+          if ! (
+            set -euo pipefail
+            rm -rf "$tmp_dir" "$plugin_dir/app"
+            git clone --branch pins --single-branch https://github.com/Touch-N-Stars/Touch-N-Stars.git "$tmp_dir"
+            pushd "$tmp_dir" >/dev/null
+            npm install
+            npm run build
+            popd >/dev/null
+            mv "$tmp_dir/dist" "$plugin_dir/app"
+            dotnet restore "$project_path"
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+            if [ -z "$tfm_dir" ]; then
+              echo "Could not locate target framework output under $build_root" >&2
+              exit 1
+            fi
+            deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
+            install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
+            rm -rf "$deb_root"
+            mkdir -p "$install_root"
+            rsync -a "$tfm_dir/" "$install_root/"
+            app_dir="$plugin_dir/app"
+            if [ -d "$app_dir" ]; then
+              rm -rf "$install_root/app"
+              cp -a "$app_dir" "$install_root/app"
+            fi
+            extra_libs="$plugin_dir/extra-libs"
+            if [ -d "$extra_libs" ]; then
+              find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
+            fi
+            control_dir="$deb_root/DEBIAN"
+            mkdir -p "$control_dir"
+            installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
+            {
+              echo "Package: $deb_package"
+              echo "Version: $VERSION"
+              echo "Section: misc"
+              echo "Priority: optional"
+              echo "Architecture: ${{ env.DEB_ARCH }}"
+              echo "Maintainer: N.I.N.A. Team"
+              echo "Installed-Size: $installed_size"
+              echo "Description: NINA plugin package for $install_folder"
+            } > "$control_dir/control"
+            deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
+            dpkg-deb --build "$deb_root" "$deb_path"
+            sha256sum "$deb_path" > "$deb_path.sha256"
+          ); then
+            echo "$deb_package" | tee -a "${{ env.PLUGIN_FAILURES_FILE }}"
+          fi
+
+      - name: Summarize plugin build status
+        if: always()
+        run: |
+          if [ -s "${{ env.PLUGIN_FAILURES_FILE }}" ]; then
+            echo "The following plugin packages failed to build:" >&2
+            cat "${{ env.PLUGIN_FAILURES_FILE }}" >&2
             exit 1
           fi
-          deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
-          install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
-          rm -rf "$deb_root"
-          mkdir -p "$install_root"
-          rsync -a "$tfm_dir/" "$install_root/"
-          app_dir="$plugin_dir/app"
-          if [ -d "$app_dir" ]; then
-            rm -rf "$install_root/app"
-            cp -a "$app_dir" "$install_root/app"
-          fi
-          extra_libs="$plugin_dir/extra-libs"
-          if [ -d "$extra_libs" ]; then
-            find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
-          fi
-          control_dir="$deb_root/DEBIAN"
-          mkdir -p "$control_dir"
-          installed_size=$(du -sk "$deb_root${{ env.PLUGINS_INSTALL_BASE }}" | cut -f1)
-          {
-            echo "Package: $deb_package"
-            echo "Version: $VERSION"
-            echo "Section: misc"
-            echo "Priority: optional"
-            echo "Architecture: ${{ env.DEB_ARCH }}"
-            echo "Maintainer: N.I.N.A. Team"
-            echo "Installed-Size: $installed_size"
-            echo "Description: NINA plugin package for $install_folder"
-          } > "$control_dir/control"
-          deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${VERSION}_${{ env.DEB_ARCH }}.deb"
-          dpkg-deb --build "$deb_root" "$deb_path"
-          sha256sum "$deb_path" > "$deb_path.sha256"
+          echo "All plugin packages built successfully."
 
       - name: Upload plugin deb artifacts
         uses: actions/upload-artifact@v4
