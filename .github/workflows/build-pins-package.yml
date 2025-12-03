@@ -211,15 +211,11 @@ jobs:
             exit 1
           fi
           root="${DOTNET_ROOT:-$HOME/.dotnet}"
-          ref_dir=$(find "$root/packs/Microsoft.NETCore.App.Ref" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort | tail -n1)
-          if [ -z "$ref_dir" ]; then
-            echo "No reference pack directory found under $root" >&2
-            exit 1
-          fi
-          ref_path="$ref_dir/ref/net10.0/System.Windows.dll"
-          if [ ! -f "$ref_path" ]; then
-            echo "Reference System.Windows.dll not found at $ref_path" >&2
-            exit 1
+          ref_path=$(find "$root/packs" -path '*ref*' -name 'System.Windows.dll' 2>/dev/null | head -n1)
+          if [ -z "$ref_path" ]; then
+            echo "No System.Windows.dll found under $root/packs; skipping replacement"
+            echo "backup_path=" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           backup="$ref_path.ghbackup"
           cp "$ref_path" "$backup"
