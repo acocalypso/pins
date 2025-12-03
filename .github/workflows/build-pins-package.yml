@@ -75,6 +75,14 @@ jobs:
           echo "Package version: $version"
           echo "package_version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Determine release version
+        id: release_tag
+        run: |
+          release_version="v$(date +%d%m%Y)"
+          echo "Release version: $release_version"
+          echo "RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+          echo "value=$release_version" >> "$GITHUB_OUTPUT"
+
       - name: Stage /home/pi/pins layout
         run: |
           publish_root="${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}"
@@ -508,6 +516,20 @@ jobs:
             exit 1
           fi
           echo "All plugin packages built successfully."
+
+      - name: Publish deb-only GitHub release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: ${{ steps.release_tag.outputs.value }}
+          name: Release ${{ steps.release_tag.outputs.value }}
+          body: |
+            Automated release ${{ steps.release_tag.outputs.value }} containing the Raspberry Pi build and plugin Debian packages.
+          files: |
+            artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb
+            artifacts/plugins/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload plugin deb artifacts
         uses: actions/upload-artifact@v4
