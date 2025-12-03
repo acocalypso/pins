@@ -24,6 +24,12 @@ namespace NINA.Core.SignalR {
     public class DialogHub : Hub {
         public override async Task OnConnectedAsync() {
             await base.OnConnectedAsync();
+            
+            // Send all currently active dialogs to the newly connected client
+            var activeDialogs = DialogBroadcaster.GetActiveDialogs();
+            foreach (var dialog in activeDialogs) {
+                await Clients.Caller.SendAsync("ReceiveDialog", dialog);
+            }
         }
 
         public override async Task OnDisconnectedAsync(Exception exception) {
