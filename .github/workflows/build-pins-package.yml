@@ -22,7 +22,7 @@ env:
 jobs:
   build-linux-arm64:
     name: Build Raspberry Pi package and plugin debs
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
