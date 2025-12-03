@@ -29,7 +29,14 @@ jobs:
           submodules: recursive
 
       - name: Update submodules to latest commits
-        run: git submodule update --init --recursive --remote
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git submodule update --init --recursive --remote; then
+            exit 0
+          fi
+          echo "Remote submodule update failed; falling back to pinned commits" >&2
+          git submodule update --init --recursive
 
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v4
