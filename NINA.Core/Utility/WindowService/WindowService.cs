@@ -132,6 +132,13 @@ namespace NINA.Core.Utility.WindowService {
         }
 
         public IDispatcherOperationWrapper ShowDialog(object content, string title = "", ResizeMode resizeMode = ResizeMode.NoResize, WindowStyle windowStyle = WindowStyle.None, ICommand closeCommand = null) {
+            // Check if running in headless mode
+            if (System.Windows.DialogService.IsHeadless()) {
+                ShowViaDialogService(content, title, closeCommand);
+                // Return a completed dispatcher operation for headless mode
+                return new DispatcherOperationWrapper(dispatcher.BeginInvoke(DispatcherPriority.Normal, () => { }));
+            }
+            
             return new DispatcherOperationWrapper(dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => {
                 try {
                     window = GenerateWindow(content, title, resizeMode, windowStyle, closeCommand);
@@ -182,7 +189,7 @@ namespace NINA.Core.Utility.WindowService {
             }
         }
 
-        private void ShowViaDialogService(object content, string title) {
+        private void ShowViaDialogService(object content, string title, ICommand closeCommand = null) {
             try {
                 var contentType = content?.GetType().FullName ?? "UnknownWindow";
                 
@@ -190,7 +197,13 @@ namespace NINA.Core.Utility.WindowService {
                     Title = title ?? "Dialog",
                     Message = ExtractMessage(content),
                     ContentType = contentType,
-                    DataContext = content
+                    DataContext = content,
+                    ResultCallback = (result) => {
+                        // Execute the close command if provided
+                        if (closeCommand != null && closeCommand.CanExecute(result)) {
+                            closeCommand.Execute(result);
+                        }
+                    }
                 };
 
                 // Extract content properties
