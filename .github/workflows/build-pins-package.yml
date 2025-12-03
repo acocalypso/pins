@@ -170,14 +170,8 @@ jobs:
           } > "$control_dir/control"
           dpkg-deb --build "$deb_root" "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb"
 
-      - name: Create install archive
-        run: |
-          mkdir -p artifacts
-          tar -czf "artifacts/${{ env.PACKAGE_NAME }}.tar.gz" -C "${{ env.PACKAGE_ROOT }}" pins
-
       - name: Generate SHA256 checksums
         run: |
-          sha256sum "artifacts/${{ env.PACKAGE_NAME }}.tar.gz" > "artifacts/${{ env.PACKAGE_NAME }}.tar.gz.sha256"
           sha256sum "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb" > "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb.sha256"
 
       - name: Upload Raspberry Pi package
@@ -185,56 +179,9 @@ jobs:
         with:
           name: linux-arm64-package
           path: |
-            artifacts/${{ env.PACKAGE_NAME }}.tar.gz
-            artifacts/${{ env.PACKAGE_NAME }}.tar.gz.sha256
             artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb
             artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}.deb.sha256
           retention-days: 30
-
-      - name: Remove System.Drawing.Common references
-        id: disable_sdc
-        shell: bash
-        run: |
-          set -euo pipefail
-          root="${DOTNET_ROOT:-$HOME/.dotnet}"
-          refs=$(find "$root/packs" -path '*ref*' -name 'System.Drawing.Common.dll' 2>/dev/null)
-          if [ -z "$refs" ]; then
-            echo "No System.Drawing.Common reference assemblies found; skipping"
-            echo "disabled_refs=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          disabled_list=""
-          while IFS= read -r ref_path; do
-            [ -z "$ref_path" ] && continue
-            mv "$ref_path" "$ref_path.disabled"
-            disabled_list="$disabled_list $ref_path.disabled"
-            echo "Disabled $ref_path"
-          done <<< "$refs"
-          disabled_list=${disabled_list# }
-          echo "disabled_refs=$disabled_list" >> "$GITHUB_OUTPUT"
-
-      - name: Replace SDK System.Windows.dll
-        id: replace_system_windows
-        shell: bash
-        run: |
-          set -euo pipefail
-          compat_dll="System.Windows.Compat/bin/${{ env.BUILD_CONFIGURATION }}/net10.0/System.Windows.dll"
-          if [ ! -f "$compat_dll" ]; then
-            echo "Compat assembly not found at $compat_dll" >&2
-            exit 1
-          fi
-          root="${DOTNET_ROOT:-$HOME/.dotnet}"
-          ref_path=$(find "$root/packs" -path '*ref*' -name 'System.Windows.dll' 2>/dev/null | head -n1)
-          if [ -z "$ref_path" ]; then
-            echo "No System.Windows.dll found under $root/packs; skipping replacement"
-            echo "backup_path=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          backup="$ref_path.ghbackup"
-          cp "$ref_path" "$backup"
-          cp "$compat_dll" "$ref_path"
-          echo "Replaced $ref_path with compat build"
-          echo "backup_path=$backup" >> "$GITHUB_OUTPUT"
 
       - name: Build plugin Debian packages
         shell: bash
@@ -334,30 +281,3 @@ jobs:
           name: plugin-debs
           path: ${{ env.PLUGIN_ARTIFACT_DIR }}
           retention-days: 30
-
-      - name: Restore SDK System.Windows.dll
-        if: always()
-        shell: bash
-        run: |
-          backup="${{ steps.replace_system_windows.outputs.backup_path }}"
-          if [ -n "$backup" ] && [ -f "$backup" ]; then
-            ref_path="${backup%.ghbackup}"
-            mv "$backup" "$ref_path"
-            echo "Restored $ref_path"
-          fi
-
-      - name: Restore System.Drawing.Common references
-        if: always()
-        shell: bash
-        run: |
-          disabled="${{ steps.disable_sdc.outputs.disabled_refs }}"
-          if [ -z "$disabled" ]; then
-            exit 0
-          fi
-          for ref_disabled in $disabled; do
-            orig="${ref_disabled%.disabled}"
-            if [ -f "$ref_disabled" ]; then
-              mv "$ref_disabled" "$orig"
-              echo "Restored $orig"
-            fi
-          done
