@@ -117,7 +117,7 @@ namespace System.Windows {
 
     public class Style { }
 
-    public class DependencyObject {
+    public class DependencyObject : Media.Visual {
         // Stub for WPF DependencyObject
     }
 
@@ -169,14 +169,19 @@ namespace System.Windows {
         public Threading.Dispatcher Dispatcher { get; } = Threading.Dispatcher.CurrentDispatcher;
         public event EventHandler Closed;
         public event System.EventHandler SourceInitialized;
+        public double ActualWidth { get; set; } = 800;
+        public double ActualHeight { get; set; } = 600;
+        public Rect RestoreBounds { get; set; } = new Rect(0, 0, 800, 600);
 
         public bool? ShowDialog() => true;
         public void Show() { }
+        public void Hide() { IsVisible = false; }
         public void Close() {
             Closed?.Invoke(this, EventArgs.Empty);
         }
         public bool Focus() => true;
         public bool Activate() => true;
+        public Point PointToScreen(Point pt) => pt;
 
         // Added for stub compatibility
         public object GetValue(object dp) => null;

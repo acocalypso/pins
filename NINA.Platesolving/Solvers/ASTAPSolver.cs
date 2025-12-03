@@ -179,10 +179,12 @@ namespace NINA.PlateSolving.Solvers {
         }
 
         protected override string GetOutputPath(string imageFilePath) {
+            if (string.IsNullOrEmpty(imageFilePath)) return null;
             return Path.Combine(Path.GetDirectoryName(imageFilePath), Path.GetFileNameWithoutExtension(imageFilePath)) + ".ini";
         }
 
         protected override List<string> GetSideCarFilePaths(string imageFilePath) {
+            if (string.IsNullOrEmpty(imageFilePath)) return new List<string>();
             return new List<string>() {
                 Path.Combine(Path.GetDirectoryName(imageFilePath), Path.GetFileNameWithoutExtension(imageFilePath)) + ".wcs"
             };

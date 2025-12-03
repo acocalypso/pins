@@ -33,6 +33,19 @@ namespace NINA.Core.Utility.WindowService {
     public class WindowService : IWindowService {
         protected Dispatcher dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         protected CustomWindow window;
+        
+        // Track which content objects already have event handlers to prevent duplicates
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<object, bool> _subscribedContent = new();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<object, PropertyChangedEventHandler> _eventHandlers = new();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<object, System.Threading.Timer> _debounceTimers = new();
+        
+        // Track WindowService instances for debugging
+        private static int _instanceCounter = 0;
+        private readonly int _instanceId;
+        
+        public WindowService() {
+            _instanceId = System.Threading.Interlocked.Increment(ref _instanceCounter);
+        }
 
         public void Show(object content, string title = "", ResizeMode resizeMode = ResizeMode.NoResize, WindowStyle windowStyle = WindowStyle.None) {
             // Check if running in headless mode
@@ -63,6 +76,17 @@ namespace NINA.Core.Utility.WindowService {
         }
 
         public async Task Close() {
+            // In headless mode, we need to close via DialogService
+            if (System.Windows.DialogService.IsHeadless()) {
+                // Find and close any dialogs associated with this WindowService instance
+                var allDialogs = System.Windows.DialogService.GetAllDialogs();
+                foreach (var dialog in allDialogs) {
+                    // Close each dialog - this will trigger ClearDialogAsync
+                    System.Windows.DialogService.CloseDialog(dialog.DialogId, result: true);
+                }
+                return;
+            }
+            
             await dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => {
                 try { 
                     window?.Close(); 
@@ -128,13 +152,44 @@ namespace NINA.Core.Utility.WindowService {
         public event EventHandler OnDialogResultChanged;
 
         public event EventHandler OnClosed;
+        
+        /// <summary>
+        /// Clean up event handlers for a specific content object
+        /// Called by DialogService when dialog closes
+        /// </summary>
+        public static void CleanupEventHandlersForContent(object content) {
+            if (content == null) return;
+            
+            // Remove from subscription tracking FIRST (this stops pending timer callbacks)
+            _subscribedContent.TryRemove(content, out _);
+            
+            // Stop and dispose the debounce timer if it exists
+            if (_debounceTimers.TryRemove(content, out var timer)) {
+                try {
+                    // Stop the timer from firing (change to Infinite delay)
+                    timer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+                    timer?.Dispose();
+                } catch {
+                    // Timer might already be disposed or firing, ignore
+                }
+            }
+            
+            // Unsubscribe the event handler if it exists
+            if (_eventHandlers.TryRemove(content, out var handler)) {
+                if (content is INotifyPropertyChanged notifyObj) {
+                    notifyObj.PropertyChanged -= handler;
+                }
+            }
+        }
 
         private void ShowViaDialogService(object content, string title) {
             try {
+                var contentType = content?.GetType().FullName ?? "UnknownWindow";
+                
                 var dialog = new DialogService.DialogInfo {
                     Title = title ?? "Dialog",
                     Message = ExtractMessage(content),
-                    ContentType = content?.GetType().FullName ?? "UnknownWindow",
+                    ContentType = contentType,
                     DataContext = content
                 };
 
@@ -146,38 +201,65 @@ namespace NINA.Core.Utility.WindowService {
                 int dialogId = DialogService.RegisterDialog(dialog);
                 
                 // Subscribe to property changes for real-time updates
-                if (content is INotifyPropertyChanged notifyObj) {
-                    notifyObj.PropertyChanged += (sender, e) => {
-                        _ = Task.Run(async () => {
-                            try {
-                                var broadcaster = SignalR.DialogBroadcaster.Instance;
-                                if (broadcaster != null) {
-                                    var parameters = dialog.Content.ToDictionary(
-                                        kvp => kvp.Key,
-                                        kvp => kvp.Value?.ToString() ?? ""
-                                    );
+                // Only subscribe once per content object to prevent duplicate broadcasts
+                if (content is INotifyPropertyChanged notifyObj && _subscribedContent.TryAdd(content, true)) {
+                    PropertyChangedEventHandler handler = null;
+                    handler = (sender, e) => {
+                        
+                        // Debounce: Reset timer on each property change, only broadcast after 100ms of silence
+                        var timer = _debounceTimers.AddOrUpdate(content, 
+                            // Add new timer
+                            key => new System.Threading.Timer(_ => {
+                                _ = Task.Run(async () => {
+                                    try {
+                                        // Check if this content is still subscribed (dialog not closed)
+                                        if (!_subscribedContent.ContainsKey(content)) {
+                                            return; // Dialog was closed, don't broadcast
+                                        }
+                                        
+                                        var broadcaster = SignalR.DialogBroadcaster.Instance;
+                                        if (broadcaster != null) {
+                                            var parameters = dialog.Content.ToDictionary(
+                                                kvp => kvp.Key,
+                                                kvp => kvp.Value?.ToString() ?? ""
+                                            );
 
-                                    var dialogData = new Model.DialogData {
-                                        Title = title ?? "Dialog",
-                                        ContentType = dialog.ContentType,
-                                        Active = true,
-                                        Status = ExtractMessage(content),
-                                        Parameters = parameters,
-                                        AvailableCommands = ["Cancel"]
-                                    };
+                                            var dialogData = new Model.DialogData {
+                                                Title = title ?? "Dialog",
+                                                ContentType = dialog.ContentType,
+                                                Active = true,
+                                                Status = ExtractMessage(content),
+                                                Parameters = parameters,
+                                                AvailableCommands = ["Cancel"]
+                                            };
 
-                                    // Special handling for PlateSolvingStatusVM
-                                    if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.PlateSolvingStatusVM") {
-                                        dialogData.SlewAndCenter = ExtractSlewAndCenterData(content);
+                                            // Special handling for PlateSolvingStatusVM
+                                            if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.PlateSolvingStatusVM") {
+                                                dialogData.SlewAndCenter = ExtractSlewAndCenterData(content);
+                                            }
+
+                                            await broadcaster.BroadcastDialogAsync(dialogData);
+                                        }
+                                    } catch (Exception ex) {
+                                        Logger.Error($"Failed to broadcast dialog update via SignalR: {ex}");
                                     }
-
-                                    await broadcaster.BroadcastDialogAsync(dialogData);
-                                }
-                            } catch (Exception ex) {
-                                Logger.Error($"Failed to broadcast dialog update via SignalR: {ex}");
-                            }
-                        });
+                                });
+                            }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite),
+                            // Update existing timer
+                            (key, existingTimer) => {
+                                existingTimer.Change(100, System.Threading.Timeout.Infinite); // Reset to 100ms
+                                return existingTimer;
+                            });
+                        
+                        // Start/restart the timer
+                        timer.Change(100, System.Threading.Timeout.Infinite);
                     };
+                    
+                    // Subscribe the handler
+                    notifyObj.PropertyChanged += handler;
+                    
+                    // Store handler for cleanup
+                    _eventHandlers[content] = handler;
                 }
                 
                 // Subscribe to PlateSolveHistory collection changes for PlateSolvingStatusVM
@@ -189,6 +271,11 @@ namespace NINA.Core.Utility.WindowService {
                             collectionChanged.CollectionChanged += (sender, e) => {
                                 _ = Task.Run(async () => {
                                     try {
+                                        // Check if this content is still subscribed (dialog not closed)
+                                        if (!_subscribedContent.ContainsKey(content)) {
+                                            return; // Dialog was closed, don't broadcast
+                                        }
+                                        
                                         var broadcaster = NINA.Core.SignalR.DialogBroadcaster.Instance;
                                         if (broadcaster != null) {
                                             var parameters = dialog.Content.ToDictionary(
@@ -223,6 +310,11 @@ namespace NINA.Core.Utility.WindowService {
                 // Broadcast via SignalR immediately
                 _ = Task.Run(async () => {
                     try {
+                        // Check if this content is still subscribed (dialog not closed immediately)
+                        if (!_subscribedContent.ContainsKey(content)) {
+                            return; // Dialog was closed before broadcast, don't broadcast
+                        }
+                        
                         var broadcaster = SignalR.DialogBroadcaster.Instance;
                         if (broadcaster != null) {
                             // Convert object dictionary to string dictionary for Parameters

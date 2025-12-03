@@ -271,5 +271,10 @@ namespace System.Windows.Media {
 
         public override string ToString() => _familyName;
     }
-}
 
+    /// <summary>
+    /// Visual base class (minimal implementation for DPI-aware operations)
+    /// </summary>
+    public class Visual {
+    }
+}
