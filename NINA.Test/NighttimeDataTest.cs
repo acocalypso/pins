@@ -33,11 +33,11 @@ namespace NINA.Test {
         private DateTime referenceDate;
         private double latitude;
         private double longitude;
-        private RiseAndSetEvent twilightRiseAndSet;
-        private RiseAndSetEvent nauticalTwilightRiseAndSet;
-        private RiseAndSetEvent civilTwilightRiseAndSet;
-        private RiseAndSetEvent moonRiseAndSet;
-        private RiseAndSetEvent sunRiseAndSet;
+        private RiseAndSetEvent? twilightRiseAndSet;
+        private RiseAndSetEvent? nauticalTwilightRiseAndSet;
+        private RiseAndSetEvent? civilTwilightRiseAndSet;
+        private RiseAndSetEvent? moonRiseAndSet;
+        private RiseAndSetEvent? sunRiseAndSet;
         private MoonPhase moonPhase;
         private double? illumination;
 
@@ -115,7 +115,7 @@ namespace NINA.Test {
         public void IlluminationChangedTest() {
             illumination = null;
             var data = GetData();
-            ClassicAssert.IsFalse(data.Illumination.HasValue);
+            Assert.That(data.Illumination.HasValue, Is.False);
         }
 
         [Test]
