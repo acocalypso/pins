@@ -69,6 +69,11 @@ namespace System.Windows.Threading {
             // Ignore priority in headless mode
             return System.Threading.Tasks.Task.Run(() => method?.DynamicInvoke(args));
         }
+
+        public bool CheckAccess() {
+            // In headless mode, always return true (we can access from any thread)
+            return true;
+        }
     }
 
     /// <summary>
