@@ -49,8 +49,8 @@ namespace NINA.Core.SignalR {
             var message = new MyMessageBoxMessage {
                 Title = caption,
                 Text = messageBoxText,
-                Button = button,
-                DefaultResult = defaultResult
+                Button = button.ToString(),
+                DefaultResult = defaultResult.ToString()
             };
 
             var tcs = new TaskCompletionSource<MessageBoxResult>();
@@ -86,9 +86,14 @@ namespace NINA.Core.SignalR {
             }
         }
 
-        public async Task HandleMessageBoxResponseAsync(string messageBoxId, MessageBoxResult result) {
+        public async Task HandleMessageBoxResponseAsync(string messageBoxId, string result) {
             if (_pendingRequests.TryRemove(messageBoxId, out var tcs)) {
-                tcs.TrySetResult(result);
+                if (System.Enum.TryParse<MessageBoxResult>(result, out var parsedResult)) {
+                    tcs.TrySetResult(parsedResult);
+                } else {
+                    Logger.Warning($"Failed to parse MessageBoxResult from '{result}'");
+                    tcs.TrySetResult(MessageBoxResult.None);
+                }
             }
             await Task.CompletedTask;
         }

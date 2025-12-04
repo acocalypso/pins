@@ -42,7 +42,7 @@ namespace NINA.Core.SignalR {
         /// <summary>
         /// Handle message box response from the client
         /// </summary>
-        public async Task RespondToMessageBox(string messageBoxId, MessageBoxResult result) {
+        public async Task RespondToMessageBox(string messageBoxId, string result) {
             Logger.Info($"Received message box response: ID={messageBoxId}, Result={result}");
             await _broadcaster.HandleMessageBoxResponseAsync(messageBoxId, result);
         }

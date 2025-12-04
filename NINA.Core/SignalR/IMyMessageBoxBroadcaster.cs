@@ -18,6 +18,6 @@ using System.Windows;
 namespace NINA.Core.SignalR {
     public interface IMyMessageBoxBroadcaster {
         Task<MessageBoxResult> ShowMessageBoxAsync(string messageBoxText, string caption, MessageBoxButton button, MessageBoxResult defaultResult, System.TimeSpan timeout = default);
-        Task HandleMessageBoxResponseAsync(string messageBoxId, MessageBoxResult result);
+        Task HandleMessageBoxResponseAsync(string messageBoxId, string result);
     }
 }

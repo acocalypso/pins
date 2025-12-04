@@ -24,9 +24,9 @@ namespace NINA.Core.MyMessageBox {
         public string Id { get; set; } = Guid.NewGuid().ToString();
         public string Title { get; set; }
         public string Text { get; set; }
-        public MessageBoxButton Button { get; set; }
-        public MessageBoxResult DefaultResult { get; set; }
+        public string Button { get; set; }
+        public string DefaultResult { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
-        public MessageBoxResult? Result { get; set; }
+        public string Result { get; set; }
     }
 }
