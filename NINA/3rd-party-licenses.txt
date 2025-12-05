@@ -18,6 +18,8 @@ applies to:
     - Nito.Mvvm.Async
     - NJsonSchema
     - OxyPlot
+    - OpenCv4Sharp
+    - Swashbuckle.AspNetCore
 -----------------------------------------------------------------------------
 
 Copyright <YEAR> <COPYRIGHT HOLDER>
@@ -190,6 +192,9 @@ GNU Lesser Public License v2.1
 
 applies to:
     - Accord
+    - libgphoto2
+    - libraw
+    - libudev
 -----------------------------------------------------------------------------
 
                   GNU LESSER GENERAL PUBLIC LICENSE
@@ -817,6 +822,8 @@ BSD 3-Clause License
 applies to:
     - CSharpFITS
     - Google.Protobuf  
+    - OpenCV
+    - HIDAPI
 -----------------------------------------------------------------------------
 
 Copyright <YEAR> <COPYRIGHT HOLDER>
