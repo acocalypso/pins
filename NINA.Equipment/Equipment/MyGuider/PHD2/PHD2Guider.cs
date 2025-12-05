@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright � 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright © 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -990,7 +990,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                         break;
                     }
                 case "ConfigurationChange": {
-                        if (initialized) {
+                        if(initialized) { 
                             Logger.Debug($"PHD2 - ConfigurationChange!");
                             _ = SetPixelScale();
                         }
@@ -1104,7 +1104,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                         FileName = profileService.ActiveProfile.GuiderSettings.PHD2Path,
                         Arguments = $"-i={profileService.ActiveProfile.GuiderSettings.PHD2InstanceNumber}"
                     }
-                };
+                    };
                 process?.Start();
                 process?.WaitForInputIdle();
 

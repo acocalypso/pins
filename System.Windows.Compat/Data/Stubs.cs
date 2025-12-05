@@ -249,13 +249,62 @@ namespace System.Windows.Data {
         public string UpdateSourceTrigger { get; set; }
         public object Converter { get; set; }
         public object ConverterParameter { get; set; }
+
+        /// <summary>
+        /// Sentinel value indicating a binding converter should not return a value
+        /// </summary>
+        public static readonly object DoNothing = new object();
     }
 
     public interface IValueConverter { }
     public class BindingBase { }
     public enum BindingMode { OneWay, TwoWay, OneTime, OneWayToSource, Default }
     public class MultiBinding : BindingBase { }
-    public interface IMultiValueConverter { }
+    
+    public interface IMultiValueConverter {
+        object Convert(object[] values, System.Type targetType, object parameter, System.Globalization.CultureInfo culture);
+        object[] ConvertBack(object value, System.Type[] targetTypes, object parameter, System.Globalization.CultureInfo culture);
+    }
+    
+    /// <summary>
+    /// Attribute that specifies the input and output types for a value converter
+    /// </summary>
+    [System.AttributeUsage(System.AttributeTargets.Class)]
+    public class ValueConversionAttribute : System.Attribute {
+        public ValueConversionAttribute(System.Type sourceType, System.Type targetType) {
+            SourceType = sourceType;
+            TargetType = targetType;
+        }
+
+        public System.Type SourceType { get; }
+        public System.Type TargetType { get; }
+    }
+
+    /// <summary>
+    /// Represents the thickness of a frame around a rectangle.
+    /// </summary>
+    public struct Thickness {
+        public Thickness(double uniformLength) {
+            Left = Top = Right = Bottom = uniformLength;
+        }
+
+        public Thickness(double leftRight, double topBottom) {
+            Left = Right = leftRight;
+            Top = Bottom = topBottom;
+        }
+
+        public Thickness(double left, double top, double right, double bottom) {
+            Left = left;
+            Top = top;
+            Right = right;
+            Bottom = bottom;
+        }
+
+        public double Left { get; set; }
+        public double Top { get; set; }
+        public double Right { get; set; }
+        public double Bottom { get; set; }
+    }
 }
 
 namespace System.ComponentModel {
@@ -356,6 +405,75 @@ namespace System.Windows {
         }
     }
 
+    /// <summary>
+    /// Provides a base class for objects that can be made immutable.
+    /// </summary>
+    public abstract class Freezable : DependencyObject {
+        private bool _isFrozen = false;
+
+        public bool IsFrozen => _isFrozen;
+
+        public void Freeze() {
+            _isFrozen = true;
+        }
+
+        protected abstract Freezable CreateInstanceCore();
+
+        public Freezable Clone() {
+            var clone = CreateInstanceCore();
+            if (clone != null) {
+                // Copy dependency properties from this instance to clone
+                var props = GetType().GetProperties();
+                foreach (var prop in props) {
+                    if (prop.CanRead && prop.CanWrite) {
+                        try {
+                            prop.SetValue(clone, prop.GetValue(this));
+                        } catch {
+                            // Ignore properties that can't be copied
+                        }
+                    }
+                }
+            }
+            return clone;
+        }
+    }
+
+    /// <summary>
+    /// A generic collection of Freezable objects.
+    /// </summary>
+    public class FreezableCollection<T> : Freezable, System.Collections.Generic.IEnumerable<T>, System.Collections.IEnumerable
+        where T : Freezable {
+        private readonly System.Collections.ObjectModel.ObservableCollection<T> _collection;
+
+        public FreezableCollection() {
+            _collection = new System.Collections.ObjectModel.ObservableCollection<T>();
+        }
+
+        public void Add(T item) {
+            _collection.Add(item);
+        }
+
+        public void Remove(T item) {
+            _collection.Remove(item);
+        }
+
+        public void Clear() {
+            _collection.Clear();
+        }
+
+        public System.Collections.Generic.IEnumerator<T> GetEnumerator() {
+            return _collection.GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() {
+            return _collection.GetEnumerator();
+        }
+
+        protected override Freezable CreateInstanceCore() {
+            return new FreezableCollection<T>();
+        }
+    }
+
     public class Application {
         public static Application Current { get; } = new Application();
         public Window MainWindow { get; set; }
@@ -424,6 +542,17 @@ namespace System.Windows {
         public void SetValue(object dp, object value) { }
         public void InvalidateMeasure() { }
         public static object Register(string name, System.Type propertyType, System.Type ownerType, object metadata) => null;
+
+        /// <summary>
+        /// Gets the Window for an element, walking up the visual tree if needed.
+        /// </summary>
+        public static Window GetWindow(object element) {
+            // In headless mode, return the current application's main window
+            if (element is Window window) {
+                return window;
+            }
+            return Application.Current?.MainWindow as Window;
+        }
     }
 
     public enum WindowStartupLocation {
@@ -616,6 +745,8 @@ namespace System.Windows.Controls {
         public object Content { get; set; }
         public object ToolTip { get; set; }
         public System.Windows.Visibility Visibility { get; set; }
+
+        public event System.EventHandler Click;
 
         public void RaiseEvent(System.Windows.RoutedEventArgs e) { }
     }

@@ -74,6 +74,18 @@ namespace System.Windows {
     }
 
     /// <summary>
+    /// Provides metadata for UI-level dependency properties.
+    /// </summary>
+    public class UIPropertyMetadata : PropertyMetadata {
+        public UIPropertyMetadata() { }
+
+        public UIPropertyMetadata(object defaultValue) : base(defaultValue) { }
+
+        public UIPropertyMetadata(object defaultValue, PropertyChangedCallback propertyChangedCallback) 
+            : base(defaultValue, propertyChangedCallback) { }
+    }
+
+    /// <summary>
     /// Represents a callback for when a dependency property value changes.
     /// </summary>
     public delegate void PropertyChangedCallback(DependencyObject d, DependencyPropertyChangedEventArgs e);

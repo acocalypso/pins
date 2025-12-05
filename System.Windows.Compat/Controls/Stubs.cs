@@ -122,6 +122,28 @@ namespace System.Windows.Controls {
 
         public event System.Windows.RoutedEventHandler Loaded;
     }
+
+    /// <summary>
+    /// Base class for validation rules
+    /// </summary>
+    public class ValidationRule {
+        public virtual ValidationResult Validate(object value, System.Globalization.CultureInfo cultureInfo) {
+            return new ValidationResult(true, null);
+        }
+    }
+
+    /// <summary>
+    /// Represents the result of a validation
+    /// </summary>
+    public class ValidationResult {
+        public ValidationResult(bool isValid, object errorContent) {
+            IsValid = isValid;
+            ErrorContent = errorContent;
+        }
+
+        public bool IsValid { get; }
+        public object ErrorContent { get; }
+    }
 }
 
 namespace System.Windows.Controls.Primitives {
