@@ -131,6 +131,19 @@ namespace System.Windows.Input {
     }
 
     /// <summary>
+    /// Provides data for size changed events.
+    /// </summary>
+    public class SizeChangedEventArgs : System.Windows.RoutedEventArgs {
+        public System.Windows.Size PreviousSize { get; set; }
+        public System.Windows.Size NewSize { get; set; }
+
+        public SizeChangedEventArgs(System.Windows.Size previousSize, System.Windows.Size newSize) {
+            PreviousSize = previousSize;
+            NewSize = newSize;
+        }
+    }
+
+    /// <summary>
     /// Represents a keyboard key.
     /// </summary>
     public enum Key {
@@ -361,6 +374,7 @@ namespace System.Windows {
         public event EventHandler<System.Windows.Input.StylusDownEventArgs> StylusDown;
         public event EventHandler<System.Windows.Input.StylusEventArgs> StylusMove;
         public event EventHandler<System.Windows.Input.StylusEventArgs> StylusUp;
+        public event EventHandler<System.Windows.Input.SizeChangedEventArgs> SizeChanged;
 
         public void RaiseEvent(RoutedEventArgs e) {
         }

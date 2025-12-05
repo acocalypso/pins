@@ -64,6 +64,10 @@ namespace System.Windows.Threading {
             return System.Threading.Tasks.Task.Run(callback);
         }
 
+        public System.Threading.Tasks.Task BeginInvoke(Action callback, DispatcherPriority priority) {
+            // Ignore priority in headless mode
+            return System.Threading.Tasks.Task.Run(callback);
+        }
 
         public System.Threading.Tasks.Task BeginInvoke(DispatcherPriority priority, Delegate method, params object[] args) {
             // Ignore priority in headless mode

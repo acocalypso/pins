@@ -522,9 +522,14 @@ namespace System.Windows {
         public Threading.Dispatcher Dispatcher { get; } = Threading.Dispatcher.CurrentDispatcher;
         public event EventHandler Closed;
         public event System.EventHandler SourceInitialized;
+        public event EventHandler ContentRendered;
         public double ActualWidth { get; set; } = 800;
         public double ActualHeight { get; set; } = 600;
         public Rect RestoreBounds { get; set; } = new Rect(0, 0, 800, 600);
+        public double Left { get; set; } = 0;
+        public double Top { get; set; } = 0;
+        public double Width { get; set; } = 800;
+        public double Height { get; set; } = 600;
 
         public bool? ShowDialog() => true;
         public void Show() { }
@@ -587,9 +592,16 @@ namespace System.Windows {
 
         public ResourceDictionary() : base() { }
 
-        // Always return null - resources are never populated in headless mode
+        // Return sensible defaults for common resource keys in headless mode
         public new object this[object key] {
-            get => null;
+            get {
+                string keyStr = key?.ToString() ?? "";
+                // Return a default empty GeometryGroup for any graphics/geometry requests
+                if (keyStr.Contains("SVG") || keyStr.Contains("Icon") || keyStr.Contains("Geometry")) {
+                    return new System.Windows.Media.GeometryGroup();
+                }
+                return null;
+            }
             set { } // No-op
         }
 

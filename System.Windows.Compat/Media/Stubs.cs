@@ -44,6 +44,10 @@ namespace System.Windows.Media {
 
     public class GeometryGroup : Geometry {
         public GeometryCollection Children { get; set; } = new GeometryCollection();
+
+        protected override Freezable CreateInstanceCore() {
+            return new GeometryGroup();
+        }
     }
 
     public class GeometryCollection : System.Collections.Generic.List<Geometry> { }
@@ -65,6 +69,12 @@ namespace System.Windows.Media {
         public PathFigure(Point startPoint, System.Collections.Generic.List<PathSegment> segments, bool isClosed) {
             StartPoint = startPoint;
             Segments = new PathSegmentCollection(segments);
+            IsClosed = isClosed;
+        }
+
+        public PathFigure(Point startPoint, PathSegmentCollection segments, bool isClosed) {
+            StartPoint = startPoint;
+            Segments = segments;
             IsClosed = isClosed;
         }
     }
@@ -89,10 +99,12 @@ namespace System.Windows.Media {
         }
     }
 
-    public class PathSegmentCollection : System.Collections.Generic.List<PathSegment> {
+    public class PathSegmentCollection : System.Collections.ObjectModel.ObservableCollection<PathSegment> {
         public PathSegmentCollection() : base() { }
-        public PathSegmentCollection(int capacity) : base(capacity) { }
+        public PathSegmentCollection(int capacity) : base() { }
         public PathSegmentCollection(System.Collections.Generic.IEnumerable<PathSegment> collection) : base(collection) { }
+
+        public void Freeze() { }
     }
 
     /// <summary>
@@ -106,11 +118,23 @@ namespace System.Windows.Media {
     public class PathGeometry : Geometry {
         public PathFigureCollection Figures { get; set; } = new PathFigureCollection();
         public FillRule FillRule { get; set; } = FillRule.EvenOdd;
+
+        protected override Freezable CreateInstanceCore() {
+            return new PathGeometry();
+        }
     }
 
-    public class LineGeometry : Geometry { }
+    public class LineGeometry : Geometry {
+        protected override Freezable CreateInstanceCore() {
+            return new LineGeometry();
+        }
+    }
 
-    public class EllipseGeometry : Geometry { }
+    public class EllipseGeometry : Geometry {
+        protected override Freezable CreateInstanceCore() {
+            return new EllipseGeometry();
+        }
+    }
 
     public struct Color {
         public byte A { get; set; }
@@ -460,7 +484,7 @@ namespace System.Windows.Media {
     /// <summary>
     /// Represents a geometric shape.
     /// </summary>
-    public abstract class Geometry {
+    public abstract class Geometry : System.Windows.Freezable {
     }
 
     /// <summary>
@@ -468,5 +492,9 @@ namespace System.Windows.Media {
     /// </summary>
     public class RectangleGeometry : Geometry {
         public Rect Rect { get; set; }
+
+        protected override Freezable CreateInstanceCore() {
+            return new RectangleGeometry();
+        }
     }
 }
