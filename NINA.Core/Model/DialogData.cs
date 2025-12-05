@@ -25,11 +25,32 @@ namespace NINA.Core.Model {
         public bool Active { get; set; }
         public string Status { get; set; }
         public SlewAndCenterData SlewAndCenter { get; set; }
+        public MeridianFlipData MeridianFlip { get; set; }
         public Dictionary<string, string> Parameters { get; set; }
         public string StatusMessage { get; set; }
         public List<Dictionary<string, string>> Table { get; set; }
         public List<string> TableHeaders { get; set; }
         public List<string> AvailableCommands { get; set; }
+    }
+
+    /// <summary>
+    /// DTO for meridian flip data
+    /// </summary>
+    public class MeridianFlipData {
+        public bool Active { get; set; }
+        public int StepCount { get; set; }
+        public List<MeridianFlipStep> Steps { get; set; }
+    }
+
+    /// <summary>
+    /// DTO for individual meridian flip step
+    /// </summary>
+    public class MeridianFlipStep {
+        public string Id { get; set; }
+        public string Title { get; set; }
+        public bool Finished { get; set; }
+        public bool IsCurrent { get; set; }
+        public double? TimeRemaining { get; set; }
     }
 
     /// <summary>

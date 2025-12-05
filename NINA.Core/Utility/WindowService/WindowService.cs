@@ -250,6 +250,11 @@ namespace NINA.Core.Utility.WindowService {
                                             if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.PlateSolvingStatusVM") {
                                                 dialogData.SlewAndCenter = ExtractSlewAndCenterData(content);
                                             }
+                                            
+                                            // Special handling for MeridianFlipVM
+                                            if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.MeridianFlipVM") {
+                                                dialogData.MeridianFlip = ExtractMeridianFlipData(content);
+                                            }
 
                                             await broadcaster.BroadcastDialogAsync(dialogData);
                                         }
@@ -303,7 +308,8 @@ namespace NINA.Core.Utility.WindowService {
                                                 Status = ExtractMessage(content),
                                                 Parameters = parameters,
                                                 AvailableCommands = ["Cancel"],
-                                                SlewAndCenter = ExtractSlewAndCenterData(content)
+                                                SlewAndCenter = ExtractSlewAndCenterData(content),
+                                                MeridianFlip = ExtractMeridianFlipData(content)
                                             };
 
                                             await broadcaster.BroadcastDialogAsync(dialogData);
@@ -348,6 +354,11 @@ namespace NINA.Core.Utility.WindowService {
                             // Special handling for PlateSolvingStatusVM
                             if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.PlateSolvingStatusVM") {
                                 dialogData.SlewAndCenter = ExtractSlewAndCenterData(content);
+                            }
+                            
+                            // Special handling for MeridianFlipVM
+                            if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.MeridianFlipVM") {
+                                dialogData.MeridianFlip = ExtractMeridianFlipData(content);
                             }
                             
                             await broadcaster.BroadcastDialogAsync(dialogData);
@@ -486,6 +497,62 @@ namespace NINA.Core.Utility.WindowService {
                 };
             } catch (Exception ex) {
                 Logger.Error($"Failed to convert measurement: {ex}");
+                return null;
+            }
+        }
+
+        private Model.MeridianFlipData ExtractMeridianFlipData(object content) {
+            try {
+                var type = content.GetType();
+                
+                // Get Steps property (AutomatedWorkflow)
+                var stepsProp = type.GetProperty("Steps");
+                var stepsObj = stepsProp?.GetValue(content);
+                
+                // Get ActiveStep property to determine current step
+                var activeStepProp = stepsObj?.GetType().GetProperty("ActiveStep");
+                var activeStep = activeStepProp?.GetValue(stepsObj);
+                
+                var steps = new List<Model.MeridianFlipStep>();
+                
+                if (stepsObj != null && stepsObj is System.Collections.IEnumerable stepsCollection) {
+                    foreach (var step in stepsCollection) {
+                        if (step == null) continue;
+                        
+                        var stepType = step.GetType();
+                        var idProp = stepType.GetProperty("Id");
+                        var titleProp = stepType.GetProperty("Title");
+                        var finishedProp = stepType.GetProperty("Finished");
+                        var isCurrentProp = stepType.GetProperty("IsCurrent");
+                        var timeRemainingProp = stepType.GetProperty("TimeRemaining");
+                        
+                        if (idProp != null && titleProp != null && finishedProp != null) {
+                            var timeRemainingValue = timeRemainingProp?.GetValue(step);
+                            double? timeRemaining = null;
+                            if (timeRemainingValue != null && double.TryParse(timeRemainingValue.ToString(), out double timeValue)) {
+                                timeRemaining = timeValue;
+                            }
+                            
+                            steps.Add(new Model.MeridianFlipStep {
+                                Id = idProp.GetValue(step)?.ToString() ?? "",
+                                Title = titleProp.GetValue(step)?.ToString() ?? "",
+                                Finished = (bool)(finishedProp.GetValue(step) ?? false),
+                                IsCurrent = activeStep == step,
+                                TimeRemaining = timeRemaining
+                            });
+                        }
+                    }
+                }
+                
+                var result = new Model.MeridianFlipData {
+                    Active = true,
+                    StepCount = steps.Count,
+                    Steps = steps
+                };
+                
+                return result;
+            } catch (Exception ex) {
+                Logger.Error($"Failed to extract MeridianFlip data: {ex}");
                 return null;
             }
         }
