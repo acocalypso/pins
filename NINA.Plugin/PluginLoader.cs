@@ -340,10 +340,10 @@ namespace NINA.Plugin {
             try {
                 var applicationVersion = new Version(CoreUtil.Version);
 
-                var pluginFileInfo = new FileInfo(file);
-                if (pluginFileInfo.AlternateDataStreamExists("Zone.Identifier")) {
-                    pluginFileInfo.DeleteAlternateDataStream("Zone.Identifier");
-                }
+//                var pluginFileInfo = new FileInfo(file);
+//                if (pluginFileInfo.AlternateDataStreamExists("Zone.Identifier")) {
+//                    pluginFileInfo.DeleteAlternateDataStream("Zone.Identifier");
+//                }
 
                 var references = PluginAssemblyReader.GrabAssemblyReferences(file);
                 if (references.FirstOrDefault(x => x.Contains("NINA.Plugin")) != null) {
