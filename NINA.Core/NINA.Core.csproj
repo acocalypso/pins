@@ -58,7 +58,7 @@
     <PackageReference Include="System.Management" Version="10.0.0" />
     <PackageReference Include="System.Runtime.Caching" Version="10.0.0" />
     <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
     <!-- Exclude System.Drawing.Common as it conflicts with our compat library -->
     <PackageReference Include="System.Drawing.Common" Version="*" ExcludeAssets="all" />
   </ItemGroup>
