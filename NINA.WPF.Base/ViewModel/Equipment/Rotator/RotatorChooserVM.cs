@@ -23,6 +23,8 @@ using NINA.Equipment.Equipment;
 using NINA.Equipment.Interfaces;
 using System.Threading.Tasks;
 using NINA.Equipment.Interfaces.ViewModel;
+using Nitecrawler;
+using Wanderer;
 
 namespace NINA.WPF.Base.ViewModel.Equipment.Rotator {
 
@@ -37,7 +39,35 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Rotator {
                 var devices = new List<IDevice>();
 
                 devices.Add(new DummyDevice(Loc.Instance["LblNoRotator"]));
-                
+
+                /* Nitecrawler rotators */
+                try {
+                    Logger.Trace("Adding Nitecrawler Rotators");
+                    int[] ids = new int[NitecrawlerSDK.MLNC_MAX_NUM];
+                    NitecrawlerSDK.ScanRotators(out var rotators, ids);
+                    for (int i = 0; i < rotators; i++) {
+                        var rotator = new NitecrawlerRotator(ids[i], profileService);
+                        Logger.Info($"Adding Nitecrawler Rotator: {rotator.Name}");
+                        devices.Add(rotator);
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
+                /* Wanderer rotators */
+                try {
+                    Logger.Trace("Adding Wanderer Rotators");
+                    int[] ids = new int[WandererRotatorSDK.WR_MAX_NUM];
+                    WandererRotatorSDK.RotatorScan(out var rotators, ids);
+                    for (int i = 0; i < rotators; i++) {
+                        var rotator = new WandererRotator(ids[i], profileService);
+                        Logger.Info($"Adding Wanderer Rotator: {rotator.Name}");
+                        devices.Add(rotator);
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
                 /* Plugin Providers */
                 foreach (var provider in await equipmentProviders.GetProviders()) {
                     try {

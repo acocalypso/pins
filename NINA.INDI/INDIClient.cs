@@ -75,17 +75,12 @@ namespace NINA.INDI {
             /* Focusers */
             {"indi_simulator_focus", "Focuser Simulator (INDI)" },
             {"indi_gemini_focus", "Gemini Focuser (INDI)" },
-            {"indi_moonlite_focus", "MoonLite Focuser (INDI)" },
-            {"indi_nightcrawler_focus", "MoonLite NiteCrawler Focuser (INDI)" },
             {"indi_qhy_focuser", "QHY Q-Focuser (INDI)" },
 
             /* Rotators */
             { "indi_falcon_rotator", "Pegasus Falcon Rotator (INDI)" },
             { "indi_falconv2_rotator", "Pegasus Falcon V2 Rotator (INDI)" },
             { "indi_simulator_rotator", "Rotator Simulator (INDI)" },
-            { "indi_wanderer_lite_rotator", "WandererRotator Lite (INDI)" },
-            { "indi_wanderer_rotator_lite_v2", "WandererRotator Lite V2 (INDI)" },
-            { "indi_wanderer_rotator_mini", "WandererRotator Mini (INDI)" },
 
             /* Mounts */
             { "indi_simulator_telescope", "Mount Simulator" },

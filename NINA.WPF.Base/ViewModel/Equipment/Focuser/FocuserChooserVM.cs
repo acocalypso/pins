@@ -27,6 +27,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using ToupTek;
 using ZWOptical.ASISDK;
+using Nitecrawler;
 
 namespace NINA.WPF.Base.ViewModel.Equipment.Focuser {
 
@@ -83,6 +84,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Focuser {
                     Logger.Error(ex);
                 }
 
+                /* ToupTek focusers */
                 try {
                     Logger.Trace("Adding ToupTek Focusers");
                     var toupTekDevices = ToupCam.EnumV2();
@@ -93,6 +95,20 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Focuser {
                             Logger.Debug($"Adding ToupTek Focuser: {focuser.Name}");
                             devices.Add(focuser);
                         }
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
+                /* Nitecrawler focusers */
+                try {
+                    Logger.Trace("Adding Nitecrawler Focusers");
+                    int[] ids = new int[NitecrawlerSDK.MLNC_MAX_NUM];
+                    NitecrawlerSDK.ScanFocusers(out var focusers, ids);
+                    for (int i = 0; i < focusers; i++) {
+                        var focuser = new NitecrawlerFocuser(ids[i], profileService);
+                        Logger.Info($"Adding Nitecrawler Focuser: {focuser.Name}");
+                        devices.Add(focuser);
                     }
                 } catch (Exception ex) {
                     Logger.Error(ex);
