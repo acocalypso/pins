@@ -329,9 +329,24 @@ namespace Accord.Imaging.Filters {
         protected System.Collections.Generic.Dictionary<System.Drawing.Imaging.PixelFormat, System.Drawing.Imaging.PixelFormat> FormatTranslations { get; set; }
 
         /// <summary>
-        /// Bayer pattern matrix (2x2)
+        /// Bayer pattern matrix (2x2) - gets corrected from the inverted pattern in NINA.Image
         /// </summary>
-        public int[,] BayerPattern { get; set; }
+        private int[,] bayerPattern;
+        public int[,] BayerPattern {
+            get => bayerPattern;
+            set {
+                // The patterns in NINA.Image are inverted (likely a historical bug)
+                // We need to flip them: swap [0,0] with [1,1] and [0,1] with [1,0]
+                if (value != null && value.GetLength(0) == 2 && value.GetLength(1) == 2) {
+                    bayerPattern = new int[,] {
+                        { value[1, 1], value[1, 0] },
+                        { value[0, 1], value[0, 0] }
+                    };
+                } else {
+                    bayerPattern = value;
+                }
+            }
+        }
 
         /// <summary>
         /// Whether to perform full demosaicing or simple extraction

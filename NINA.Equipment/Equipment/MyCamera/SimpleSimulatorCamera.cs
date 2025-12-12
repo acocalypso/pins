@@ -17,12 +17,14 @@ using NINA.Profile.Interfaces;
 using NINA.Core.Utility;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NINA.Core.Model.Equipment;
 using NINA.Image.Interfaces;
 using NINA.Equipment.Model;
 using NINA.Equipment.Interfaces;
+using NINA.Image.FileFormat.FITS;
 
 namespace NINA.Equipment.Equipment.MyCamera {
 
@@ -33,6 +35,44 @@ namespace NINA.Equipment.Equipment.MyCamera {
             this.imageDataFactory = imageDataFactory;
             this.exposureDataFactory = exposureDataFactory;
             CameraState = CameraStates.Idle;
+            
+            // Initialize from FITS file if available
+            InitializeFromFitsFile();
+        }
+
+        private void InitializeFromFitsFile() {
+            try {
+                var fitsPath = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), "simulator.fits");
+                if (System.IO.File.Exists(fitsPath)) {
+                    using (var fitsReader = new CFitsioFITSReader(fitsPath)) {
+                        _cameraXSize = fitsReader.Width;
+                        _cameraYSize = fitsReader.Height;
+                        
+                        var header = fitsReader.ReadHeader();
+                        
+                        // Check for Bayer pattern and set sensor type accordingly
+                        var bayerPatCard = header.HeaderCards.FirstOrDefault(card => card.Key == "BAYERPAT");
+                        if (bayerPatCard != null) {
+                            _sensorType = bayerPatCard.Value switch {
+                                "RGGB" => SensorType.RGGB,
+                                "BGGR" => SensorType.BGGR,
+                                "GBRG" => SensorType.GBRG,
+                                "GRBG" => SensorType.GRBG,
+                                _ => SensorType.RGGB
+                            };
+                        }
+                        
+                        // Try to read pixel size from FITS header
+                        var pixelSizeCard = header.HeaderCards.FirstOrDefault(card => card.Key == "XPIXSZ");
+                        if (pixelSizeCard != null && double.TryParse(pixelSizeCard.Value, out var pixelSize)) {
+                            _pixelSizeX = pixelSize;
+                            _pixelSizeY = pixelSize;
+                        }
+                    }
+                }
+            } catch {
+                // Use defaults if FITS file can't be read
+            }
         }
 
         public string Category { get; } = "Simulator";
@@ -40,6 +80,12 @@ namespace NINA.Equipment.Equipment.MyCamera {
         public bool HasShutter => false;
 
         public bool Connected { get; private set; }
+
+        private SensorType _sensorType = SensorType.RGGB;
+        private int _cameraXSize = 9568;
+        private int _cameraYSize = 6380;
+        private double _pixelSizeX = 3.76;
+        private double _pixelSizeY = 3.76;
 
         public double CCDTemperature => double.NaN;
 
@@ -72,15 +118,15 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         public string SensorName => "";
 
-        public SensorType SensorType => SensorType.Monochrome;
+        public SensorType SensorType => _sensorType;
 
         public short BayerOffsetX => 0;
 
         public short BayerOffsetY => 0;
 
-        public int CameraXSize => 9568;
+        public int CameraXSize => _cameraXSize;
 
-        public int CameraYSize => 6380;
+        public int CameraYSize => _cameraYSize;
 
         public double ExposureMin => 0.0001;
 
@@ -92,9 +138,9 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         public short MaxBinY => 1;
 
-        public double PixelSizeX => 3.76;
+        public double PixelSizeX => _pixelSizeX;
 
-        public double PixelSizeY => 3.76;
+        public double PixelSizeY => _pixelSizeY;
 
         public bool CanSetCCDTemperature => false;
 
@@ -281,7 +327,11 @@ namespace NINA.Equipment.Equipment.MyCamera {
                 while (true) {
                     tries++;
                     try {
-                        var image = await imageDataFactory.CreateFromFile("/tmp/simulator.fits", 16, false, profileService.ActiveProfile.CameraSettings.RawConverter, token);
+                        // Determine if the file contains Bayer data based on sensor type
+                        bool isBayered = _sensorType != SensorType.Monochrome && _sensorType != SensorType.Color;
+                        
+                        var fitsPath = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), "simulator.fits");
+                        var image = await imageDataFactory.CreateFromFile(fitsPath, 16, isBayered, profileService.ActiveProfile.CameraSettings.RawConverter, token);
                         return exposureDataFactory.CreateCachedExposureData(image);
                     } catch (Exception ex) {
                         if (tries > 3) {
