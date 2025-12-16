@@ -1182,8 +1182,10 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     var message = string.Empty;
                     while (s.DataAvailable) {
                         byte[] response = new byte[1024];
-                        await s.ReadExactlyAsync(response, _clientCTS.Token);
-                        message += Encoding.ASCII.GetString(response);
+                        int bytesRead = await s.ReadAsync(response, _clientCTS.Token);
+                        if (bytesRead > 0) {
+                            message += Encoding.ASCII.GetString(response, 0, bytesRead);
+                        }
                     }
 
                     var lines = message.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
