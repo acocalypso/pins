@@ -295,9 +295,48 @@ namespace System.Drawing
         /// </summary>
         public void Save(string filename, Imaging.ImageCodecInfo encoder, Imaging.EncoderParameters encoderParams)
         {
-            using (var fileStream = new FileStream(filename, FileMode.Create))
+            if (_mat == null || _mat.Empty())
             {
-                Save(fileStream, encoder, encoderParams);
+                throw new InvalidOperationException("Cannot save an empty bitmap");
+            }
+
+            // For encoder-based save, use OpenCV's ImWrite which is more reliable on Linux
+            // Extract quality if provided
+            int quality = 95;
+            if (encoderParams != null && encoderParams.Param != null && encoderParams.Param.Length > 0)
+            {
+                var qualityParam = encoderParams.Param[0];
+                if (qualityParam != null)
+                {
+                    quality = (int)qualityParam.Value;
+                }
+            }
+
+            // Determine extension from filename or encoder
+            string extension = Path.GetExtension(filename).ToLowerInvariant();
+            if (string.IsNullOrEmpty(extension))
+            {
+                // No extension in filename, determine from encoder
+                if (encoder != null)
+                {
+                    if (encoder.FormatID == Imaging.ImageFormat.Jpeg.Guid)
+                        extension = ".jpg";
+                    else if (encoder.FormatID == Imaging.ImageFormat.Png.Guid)
+                        extension = ".png";
+                    else if (encoder.FilenameExtension != null)
+                        extension = encoder.FilenameExtension.Split(';')[0]; // Take first extension
+                }
+                if (string.IsNullOrEmpty(extension))
+                    extension = ".png"; // Default fallback
+                    
+                filename = Path.ChangeExtension(filename, extension);
+            }
+
+            // Use OpenCV ImEncode with quality parameters
+            var encodeParams = new int[] { (int)ImwriteFlags.JpegQuality, quality };
+            if (!Cv2.ImWrite(filename, _mat, encodeParams))
+            {
+                throw new IOException($"Failed to save bitmap to {filename}");
             }
         }
 
@@ -349,13 +388,33 @@ namespace System.Drawing
 
             // Determine file extension from codec
             string ext = ".png";
-            if (encoder != null && encoder.FormatDescription.Contains("JPEG"))
+            if (encoder != null)
             {
-                ext = ".jpg";
-            }
-            else if (encoder != null && encoder.FormatDescription.Contains("PNG"))
-            {
-                ext = ".png";
+                // Check by GUID first (more reliable)
+                if (encoder.FormatID == Imaging.ImageFormat.Jpeg.Guid)
+                {
+                    ext = ".jpg";
+                }
+                else if (encoder.FormatID == Imaging.ImageFormat.Png.Guid)
+                {
+                    ext = ".png";
+                }
+                else if (encoder.FormatID == Imaging.ImageFormat.Bmp.Guid)
+                {
+                    ext = ".bmp";
+                }
+                else if (encoder.FormatID == Imaging.ImageFormat.Gif.Guid)
+                {
+                    ext = ".gif";
+                }
+                // Fallback to string matching if GUID didn't work
+                else if (encoder.FormatDescription != null)
+                {
+                    if (encoder.FormatDescription.Contains("JPEG"))
+                        ext = ".jpg";
+                    else if (encoder.FormatDescription.Contains("PNG"))
+                        ext = ".png";
+                }
             }
 
             // For JPEG with quality parameter, extract quality value
