@@ -1,18 +1,19 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <SelfContained>true</SelfContained>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)'==''">$(RuntimeIdentifier)</RuntimeIdentifier>
     <Deterministic>true</Deterministic>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Optimize>true</Optimize>
     <LangVersion>default</LangVersion>
     <DefaultItemExcludes>$(DefaultItemExcludes);**/*.xaml.cs;**/*.xaml</DefaultItemExcludes>
   </PropertyGroup>
-  <PropertyGroup>
-    <RuntimeIdentifier Condition="'$(OS)'=='Linux' and '$(PROCESSOR_ARCHITECTURE)'=='x64'">linux-x64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="'$(OS)'=='Linux' and '$(PROCESSOR_ARCHITECTURE)'=='ARM64'">linux-arm64</RuntimeIdentifier>
+  <PropertyGroup Condition="$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))">
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)'=='' and '$(Platform)'=='x64'">linux-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)'=='' and '$(Platform)'=='ARM64'">linux-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)'==''">linux-x64</RuntimeIdentifier>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>Logo_Nina.ico</ApplicationIcon>
@@ -140,8 +141,6 @@
     </None>
   </ItemGroup>
   <Target Name="CopySystemWindowsStub" AfterTargets="Build">
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)\..\System.Windows.Compat\bin\$(Configuration)\net10.0\System.Windows.dll" 
-          DestinationFolder="$(OutputPath)" 
-          SkipUnchangedFiles="false" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)\..\System.Windows.Compat\bin\$(Configuration)\net10.0\System.Windows.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="false" />
   </Target>
 </Project>

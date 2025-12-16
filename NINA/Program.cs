@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using NINA.Core.Utility;
 using NINA.Core.Utility.Notification;
 using NINA.Core.SignalR;
@@ -23,10 +24,13 @@ Environment.SetEnvironmentVariable("DOTNET_USE_POLLING_FILE_WATCHER", "true");
 
 // Now build the full application with all services
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration["Kestrel:Endpoints:Http:Url"] = "http://0.0.0.0:4782";
 
-// Add full services
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// Clear all default logging providers to suppress ASP.NET Core noise
+builder.Logging.ClearProviders();
+builder.Logging.SetMinimumLevel(LogLevel.Warning);
+
+// Add only SignalR services
 builder.Services.AddCors(options => {
     options.AddPolicy("AllowAll", builder => {
         builder.AllowAnyOrigin()
@@ -39,9 +43,6 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<SignalRNotificationBroadcaster>();
 builder.Services.AddSingleton<IDialogBroadcaster, DialogBroadcaster>();
 builder.Services.AddSingleton<IMyMessageBoxBroadcaster, MyMessageBoxBroadcaster>();
-builder.Services.AddControllers().AddJsonOptions(options => {
-    options.JsonSerializerOptions.NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals;
-});
 
 // Command line
 var allArgs = Environment.GetCommandLineArgs();
@@ -99,17 +100,10 @@ _ = app.Services.GetService<IImageHistoryVM>();
 _ = app.Services.GetService<IPluginsVM>();
 _ = app.Services.GetService<GlobalObjects>();
 
-// Configure HTTP request pipeline
-if (app.Environment.IsDevelopment()) {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
 // Enable CORS for SignalR connections from other ports/origins
 app.UseCors("AllowAll");
 
-// Start web server to expose profile endpoints
-app.MapControllers();
+// Map SignalR hubs only
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapHub<DialogHub>("/hubs/dialogs");
 app.MapHub<MyMessageBoxHub>("/hubs/messageboxes");
