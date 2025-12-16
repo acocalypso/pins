@@ -45,7 +45,7 @@ namespace NINA.INDI {
                 if (_instance == null) {
                     lock (_lock) {
                         if (_instance == null) {
-                            _instance = new INDIClient(7654);
+                            _instance = new INDIClient(7624);
                         }
                     }
                 }
