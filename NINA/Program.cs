@@ -18,6 +18,7 @@ using NINA.Profile.Interfaces;
 using NINA.ViewModel.Sequencer;
 using NINA.ViewModel.Interfaces;
 using NINA.Plugin.Interfaces;
+using NINA.INDI;
 
 // Disable file watching to prevent inotify limit issues on Linux
 Environment.SetEnvironmentVariable("DOTNET_USE_POLLING_FILE_WATCHER", "true");
@@ -82,6 +83,9 @@ var app = builder.Build();
 
 // Initialize DialogBroadcaster early so plugins can access it
 _ = app.Services.GetRequiredService<IDialogBroadcaster>();
+
+// Initialize INDIClient early to start server and FIFO setup
+_ = INDIClient.Instance;
 
 // Now that profile is ready, instantiate services and Controller
 _ = app.Services.GetService<IImageSaveController>();
