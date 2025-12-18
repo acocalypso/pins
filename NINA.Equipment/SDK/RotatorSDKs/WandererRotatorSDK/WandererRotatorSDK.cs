@@ -35,9 +35,12 @@ namespace Wanderer {
         public const int WR_VERSION_LEN = 32;          // Buffer length for version strings
 
         // Configuration masks for rotator
-        public const uint MASK_ROTATOR_REVERSE_DIRECTION = 1 << 0;
-        public const uint MASK_ROTATOR_BACKLASH = 1 << 1;
-        public const uint MASK_ROTATOR_ALL = 1 << 8;
+        public const uint MASK_ROTATOR_REVERSE_DIRECTION = 0x01;
+        public const uint MASK_ROTATOR_BACKLASH = 0x02;
+        public const uint MASK_ROTATOR_OVERSHOOT = 0x04;
+        public const uint MASK_ROTATOR_OVERSHOOT_ANGLE = 0x08;
+        public const uint MASK_ROTATOR_OVERSHOOT_DIRECTION = 0x10;
+        public const uint MASK_ROTATOR_ALL = 0x1F;
 
         /// <summary>
         /// Error types returned by SDK functions
