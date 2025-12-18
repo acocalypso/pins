@@ -23,6 +23,7 @@ using NINA.Profile.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Wanderer;
 
 namespace NINA.WPF.Base.ViewModel.Equipment.FlatDevice {
 
@@ -37,6 +38,20 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FlatDevice {
                 var devices = new List<IDevice>();
                 devices.Add(new DummyDevice(Loc.Instance["LblFlatDeviceNoDevice"]));
 
+                /* Wanderer covers */
+                try {
+                    Logger.Trace("Adding Wanderer Covers");
+                    int[] ids = new int[WandererCoverSDK.WC_MAX_NUM];
+                    WandererCoverSDK.CoverScan(out var covers, ids);
+                    for (int i = 0; i < covers; i++) {
+                        var cover = new WandererCover(ids[i], profileService);
+                        Logger.Info($"Adding Wanderer Cover: {cover.Name}");
+                        devices.Add(cover);
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
                 /* Plugin Providers */
                 foreach (var provider in await equipmentProviders.GetProviders()) {
                     try {
@@ -49,15 +64,15 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FlatDevice {
                 }
 
                 /* INDIGO cover calibrators */
-/*                try {
-                    var indigoInteraction = new INDIGOInteraction(profileService);
-                    var indigoCoverCalibrators = indigoInteraction.GetCoverCalibrators();
-                    devices.AddRange(indigoCoverCalibrators);
-                    Logger.Info($"Found {indigoCoverCalibrators?.Count} INDIGO CoverCalibrators");
-                } catch (Exception ex) {
-                    Logger.Error(ex);
-                }
-*/
+                /*                try {
+                                    var indigoInteraction = new INDIGOInteraction(profileService);
+                                    var indigoCoverCalibrators = indigoInteraction.GetCoverCalibrators();
+                                    devices.AddRange(indigoCoverCalibrators);
+                                    Logger.Info($"Found {indigoCoverCalibrators?.Count} INDIGO CoverCalibrators");
+                                } catch (Exception ex) {
+                                    Logger.Error(ex);
+                                }
+                */
 
                 /* Alpaca */
                 try {
