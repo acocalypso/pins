@@ -126,7 +126,7 @@ jobs:
         id: release_tag
         run: |
           release_date=$(date +%d%m%Y)
-          release_version="v${release_date}"
+          release_version="v${release_date}-${GITHUB_RUN_NUMBER}"
           echo "Release version: $release_version"
           echo "Release date: $release_date"
           echo "RELEASE_DATE=$release_date" >> "$GITHUB_ENV"
