@@ -19,6 +19,7 @@ using NINA.Core.Utility;
 using NINA.Equipment.Interfaces.Mediator;
 using System;
 using System.Collections.Generic;
+using ZWOptical.ASISDK;
 using NINA.Equipment.Utility;
 using NINA.Core.Locale;
 using NINA.Equipment.Equipment;
@@ -51,6 +52,21 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                 var devices = new List<IDevice>();
 
                 devices.Add(new DummyDevice(Loc.Instance["LblNoCamera"]));
+
+                /* ASI */
+                try {
+                    var asiCameras = ASICameras.Count;
+                    Logger.Info($"Found {asiCameras} ASI Cameras");
+                    for (int cameraIndex = 0; cameraIndex < asiCameras; cameraIndex++) {
+                        var cam = ASICameras.GetCamera(cameraIndex, profileService, exposureDataFactory);
+                        if (!string.IsNullOrEmpty(cam.Name)) {
+                            Logger.Trace(string.Format("Adding {0}", cam.Name));
+                            devices.Add(cam);
+                        }
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
 
                 /* Altair */
                 try {
