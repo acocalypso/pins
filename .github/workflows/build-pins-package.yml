@@ -52,7 +52,7 @@ jobs:
 
             echo "Remote update failed for $path; falling back to pinned commit" >&2
             git submodule update --init --recursive "$path"
-          done < <(git config -f .gitmodules --get-regexp '^submodule\\..*\\.path$')
+          done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$')
 
       - name: Populate NINA/External from zip bundle
         shell: bash
