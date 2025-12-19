@@ -108,11 +108,17 @@ jobs:
       - name: Determine package version
         id: version
         run: |
-          version=$(grep -m1 'AssemblyInformationalVersion' CommonAssemblyInfo.cs | sed -E 's/.*"([^"]+)".*/\1/')
-          if [ -z "$version" ]; then
+          base_version=$(grep -m1 'AssemblyInformationalVersion' CommonAssemblyInfo.cs | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$base_version" ]; then
             echo "Failed to determine version from CommonAssemblyInfo.cs" >&2
             exit 1
           fi
+
+          # Ensure every CI build produces a unique, increasing Debian version.
+          # Debian versions support a '+' build metadata suffix.
+          version="${base_version}+${GITHUB_RUN_NUMBER}"
+
+          echo "Base version: $base_version"
           echo "Package version: $version"
           echo "package_version=$version" >> "$GITHUB_OUTPUT"
 
@@ -238,6 +244,9 @@ jobs:
               echo "AssemblyVersion not found in $assembly_info" >&2
               exit 1
             fi
+
+            # Ensure every CI build produces a unique, increasing Debian version.
+            plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
             dotnet restore "$project_path"
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
@@ -304,6 +313,9 @@ jobs:
               echo "AssemblyVersion not found in $assembly_info" >&2
               exit 1
             fi
+
+            # Ensure every CI build produces a unique, increasing Debian version.
+            plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
             dotnet restore "$project_path"
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
@@ -370,6 +382,9 @@ jobs:
               echo "AssemblyVersion not found in $assembly_info" >&2
               exit 1
             fi
+
+            # Ensure every CI build produces a unique, increasing Debian version.
+            plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
             dotnet restore "$project_path"
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
@@ -436,6 +451,9 @@ jobs:
               echo "AssemblyVersion not found in $assembly_info" >&2
               exit 1
             fi
+
+            # Ensure every CI build produces a unique, increasing Debian version.
+            plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
             dotnet restore "$project_path"
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
@@ -503,6 +521,9 @@ jobs:
               echo "AssemblyVersion not found in $assembly_info" >&2
               exit 1
             fi
+
+            # Ensure every CI build produces a unique, increasing Debian version.
+            plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
             rm -rf "$tmp_dir" "$plugin_dir/app"
             git clone --branch pins --single-branch https://github.com/Touch-N-Stars/Touch-N-Stars.git "$tmp_dir"
             pushd "$tmp_dir" >/dev/null
