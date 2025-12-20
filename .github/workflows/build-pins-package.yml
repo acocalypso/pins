@@ -105,6 +105,23 @@ jobs:
       - name: Publish linux-arm64 payload
         run: dotnet publish NINA/NINA.csproj -c ${{ env.BUILD_CONFIGURATION }} -r ${{ env.TARGET_RUNTIME }} --no-build -o ${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}
 
+      - name: Include External native bundle in publish output
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          publish_root="${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}"
+
+          if [ ! -d "NINA/External" ]; then
+            echo "NINA/External not found; native bundle was not populated" >&2
+            exit 1
+          fi
+
+          mkdir -p "$publish_root/External"
+          rsync -a "NINA/External/" "$publish_root/External/"
+
+          echo "Bundled native files staged under: $publish_root/External"
+
       - name: Determine package version
         id: version
         run: |
