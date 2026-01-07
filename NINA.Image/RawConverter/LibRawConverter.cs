@@ -20,7 +20,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Media.Imaging;
 
 namespace NINA.Image.RawConverter {
 
@@ -78,146 +77,75 @@ namespace NINA.Image.RawConverter {
 
                         Logger.Debug("LibRaw: Data unpacked successfully");
 
-                        // Process the RAW data to get pixel data
-                        ret = LibRawInterop.libraw_dcraw_process(processor);
+                        // Obtain image from RAW data
+                        ret = LibRawInterop.libraw_raw2image(processor);
                         if (ret != 0) {
-                            throw new Exception($"LibRaw dcraw_process failed: {GetLibRawError(ret)}");
+                            throw new Exception($"LibRaw raw2image failed: {GetLibRawError(ret)}");
                         }
 
-                        Logger.Debug("LibRaw: Data processed successfully");
+                        Logger.Debug("LibRaw: Data obtained successfully");
 
-                        // Create processed image in memory (LibRaw outputs TIFF format)
-                        IntPtr memImage = LibRawInterop.libraw_dcraw_make_mem_image(processor, out int imgError);
-                        if (memImage == IntPtr.Zero) {
-                            throw new Exception($"LibRaw dcraw_make_mem_image failed: {GetLibRawError(imgError)}");
+                        // Get image dimensions before processing
+                        ushort width = LibRawInterop.libraw_get_iwidth(processor);
+                        ushort height = LibRawInterop.libraw_get_iheight(processor);
+
+                        Logger.Debug($"LibRaw: Image dimensions {width}x{height}");
+
+                        // libraw_data_t is the first entry in the LibRaw class and raw image data
+                        // is the first entry in the libraw_data_t struct (which is a ushort (*image)[4])
+                        // containing the RGGB data (undemosaiced raw sensor data)
+
+                        // The processor IS the libraw_data_t structure
+                        // The first field in libraw_data_t is the image pointer (ushort (*image)[4])
+                        IntPtr imagePtr = Marshal.ReadIntPtr(processor, 0);
+
+                        if (imagePtr == IntPtr.Zero) {
+                            throw new Exception("Image data pointer is null");
                         }
 
-                        Logger.Debug("LibRaw: Memory image created successfully");
+                        if (width == 0 || height == 0) {
+                            throw new Exception($"Invalid image dimensions: {width}x{height}");
+                        }
 
-                        try {
-                            // libraw_processed_image_t structure (from libraw_types.h):
-                            // enum LibRaw_image_formats type
-                            // ushort height
-                            // ushort width 
-                            // ushort colors
-                            // ushort bits
-                            // unsigned int data_size
-                            // unsigned char data[1]  <- embedded data starts here
-                            
-                            // Read the structure fields
-                            int type = Marshal.ReadInt32(memImage, 0);
-                            ushort height = (ushort)Marshal.ReadInt16(memImage, 4);
-                            ushort width = (ushort)Marshal.ReadInt16(memImage, 6);
-                            ushort colors = (ushort)Marshal.ReadInt16(memImage, 8);
-                            ushort bits = (ushort)Marshal.ReadInt16(memImage, 10);
-                            uint dataSize = (uint)Marshal.ReadInt32(memImage, 12);
+                        // Calculate total ushort values: width * height * 4 (RGBG)
+                        // The ushort (*image)[4] declaration means 4 ushort values per pixel:
+                        // (*image)[0] = R, (*image)[1] = G, (*image)[2] = B, (*image)[3] = G2
+                        int totalPixels = width * height;
 
-                            Logger.Debug($"LibRaw: Image {width}x{height}, type={type}, colors={colors}, bits={bits}, size={dataSize} bytes");
+                        // Convert RGBG data directly from unmanaged memory to single-channel Bayer image
+                        // No intermediate buffer - read directly from the pointer
+                        ushort[] bayerImageSingleChannel = new ushort[totalPixels];
+                        
+                        unsafe {
+                            ushort* pImage = (ushort*)imagePtr;
+                            for (int i = 0; i < totalPixels; i++) {
+                                int baseIdx = i * 4;
+                                ushort r = pImage[baseIdx];
+                                ushort g = pImage[baseIdx + 1];
+                                ushort b = pImage[baseIdx + 2];
+                                ushort g2 = pImage[baseIdx + 3];
 
-                            if (width == 0 || height == 0 || dataSize == 0) {
-                                throw new Exception("Invalid image data from LibRaw");
-                            }
-
-                            // The pixel data is embedded directly after the header at offset 16
-                            IntPtr pixelDataPtr = (IntPtr)((long)memImage + 16);
-                            
-                            Logger.Debug($"LibRaw: Pixel data pointer = {pixelDataPtr}");
-
-                            // Copy pixel data from unmanaged memory
-                            byte[] tiffData = new byte[(int)dataSize];
-                            
-                            unsafe {
-                                fixed (byte* pData = tiffData) {
-                                    Buffer.MemoryCopy((void*)pixelDataPtr, (void*)pData, dataSize, dataSize);
-                                }
-                            }
-
-                            Logger.Debug($"LibRaw: Copied {dataSize} bytes of TIFF data");
-                            
-                            // Check first bytes to see if it's valid TIFF
-                            string magicBytes = BitConverter.ToString(tiffData, 0, Math.Min(16, tiffData.Length));
-                            Logger.Debug($"LibRaw: TIFF data starts with: {magicBytes}");
-
-                            token.ThrowIfCancellationRequested();
-
-                            // Decode the TIFF data
-                            try {
-                                using (var tiffStream = new MemoryStream(tiffData)) {
-                                    var decoder = new TiffBitmapDecoder(
-                                        tiffStream, 
-                                        BitmapCreateOptions.PreservePixelFormat,
-                                        BitmapCacheOption.OnLoad);
-
-                                    if (decoder.Frames.Count == 0) {
-                                        throw new Exception("TIFF from LibRaw has no frames");
-                                    }
-
-                                    var frame = decoder.Frames[0];
-                                    ushort[] pixelArray = new ushort[frame.PixelWidth * frame.PixelHeight];
-                                    frame.CopyPixels(pixelArray, frame.PixelWidth * sizeof(ushort), 0);
-
-                                    Logger.Debug($"LibRaw: Decoded TIFF, got {pixelArray.Length} pixels from {frame.PixelWidth}x{frame.PixelHeight}");
-
-                                    // Create image data
-                                    var imageArray = new ImageArray(flatArray: pixelArray, rawData: rawBytes, rawType: rawType);
-                                    var data = imageDataFactory.CreateBaseImageData(
-                                        imageArray: imageArray,
-                                        width: frame.PixelWidth,
-                                        height: frame.PixelHeight,
-                                        bitDepth: bitDepth,
-                                        isBayered: true,
-                                        metaData: metaData);
-
-                                    Logger.Debug("LibRaw: Image data created successfully");
-
-                                    return Task.FromResult<IImageData>(data);
-                                }
-                            } catch (Exception) {
-                                // If TIFF decoding fails, the data might not be TIFF but raw RGB
-                                // Try interpreting as raw RGB pixels
-                                Logger.Debug("LibRaw: Attempting to interpret as raw RGB data");
-                                
-                                int expectedPixels = width * height;
-                                int bytesPerPixel = (int)dataSize / expectedPixels;
-                                
-                                Logger.Debug($"LibRaw: Data appears to be {bytesPerPixel} bytes per pixel");
-                                
-                                // Convert RGB to grayscale by taking average or first channel
-                                ushort[] grayPixels = new ushort[expectedPixels];
-                                
-                                for (int i = 0; i < expectedPixels; i++) {
-                                    // Average R, G, B channels
-                                    int baseIdx = i * bytesPerPixel;
-                                    if (baseIdx + 2 < tiffData.Length) {
-                                        int r = tiffData[baseIdx];
-                                        int g = tiffData[baseIdx + 1];
-                                        int b = tiffData[baseIdx + 2];
-                                        grayPixels[i] = (ushort)((r + g + b) / 3);
-                                    }
-                                }
-                                
-                                Logger.Debug($"LibRaw: Converted RGB to grayscale, got {expectedPixels} pixels");
-                                
-                                // Create image data from grayscale
-                                var imageArray = new ImageArray(flatArray: grayPixels, rawData: rawBytes, rawType: rawType);
-                                var data = imageDataFactory.CreateBaseImageData(
-                                    imageArray: imageArray,
-                                    width: width,
-                                    height: height,
-                                    bitDepth: 8,
-                                    isBayered: false,
-                                    metaData: metaData);
-
-                                Logger.Debug("LibRaw: Grayscale image data created successfully");
-
-                                return Task.FromResult<IImageData>(data);
-                            }
-                        } finally {
-                            // Clean up processed image memory
-                            if (memImage != IntPtr.Zero) {
-                                LibRawInterop.libraw_dcraw_clear_mem(memImage);
+                                // Use the non-zero value (Bayer pattern encodes which channel applies to each pixel)
+                                ushort value = (r > 0) ? r : (g > 0) ? g : (b > 0) ? b : g2;
+                                bayerImageSingleChannel[i] = value;
                             }
                         }
+
+                        Logger.Debug("LibRaw: Converted RGBG data to single-channel Bayer image (no intermediate copy)");
+
+                        // Create image data from single-channel Bayer image (matching FreeImage format)
+                        var imageArray = new ImageArray(flatArray: bayerImageSingleChannel, rawData: rawBytes, rawType: rawType);
+                        var data = imageDataFactory.CreateBaseImageData(
+                            imageArray: imageArray,
+                            width: width,
+                            height: height,
+                            bitDepth: bitDepth,
+                            isBayered: true,
+                            metaData: metaData);
+
+                        Logger.Debug("LibRaw: Bayer image data created successfully (single-channel format)");
+
+                        return Task.FromResult<IImageData>(data);
                     } catch (Exception ex) {
                         Logger.Error($"LibRaw conversion failed: {ex.Message}");
                         throw;
