@@ -280,7 +280,7 @@ namespace NINA.INDI.Devices {
                     ct.ThrowIfCancellationRequested();
 
                     // Wait for the connection callback with timeout and cancellation support
-                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(15), ct);
                     var completedTask = await Task.WhenAny(_operationTcs.Task, timeoutTask);
 
                     if (completedTask == timeoutTask) {
