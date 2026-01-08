@@ -266,7 +266,31 @@ namespace NINA.INDI.Devices {
             return modes;
         }
 
-        public DateTime UTCDate { get; set; }
+        public DateTime UTCDate {
+            get {
+                try {
+                    // Read UTC from TIME_UTC property
+                    var utcTime = GetTextPropertyValue("TIME_UTC", "UTC");
+                    if (!string.IsNullOrEmpty(utcTime) && DateTime.TryParse(utcTime, out var parsedTime)) {
+                        return DateTime.SpecifyKind(parsedTime, DateTimeKind.Utc);
+                    }
+                } catch (Exception ex) {
+                    Logger.Warning($"Could not read TIME_UTC: {ex.Message}");
+                }
+                return DateTime.MinValue;
+            }
+            set {
+                try {
+                    // Set UTC time via TIME_UTC property in ISO 8601 format
+                    var utcString = value.ToString("yyyy-MM-ddTHH:mm:ss");
+                    SetTextValue("TIME_UTC", "UTC", utcString);
+                    Logger.Debug($"Set mount UTC time to {utcString}");
+                } catch (Exception ex) {
+                    Logger.Error($"Could not set TIME_UTC: {ex.Message}");
+                    throw;
+                }
+            }
+        }
 
 
         public void AbortSlew() {
@@ -283,9 +307,10 @@ namespace NINA.INDI.Devices {
                 var slewRateProp = GetSwitchProperty("TELESCOPE_SLEW_RATE");
                 if (slewRateProp != null && slewRateProp.Switches.Count > 1) {
                     // UI operates on 0-5 scale, which gets mapped to device's switch indices
-                    // Report the UI scale (0-5) as the valid range
-                    Logger.Debug($"Found TELESCOPE_SLEW_RATE with {slewRateProp.Switches.Count} switches, returning UI range 0-5");
-                    return new AxisRates(0.0, 5.0);
+                    // Report the native switch count as the valid range
+                    var maxSwitchIndex = slewRateProp.Switches.Count - 1;
+                    Logger.Debug($"Found TELESCOPE_SLEW_RATE with {slewRateProp.Switches.Count} switches, returning range 0-{maxSwitchIndex}");
+                    return new AxisRates(0.0, (double)maxSwitchIndex);
                 }
 
                 // Try to get the TELESCOPE_MOTION_RATE property to find min/max values
@@ -300,9 +325,9 @@ namespace NINA.INDI.Devices {
                 Logger.Debug($"Error getting axis rates: {ex.Message}");
             }
 
-            // Return a default continuous range of 0.0 to 5.0 deg/s
-            // This allows Touch-N-Stars slider (0.01 to 5) to work fully
-            return new AxisRates(0.0, 5.0);
+            // Return a default continuous range of 0.0 to 9.0
+            // For OnStep devices with 10 slew rate levels (0-9)
+            return new AxisRates(0.0, 9.0);
         }
 
         public void ConfigureJNOW() {
@@ -349,13 +374,12 @@ namespace NINA.INDI.Devices {
                     var availableSwitches = string.Join(", ", slewRateProp.Switches.Select(s => $"{s.Name}={s.Label}"));
 
                     // OnStep provides: 0=0.25x, 1=0.5x, 2=1x, 3=2x, 4=4x, 5=8x, 6=20x, 7=48x, 8=Half-Max, 9=Max
-                    // Map UI rate (0-5 range) to device's available switch indices (0 to switchCount-1)
+                    // Use the native 0-9 range directly
                     int maxIndex = slewRateProp.Switches.Count - 1;
                     int targetIndex;
 
-                    // Linear mapping: UI range [0, 5] -> device range [0, maxIndex]
-                    // targetIndex = (absRate / 5.0) * maxIndex
-                    targetIndex = (int)Math.Round((absRate / 5.0) * maxIndex);
+                    // Direct mapping: use the rate value as the switch index
+                    targetIndex = (int)Math.Round(absRate);
 
                     // Clamp to valid range
                     targetIndex = Math.Max(0, Math.Min(targetIndex, maxIndex));

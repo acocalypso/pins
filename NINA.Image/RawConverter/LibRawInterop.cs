@@ -52,11 +52,11 @@ namespace NINA.Image.RawConverter {
         public static extern int libraw_unpack(IntPtr proc);
 
         /// <summary>
-        /// Process the RAW data to get pixel data
+        /// Obtain image from RAW
         /// Returns 0 on success, non-zero on error
         /// </summary>
         [DllImport(LIBRAW_DLL, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int libraw_dcraw_process(IntPtr proc);
+        public static extern int libraw_raw2image(IntPtr proc);
 
         /// <summary>
         /// Get image width
@@ -75,19 +75,5 @@ namespace NINA.Image.RawConverter {
         /// </summary>
         [DllImport(LIBRAW_DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr libraw_strerror(int errorcode);
-
-        /// <summary>
-        /// Create a memory-based processed image from the RAW data
-        /// Returns a pointer to libraw_processed_image_t structure
-        /// Pass NULL for error code pointer if not needed
-        /// </summary>
-        [DllImport(LIBRAW_DLL, CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr libraw_dcraw_make_mem_image(IntPtr proc, out int error);
-
-        /// <summary>
-        /// Free processed image memory
-        /// </summary>
-        [DllImport(LIBRAW_DLL, CallingConvention = CallingConvention.Cdecl)]
-        public static extern void libraw_dcraw_clear_mem(IntPtr img);
     }
 }
