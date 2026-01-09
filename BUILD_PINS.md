@@ -45,6 +45,100 @@ npm --version
 
 ---
 
+## Runtime prerequisites (recommended)
+
+These steps are not required to *build* the `.deb`, but are commonly required for a usable system after you install it on the Raspberry Pi.
+
+### Offline Sky Map Cache (Framing Assistant cache)
+
+PINS/N.I.N.A uses an “Offline Sky Map Cache” for the Framing Assistant / Sky Atlas images.
+
+Default cache directory (because the systemd service runs as user `pi`):
+
+- `/home/pi/.local/share/NINA/FramingAssistantCache`
+
+You can change this path in the application settings, but if you don’t, this is where it will look.
+
+Download and install the full cache:
+
+```bash
+set -euo pipefail
+
+cache_url="https://nighttime-imaging.eu/downloads/Setup/Releases/FramingAssistantCache_Full.zip"
+cache_root="/home/pi/.local/share/NINA"
+cache_dir="$cache_root/FramingAssistantCache"
+
+tmp_dir="$(mktemp -d)"
+zip_path="$tmp_dir/FramingAssistantCache_Full.zip"
+unzip_dir="$tmp_dir/unzipped"
+
+mkdir -p "$cache_root"
+
+echo "Downloading FramingAssistant cache: $cache_url"
+curl -L --fail --retry 3 --retry-delay 5 -o "$zip_path" "$cache_url"
+
+rm -rf "$cache_dir"
+mkdir -p "$cache_dir"
+unzip -q "$zip_path" -d "$unzip_dir"
+
+# The zip contents may or may not include a single top-level folder.
+# Try the most common layouts and fall back to copying everything.
+if [ -d "$unzip_dir/FramingAssistantCache" ]; then
+  rsync -a "$unzip_dir/FramingAssistantCache/" "$cache_dir/"
+elif [ -d "$unzip_dir/framingassistantcache" ]; then
+  rsync -a "$unzip_dir/framingassistantcache/" "$cache_dir/"
+else
+  rsync -a "$unzip_dir/" "$cache_dir/"
+fi
+
+# Ensure the service user can read it.
+sudo chown -R pi:pi "$cache_dir" || true
+
+echo "Installed cache under: $cache_dir"
+ls -la "$cache_dir" | head
+```
+
+If the sky atlas image is displayed as a black image in clients/plugins, it usually indicates the Offline Sky Map Cache directory is missing or misconfigured.
+
+### ASTAP (plate solver)
+
+PINS can use ASTAP as a plate solver. On Linux it runs ASTAP as an external CLI process.
+
+Recommended target paths (pick one):
+
+- `/usr/local/bin/astap_cli` (commonly used by CLI-only installs)
+- `/usr/bin/astap` (often used by distro packages)
+
+#### Option A: Install ASTAP from your distro (if available)
+
+```bash
+sudo apt-get update
+sudo apt-get install -y astap || true
+
+# Verify it exists (either path can be valid depending on the package)
+command -v astap || true
+ls -la /usr/bin/astap /usr/local/bin/astap_cli 2>/dev/null || true
+```
+
+#### Option B: Manual install (when you have an `astap_cli` binary)
+
+If you have an ARM64-compatible `astap_cli` binary:
+
+```bash
+sudo install -m 755 ./astap_cli /usr/local/bin/astap_cli
+
+# Optional: provide a second path some configs expect
+sudo ln -sf /usr/local/bin/astap_cli /usr/bin/astap
+
+/usr/local/bin/astap_cli -h || true
+```
+
+ASTAP also requires its star database files to be installed (otherwise solves will fail or be unreliable). Install the ASTAP star database(s) according to the ASTAP documentation and ensure ASTAP can find them on your system.
+
+Finally, in the PINS/N.I.N.A plate solver settings, set **ASTAP Location** to the exact path you installed (for example `/usr/local/bin/astap_cli`).
+
+---
+
 ## Environment variables
 
 ```bash
