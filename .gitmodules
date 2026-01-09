@@ -26,3 +26,11 @@
 	path = NINA.Plugins/joko.nina.plugins
 	url = https://github.com/nitr57/joko.nina.plugins.git
 	branch = develop
+[submodule "NINA.Plugins/NINA.Joko.Plugin.TenMicron"]
+	path = NINA.Plugins/NINA.Joko.Plugin.TenMicron
+	url = https://github.com/nitr57/NINA.Joko.Plugin.TenMicron.git
+	branch = develop
+[submodule "NINA.Plugins/nina.plugin.orbuculum"]
+	path = NINA.Plugins/nina.plugin.orbuculum
+	url = https://github.com/nitr57/nina.plugin.orbuculum.git
+	branch = master
