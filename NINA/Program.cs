@@ -42,6 +42,8 @@ builder.Services.AddCors(options => {
 });
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<SignalRNotificationBroadcaster>();
+// Progress broadcaster (SignalR)
+builder.Services.AddSingleton<SignalRProgressBroadcaster>();
 builder.Services.AddSingleton<IDialogBroadcaster, DialogBroadcaster>();
 builder.Services.AddSingleton<IMyMessageBoxBroadcaster, MyMessageBoxBroadcaster>();
 
@@ -111,11 +113,19 @@ app.UseCors("AllowAll");
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapHub<DialogHub>("/hubs/dialogs");
 app.MapHub<MyMessageBoxHub>("/hubs/messageboxes");
+// Progress hub
+app.MapHub<ProgressHub>("/hubs/progress");
 
 // Set up the notification broadcaster to use SignalR
 var signalRBroadcaster = app.Services.GetRequiredService<SignalRNotificationBroadcaster>();
 Notification.Broadcaster = async (message) => {
     await signalRBroadcaster.BroadcastNotificationAsync(message);
+};
+
+// Set up the progress broadcaster to use SignalR
+var signalRProgressBroadcaster = app.Services.GetRequiredService<SignalRProgressBroadcaster>();
+Progress.Broadcaster = async (message) => {
+    await signalRProgressBroadcaster.BroadcastProgressAsync(message);
 };
 
 Logger.Info("Server fully initialized and running.");

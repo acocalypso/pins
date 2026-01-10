@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -16,6 +16,9 @@ using System;
 using NINA.WPF.Base.Interfaces.Mediator;
 using NINA.Core.Model;
 using NINA.WPF.Base.Interfaces.ViewModel;
+using System;
+using NINA.Core.SignalR;
+using NINA.Core.Utility;
 
 namespace NINA.WPF.Base.Mediator {
 
@@ -31,6 +34,21 @@ namespace NINA.WPF.Base.Mediator {
 
         public void StatusUpdate(ApplicationStatus status) {
             handler?.StatusUpdate(status);
+
+            try {
+                var message = new ProgressMessage {
+                    Source = status?.Source,
+                    Status = status?.Status,
+                    Progress = status?.Progress ?? -1,
+                    MaxProgress = status?.MaxProgress ?? 1,
+                    Progress2 = status?.Progress2 ?? -1,
+                    MaxProgress2 = status?.MaxProgress2 ?? 1,
+                    Progress3 = status?.Progress3 ?? -1,
+                    MaxProgress3 = status?.MaxProgress3 ?? 1,
+                    Timestamp = DateTime.UtcNow
+                };
+                Progress.Publish(message);
+            } catch { }
         }
     }
 }
