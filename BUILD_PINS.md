@@ -278,8 +278,9 @@ if [ ! -f "$opencv_so" ]; then
   exit 1
 fi
 
-cp -f "$opencv_so" "$publish_root/libOpenCvSharpExtern.so"
-chmod 755 "$publish_root/libOpenCvSharpExtern.so"
+cp -f "$opencv_so" "$publish_root/OpenCvSharpExtern.so"
+chmod 755 "$publish_root/OpenCvSharpExtern.so"
+chown pi:pi "$publish_root/OpenCvSharpExtern.so"
 ```
 
 ---
