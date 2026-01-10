@@ -42,5 +42,6 @@
     <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
     <!-- Exclude System.Drawing.Common as it conflicts with our compat library -->
     <PackageReference Include="System.Drawing.Common" Version="*" ExcludeAssets="all" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.7" />
   </ItemGroup>
 </Project>
