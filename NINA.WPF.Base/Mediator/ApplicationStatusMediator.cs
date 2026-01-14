@@ -39,10 +39,15 @@ namespace NINA.WPF.Base.Mediator {
                 var message = new ProgressMessage {
                     Source = status?.Source,
                     Status = status?.Status,
+                    ProgressType = status?.ProgressType ?? ApplicationStatus.StatusProgressType.Percent,
                     Progress = status?.Progress ?? -1,
                     MaxProgress = status?.MaxProgress ?? 1,
+                    Status2 = status?.Status2 ?? string.Empty,
+                    ProgressType2 = status?.ProgressType2 ?? ApplicationStatus.StatusProgressType.Percent,
                     Progress2 = status?.Progress2 ?? -1,
                     MaxProgress2 = status?.MaxProgress2 ?? 1,
+                    Status3 = status?.Status3 ?? string.Empty,
+                    ProgressType3 = status?.ProgressType3 ?? ApplicationStatus.StatusProgressType.Percent,
                     Progress3 = status?.Progress3 ?? -1,
                     MaxProgress3 = status?.MaxProgress3 ?? 1,
                     Timestamp = DateTime.UtcNow
