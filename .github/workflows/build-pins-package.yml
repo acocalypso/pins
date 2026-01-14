@@ -6,6 +6,7 @@ on:
 env:
   BUILD_CONFIGURATION: Release
   TARGET_RUNTIME: linux-arm64
+  PLUGIN_TARGET_FRAMEWORK: net10.0
   INSTALL_DIRECTORY: /home/pi/pins
   PUBLISH_DIRECTORY: artifacts/publish
   PACKAGE_ROOT: artifacts/package
@@ -16,7 +17,7 @@ env:
   PLUGINS_INSTALL_BASE: /home/pi/.local/share/NINA/Plugins/3.0.0
   PLUGIN_DEB_BASE: artifacts/plugin-debroot
   PLUGIN_ARTIFACT_DIR: artifacts/plugins
-  PLUGIN_MSBUILD_ARGS: -p:DisableImplicitSystemDrawingReference=true
+  PLUGIN_MSBUILD_ARGS: -p:DisableImplicitSystemDrawingReference=true -p:Platform=AnyCPU -p:PlatformTarget=AnyCPU
   PLUGIN_FAILURES_FILE: artifacts/plugin-build-failures.log
 
 jobs:
@@ -275,13 +276,18 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path"
-            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
-            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-            if [ -z "$tfm_dir" ]; then
-              echo "Could not locate target framework output under $build_root" >&2
-              exit 1
+            dotnet restore "$project_path" -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
+            if [ ! -d "$tfm_dir" ]; then
+              echo "Expected RID output folder not found at: $tfm_dir" >&2
+              echo "Falling back to first 'net*' folder under bin/${{ env.BUILD_CONFIGURATION }}" >&2
+              build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+              tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+              if [ -z "$tfm_dir" ]; then
+                echo "Could not locate target framework output under $build_root" >&2
+                exit 1
+              fi
             fi
             deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
             install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
@@ -344,13 +350,18 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path"
-            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
-            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-            if [ -z "$tfm_dir" ]; then
-              echo "Could not locate target framework output under $build_root" >&2
-              exit 1
+            dotnet restore "$project_path" -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
+            if [ ! -d "$tfm_dir" ]; then
+              echo "Expected RID output folder not found at: $tfm_dir" >&2
+              echo "Falling back to first 'net*' folder under bin/${{ env.BUILD_CONFIGURATION }}" >&2
+              build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+              tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+              if [ -z "$tfm_dir" ]; then
+                echo "Could not locate target framework output under $build_root" >&2
+                exit 1
+              fi
             fi
             deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
             install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
@@ -413,13 +424,18 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path"
-            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
-            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-            if [ -z "$tfm_dir" ]; then
-              echo "Could not locate target framework output under $build_root" >&2
-              exit 1
+            dotnet restore "$project_path" -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
+            if [ ! -d "$tfm_dir" ]; then
+              echo "Expected RID output folder not found at: $tfm_dir" >&2
+              echo "Falling back to first 'net*' folder under bin/${{ env.BUILD_CONFIGURATION }}" >&2
+              build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+              tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+              if [ -z "$tfm_dir" ]; then
+                echo "Could not locate target framework output under $build_root" >&2
+                exit 1
+              fi
             fi
             deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
             install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
@@ -482,13 +498,18 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path"
-            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
-            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-            if [ -z "$tfm_dir" ]; then
-              echo "Could not locate target framework output under $build_root" >&2
-              exit 1
+            dotnet restore "$project_path" -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
+            if [ ! -d "$tfm_dir" ]; then
+              echo "Expected RID output folder not found at: $tfm_dir" >&2
+              echo "Falling back to first 'net*' folder under bin/${{ env.BUILD_CONFIGURATION }}" >&2
+              build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+              tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+              if [ -z "$tfm_dir" ]; then
+                echo "Could not locate target framework output under $build_root" >&2
+                exit 1
+              fi
             fi
             deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
             install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
@@ -559,13 +580,18 @@ jobs:
             npm run build
             popd >/dev/null
             mv "$tmp_dir/dist" "$plugin_dir/app"
-            dotnet restore "$project_path"
-            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
-            build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
-            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
-            if [ -z "$tfm_dir" ]; then
-              echo "Could not locate target framework output under $build_root" >&2
-              exit 1
+            dotnet restore "$project_path" -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
+            if [ ! -d "$tfm_dir" ]; then
+              echo "Expected RID output folder not found at: $tfm_dir" >&2
+              echo "Falling back to first 'net*' folder under bin/${{ env.BUILD_CONFIGURATION }}" >&2
+              build_root="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}"
+              tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+              if [ -z "$tfm_dir" ]; then
+                echo "Could not locate target framework output under $build_root" >&2
+                exit 1
+              fi
             fi
             deb_root="${{ env.PLUGIN_DEB_BASE }}/$deb_package"
             install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
