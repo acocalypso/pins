@@ -13,6 +13,7 @@
 #endregion "copyright"
 
 using System;
+using NINA.Core.Model;
 
 namespace NINA.Core.SignalR {
     /// <summary>
@@ -21,13 +22,17 @@ namespace NINA.Core.SignalR {
     public class ProgressMessage {
         public string Source { get; set; }
         public string Status { get; set; }
-
+        public ApplicationStatus.StatusProgressType ProgressType { get; set; }
         public double Progress { get; set; } = -1;
         public int MaxProgress { get; set; } = 1;
 
+        public string Status2 { get; set; } = string.Empty;
+        public ApplicationStatus.StatusProgressType ProgressType2 { get; set; }
         public double Progress2 { get; set; } = -1;
         public int MaxProgress2 { get; set; } = 1;
 
+        public string Status3 { get; set; } = string.Empty;
+        public ApplicationStatus.StatusProgressType ProgressType3 { get; set; }
         public double Progress3 { get; set; } = -1;
         public int MaxProgress3 { get; set; } = 1;
 
