@@ -128,9 +128,9 @@ jobs:
             exit 1
           fi
 
-          cp -f "$opencv_so" "$publish_root/libOpenCvSharpExtern.so"
-          chmod 755 "$publish_root/libOpenCvSharpExtern.so"
-          echo "Staged libOpenCvSharpExtern.so under: $publish_root/libOpenCvSharpExtern.so"
+          cp -f "$opencv_so" "$publish_root/OpenCvSharpExtern.so"
+          chmod 755 "$publish_root/OpenCvSharpExtern.so"
+          echo "Staged libOpenCvSharpExtern.so under: $publish_root/OpenCvSharpExtern.so"
 
           echo "Bundled native files staged under: $publish_root/External"
 
