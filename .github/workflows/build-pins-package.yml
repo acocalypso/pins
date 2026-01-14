@@ -257,7 +257,7 @@ jobs:
           install_folder="joko.nina.plugins"
           deb_package="pins-plugin-joko"
           plugin_dir=$(dirname "$project_path")
-          if ! (
+          if (
             set -euo pipefail
             assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
             if [ ! -f "$assembly_info" ]; then
@@ -276,7 +276,7 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path" -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
+            dotnet restore "$project_path" --framework ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -320,6 +320,8 @@ jobs:
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
+            echo "Built $deb_package"
+          else
             echo "$deb_package" | tee -a "${{ env.PLUGIN_FAILURES_FILE }}"
           fi
 
@@ -331,7 +333,7 @@ jobs:
           install_folder="LiveStack"
           deb_package="pins-plugin-livestack"
           plugin_dir=$(dirname "$project_path")
-          if ! (
+          if (
             set -euo pipefail
             assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
             if [ ! -f "$assembly_info" ]; then
@@ -350,7 +352,7 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path" -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
+            dotnet restore "$project_path" --framework ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -394,6 +396,8 @@ jobs:
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
+            echo "Built $deb_package"
+          else
             echo "$deb_package" | tee -a "${{ env.PLUGIN_FAILURES_FILE }}"
           fi
 
@@ -405,7 +409,7 @@ jobs:
           install_folder="ninaAPI"
           deb_package="pins-plugin-ninaapi"
           plugin_dir=$(dirname "$project_path")
-          if ! (
+          if (
             set -euo pipefail
             assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
             if [ ! -f "$assembly_info" ]; then
@@ -424,7 +428,7 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path" -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
+            dotnet restore "$project_path" --framework ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -468,6 +472,8 @@ jobs:
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
+            echo "Built $deb_package"
+          else
             echo "$deb_package" | tee -a "${{ env.PLUGIN_FAILURES_FILE }}"
           fi
 
@@ -479,7 +485,7 @@ jobs:
           install_folder="PolarAlignment"
           deb_package="pins-plugin-polaralignment"
           plugin_dir=$(dirname "$project_path")
-          if ! (
+          if (
             set -euo pipefail
             assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
             if [ ! -f "$assembly_info" ]; then
@@ -498,7 +504,7 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path" -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
+            dotnet restore "$project_path" --framework ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -542,6 +548,8 @@ jobs:
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
+            echo "Built $deb_package"
+          else
             echo "$deb_package" | tee -a "${{ env.PLUGIN_FAILURES_FILE }}"
           fi
 
@@ -554,7 +562,7 @@ jobs:
           deb_package="pins-plugin-touch-n-stars"
           plugin_dir=$(dirname "$project_path")
           tmp_dir="$plugin_dir/frontend-build"
-          if ! (
+          if (
             set -euo pipefail
             assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
             if [ ! -f "$assembly_info" ]; then
@@ -580,7 +588,7 @@ jobs:
             npm run build
             popd >/dev/null
             mv "$tmp_dir/dist" "$plugin_dir/app"
-            dotnet restore "$project_path" -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
+            dotnet restore "$project_path" --framework ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -624,6 +632,8 @@ jobs:
             dpkg-deb --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           ); then
+            echo "Built $deb_package"
+          else
             echo "$deb_package" | tee -a "${{ env.PLUGIN_FAILURES_FILE }}"
           fi
 
