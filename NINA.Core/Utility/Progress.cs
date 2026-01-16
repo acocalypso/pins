@@ -87,6 +87,7 @@ namespace NINA.Core.Utility {
                 ProgressType3 = status.ProgressType3,
                 Progress3 = status.Progress3,
                 MaxProgress3 = status.MaxProgress3,
+                State = "create",
                 Timestamp = DateTime.UtcNow,
             };
             BroadcastProgress(message);
@@ -112,6 +113,7 @@ namespace NINA.Core.Utility {
                 ProgressType3 = status.ProgressType3,
                 Progress3 = status.Progress3,
                 MaxProgress3 = status.MaxProgress3,
+                State = "update",
                 Timestamp = DateTime.UtcNow,
             };
             BroadcastProgress(message);
@@ -124,6 +126,7 @@ namespace NINA.Core.Utility {
             ProgressMessage message = new ProgressMessage {
                 Source = status.Source,
                 Status = string.Empty,
+                State = "delete",
                 Timestamp = DateTime.UtcNow,
             };
             BroadcastProgress(message);

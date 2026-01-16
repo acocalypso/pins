@@ -36,6 +36,7 @@ namespace NINA.Core.SignalR {
         public double Progress3 { get; set; } = -1;
         public int MaxProgress3 { get; set; } = 1;
 
+        public string State { get; set; } = "delete";
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     }
 }
