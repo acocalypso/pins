@@ -13,7 +13,9 @@
 #endregion "copyright"
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using NINA.Core.Model;
 using NINA.Core.SignalR;
 
 namespace NINA.Core.Utility {
@@ -23,6 +25,10 @@ namespace NINA.Core.Utility {
     public static class Progress {
         public delegate Task ProgressBroadcaster(ProgressMessage message);
         public static ProgressBroadcaster Broadcaster { get; set; }
+
+        // Track last send time per source to throttle updates
+        private static readonly Dictionary<string, DateTime> lastSendTime = new Dictionary<string, DateTime>();
+        private static readonly int throttleIntervalMs = 500;
 
         private static void BroadcastProgress(ProgressMessage message) {
             try {
@@ -35,7 +41,91 @@ namespace NINA.Core.Utility {
             }
         }
 
-        public static void Publish(ProgressMessage message) {
+        private static bool ShouldThrottle(string source) {
+            if (string.IsNullOrEmpty(source)) {
+                return false;
+            }
+
+            lock (lastSendTime) {
+                if (!lastSendTime.ContainsKey(source)) {
+                    lastSendTime[source] = DateTime.UtcNow;
+                    return false; // First message, don't throttle
+                }
+
+                var timeSinceLastSend = DateTime.UtcNow - lastSendTime[source];
+                if (timeSinceLastSend.TotalMilliseconds >= throttleIntervalMs) {
+                    lastSendTime[source] = DateTime.UtcNow;
+                    return false; // Enough time has passed, don't throttle
+                }
+
+                return true; // Not enough time has passed, throttle this message
+            }
+        }
+
+        private static void ClearThrottleForSource(string source) {
+            if (string.IsNullOrEmpty(source)) {
+                return;
+            }
+
+            lock (lastSendTime) {
+                lastSendTime.Remove(source);
+            }
+        }
+
+        public static void PublishNewStatus(ApplicationStatus status) {
+            ProgressMessage message = new ProgressMessage {
+                Source = status.Source,
+                Status = status.Status,
+                ProgressType = status.ProgressType,
+                Progress = status.Progress,
+                MaxProgress = status.MaxProgress,
+                Status2 = status.Status2,
+                ProgressType2 = status.ProgressType2,
+                Progress2 = status.Progress2,
+                MaxProgress2 = status.MaxProgress2,
+                Status3 = status.Status3,
+                ProgressType3 = status.ProgressType3,
+                Progress3 = status.Progress3,
+                MaxProgress3 = status.MaxProgress3,
+                Timestamp = DateTime.UtcNow,
+            };
+            BroadcastProgress(message);
+        }
+
+        public static void PublishUpdateStatus(ApplicationStatus status) {
+            // Throttle update messages to 1 per second per source
+            if (ShouldThrottle(status.Source)) {
+                return;
+            }
+
+            ProgressMessage message = new ProgressMessage {
+                Source = status.Source,
+                Status = status.Status,
+                ProgressType = status.ProgressType,
+                Progress = status.Progress,
+                MaxProgress = status.MaxProgress,
+                Status2 = status.Status2,
+                ProgressType2 = status.ProgressType2,
+                Progress2 = status.Progress2,
+                MaxProgress2 = status.MaxProgress2,
+                Status3 = status.Status3,
+                ProgressType3 = status.ProgressType3,
+                Progress3 = status.Progress3,
+                MaxProgress3 = status.MaxProgress3,
+                Timestamp = DateTime.UtcNow,
+            };
+            BroadcastProgress(message);
+        }
+        
+        public static void PublishRemoveStatus(ApplicationStatus status) {
+            // Clear throttle tracking for this source when removing
+            ClearThrottleForSource(status.Source);
+
+            ProgressMessage message = new ProgressMessage {
+                Source = status.Source,
+                Status = string.Empty,
+                Timestamp = DateTime.UtcNow,
+            };
             BroadcastProgress(message);
         }
     }
