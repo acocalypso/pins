@@ -21,6 +21,8 @@ using NINA.WPF.Base.Interfaces.Mediator;
 using NINA.WPF.Base.Interfaces.ViewModel;
 using NINA.WPF.Base.ViewModel;
 using NINA.Core.Locale;
+using NINA.Core.SignalR;
+using NINA.Core.Utility;
 
 namespace NINA.ViewModel {
 
@@ -75,7 +77,9 @@ namespace NINA.ViewModel {
                             item.Progress3 = status.Progress3;
                             item.MaxProgress3 = status.MaxProgress3;
                             item.ProgressType3 = status.ProgressType3;
+                            Progress.PublishUpdateStatus(item);
                         } else {
+                            Progress.PublishRemoveStatus(item);
                             ApplicationStatus.Remove(item);
                         }
                     } else {
@@ -95,6 +99,7 @@ namespace NINA.ViewModel {
                                 MaxProgress3 = status.MaxProgress3,
                                 ProgressType3 = status.ProgressType3
                             });
+                            Progress.PublishNewStatus(status);
                         }
                     }
                 } catch { }
