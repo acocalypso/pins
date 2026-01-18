@@ -17,6 +17,7 @@ using NINA.Equipment.Equipment.MyCamera.ToupTekAlike;
 using NINA.Profile.Interfaces;
 using NINA.Core.Utility;
 using NINA.Equipment.Interfaces.Mediator;
+using QHYCCD;
 using System;
 using System.Collections.Generic;
 using ZWOptical.ASISDK;
@@ -82,6 +83,35 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                 } catch (Exception ex) {
                     Logger.Error(ex);
                 }
+
+                /* QHYCCD */
+                try {
+                    var qhy = new QHYCameras(exposureDataFactory);
+                    uint numCameras = qhy.Count;
+                    Logger.Info($"Found {numCameras} QHYCCD Cameras");
+
+                    if (numCameras > 0) {
+                        for (uint i = 0; i < numCameras; i++) {
+                            var cam = qhy.GetCamera(i, profileService);
+                            if (!string.IsNullOrEmpty(cam.Name)) {
+                                Logger.Debug($"Adding QHY camera {i}: {cam.Id} (as {cam.Name})");
+                                devices.Add(cam);
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
+                ///* Player One */
+                //try {
+                //    var provider = new PlayerOneProvider(profileService, exposureDataFactory);
+                //    var playerOneCameras = provider.GetEquipment();
+                //    Logger.Info($"Found {playerOneCameras?.Count} Player One Cameras");
+                //    devices.AddRange(playerOneCameras);
+                //} catch (Exception ex) {
+                //    Logger.Error(ex);
+                //}
 
                 /* ToupTek */
                 try {
