@@ -5,4 +5,8 @@ if command -v systemctl >/dev/null 2>&1; then
   systemctl enable pins.service >/dev/null 2>&1 || true
   systemctl restart pins.service || true
 fi
+
+# Fix ownership
+chown -R pi:pi /home/pi/pins || true
+
 exit 0

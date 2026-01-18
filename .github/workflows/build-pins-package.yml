@@ -228,7 +228,7 @@ jobs:
             echo "Installed-Size: $installed_size"
             echo "Description: Pins build for Raspberry Pi"
           } > "$control_dir/control"
-          dpkg-deb --build "$deb_root" "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
+          dpkg-deb --root-owner-group --build "$deb_root" "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
 
       - name: Generate SHA256 checksums
         run: |
@@ -317,8 +317,15 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
+              echo "exit 0"
+            } > "$control_dir/postinst"
+            chmod 755 "$control_dir/postinst"
             deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
-            dpkg-deb --build "$deb_root" "$deb_path"
+            dpkg-deb --root-owner-group --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           )
           rc=$?
@@ -397,8 +404,15 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
+              echo "exit 0"
+            } > "$control_dir/postinst"
+            chmod 755 "$control_dir/postinst"
             deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
-            dpkg-deb --build "$deb_root" "$deb_path"
+            dpkg-deb --root-owner-group --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           )
           rc=$?
@@ -477,8 +491,15 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
+              echo "exit 0"
+            } > "$control_dir/postinst"
+            chmod 755 "$control_dir/postinst"
             deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
-            dpkg-deb --build "$deb_root" "$deb_path"
+            dpkg-deb --root-owner-group --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           )
           rc=$?
@@ -557,8 +578,15 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
+              echo "exit 0"
+            } > "$control_dir/postinst"
+            chmod 755 "$control_dir/postinst"
             deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
-            dpkg-deb --build "$deb_root" "$deb_path"
+            dpkg-deb --root-owner-group --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           )
           rc=$?
@@ -645,8 +673,15 @@ jobs:
               echo "Installed-Size: $installed_size"
               echo "Description: NINA plugin package for $install_folder"
             } > "$control_dir/control"
+            {
+              echo "#!/bin/sh"
+              echo "set -e"
+              echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
+              echo "exit 0"
+            } > "$control_dir/postinst"
+            chmod 755 "$control_dir/postinst"
             deb_path="${{ env.PLUGIN_ARTIFACT_DIR }}/${deb_package}_${plugin_version}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
-            dpkg-deb --build "$deb_root" "$deb_path"
+            dpkg-deb --root-owner-group --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
           )
           rc=$?
