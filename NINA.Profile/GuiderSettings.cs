@@ -39,7 +39,7 @@ namespace NINA.Profile {
             pHD2ServerPort = 4400;
             pHD2InstanceNumber = 1;
             pHD2LargeHistorySize = 100;
-            pHD2GuiderScale = GuiderScaleEnum.PIXELS;
+            pHD2GuiderScale = GuiderScaleEnum.ARCSECONDS;
             phd2ROIPct = 100;
             settlePixels = 1.5;
             settleTimeout = 40;
