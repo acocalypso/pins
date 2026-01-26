@@ -20,6 +20,72 @@
   <PropertyGroup>
     <TargetZone>LocalIntranet</TargetZone>
   </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <PropertyGroup>
+    <SignManifests>false</SignManifests>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CodeAnalysisRuleSet>ManagedMinimumRules.ruleset</CodeAnalysisRuleSet>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CodeAnalysisRuleSet>ManagedMinimumRules.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>default</LangVersion>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CodeAnalysisRuleSet>NINA.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>default</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CodeAnalysisRuleSet>NINA.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>default</LangVersion>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject>NINA.App</StartupObject>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'SignedRelease|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x64\SignedRelease\</OutputPath>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+    <LangVersion>default</LangVersion>
+    <CodeAnalysisRuleSet>ManagedMinimumRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'SignedRelease|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\SignedRelease\</OutputPath>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+    <LangVersion>default</LangVersion>
+    <CodeAnalysisRuleSet>NINA.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="External\x64\ASI\EAF_focuser.dll" />
+    <None Remove="External\x64\Cfitsio\cfitsionative.dll" />
+    <None Remove="External\x64\Cfitsio\pthreadVC2.dll" />
+    <None Remove="External\x64\Cfitsio\zlib.dll" />
+    <None Remove="External\x64\Moravian\cXusb.dll" />
+    <None Remove="External\x64\Moravian\gXeth.dll" />
+    <None Remove="External\x64\Moravian\gXusb.dll" />
+    <None Remove="External\x64\Moravian\sfw.dll" />
+    <None Remove="External\x64\Moravian\sfweth.dll" />
+    <None Remove="External\x64\PlayerOne\PlayerOnePW.dll" />
+    <None Remove="External\x64\SOFA\SOFA-2023-10-11.dll" />
+    <None Remove="External\x64\SVBony\svbonycam.dll" />
+  </ItemGroup>
+>>>>>>> upstream/develop
   <ItemGroup>
     <Compile Include="..\CommonAssemblyInfo.cs">
       <Link>Properties\CommonAssemblyInfo.cs</Link>

@@ -33,15 +33,20 @@ More details at <a href="https://nighttime-imaging.eu/donate/" target="_blank">n
   - The ToupTek based filter wheels are now available as a native driver.
 - **Oasis Focuser Native Driver**
   - The Oasis focuser is now available as a native driver.
+- **Oasis Filter Wheel Native Driver**
+  - The Oasis filter wheel is now available as a native driver.
 - **PlayerOne FilterWheel**
   - Added setting to change unidirectional mode
   - While connecting the app will wait for the filter wheel homing to finish before proceeding
+- **Moravian Instruments Cameras and Integrated Filter Wheels**
+  - Added native drivers for Moravian Instruments cameras and integrated filter wheels
 
 ### **User Interface & Usability**
 - **Sky Atlas Improvements**  
   - Deep sky objects can now be filtered and sorted by their upper transit time
 - **Framing Assistant Improvements** 
-  - In HiPS 2 FITS Sky Survey different HiPS sky maps can now be selected like CTA-FRAM, Mellinger, Northern Sky Narrowband Survey and more for better target planning. 
+  - In HiPS 2 FITS Sky Survey different HiPS sky maps can now be selected like CTA-FRAM, Mellinger, Northern Sky Narrowband Survey and more for better target planning.
+  - Toogle Catalogue Display: visibility of individual catalogues is no stored in settings and a new "show all catalogues" toogle been added   
 - **New Toast Notification System**
   - Replaced the external ToastNotifications package with a fully native WPF implementation.
   - Improved reliability, lifetime handling, and positioning across multiple monitors.

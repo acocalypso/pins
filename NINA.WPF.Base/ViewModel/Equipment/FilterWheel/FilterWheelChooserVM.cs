@@ -12,19 +12,25 @@
 
 #endregion "copyright"
 
-using NINA.Equipment.Equipment.MyFilterWheel;
+using Astroasis.AstroasisSDK;
+using NINA.Core.Locale;
 using NINA.Core.Utility;
+using NINA.Equipment.Equipment;
+using NINA.Equipment.Equipment.MyCamera;
+using NINA.Equipment.Equipment.MyCamera.ToupTekAlike;
+using NINA.Equipment.Equipment.MyFilterWheel;
+using NINA.Equipment.Equipment.MyFocuser;
+using NINA.Equipment.Interfaces;
+using NINA.Equipment.Interfaces.ViewModel;
+using NINA.Equipment.SDK.CameraSDKs.AtikSDK;
+using NINA.Equipment.SDK.CameraSDKs.PlayerOneSDK;
+using NINA.Equipment.SDK.CameraSDKs.SBIGSDK;
+using NINA.Equipment.Utility;
 using NINA.Profile.Interfaces;
 using System;
 using System.Collections.Generic;
-using NINA.Equipment.Utility;
-using NINA.Core.Locale;
-using NINA.Equipment.Interfaces;
-using NINA.Equipment.Equipment;
 using System.Threading.Tasks;
-using NINA.Equipment.Interfaces.ViewModel;
 using ZWOptical.EFWSDK;
-using NINA.Equipment.Equipment.MyCamera.ToupTekAlike;
 
 namespace NINA.WPF.Base.ViewModel.Equipment.FilterWheel {
 
@@ -156,6 +162,20 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FilterWheel {
                             var wheel = new ToupTekAlikeFilterWheel(info, new SVBonySDKWrapper(), profileService);
                             devices.Add(wheel);
                         }
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
+                /* Oasis filter wheels */
+                try {
+                    Logger.Trace("Adding Oasis Filter Wheels");
+                    int[] ids = new int[AOFilterWheel.OFW_MAX_NUM];
+                    AOFilterWheel.FilterWheelScan(out var ofws, ids);
+                    for (int i = 0; i < ofws; i++) {
+                        var ofw= new OasisFilterWheel(ids[i], profileService);
+                        Logger.Debug($"Adding Oasis Filter Wheel: {ofw.Name}");
+                        devices.Add(ofw);
                     }
                 } catch (Exception ex) {
                     Logger.Error(ex);

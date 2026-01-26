@@ -25,6 +25,7 @@ namespace NINA.View.Equipment {
         public DataTemplate QhyCcd { get; set; }
         public DataTemplate Touptek { get; set; }
         public DataTemplate LegacySbig { get; set; }
+        public DataTemplate Moravian { get; set; }
         public DataTemplate Canon { get; set; }
         public DataTemplate Atik { get; set; }
         public DataTemplate Zwo { get; set; }
@@ -38,6 +39,12 @@ namespace NINA.View.Equipment {
         public override DataTemplate SelectTemplate(object item, DependencyObject container) {
             if (item is ToupTekAlikeCamera) {
                 return Touptek;
+            } else if (item is QHYCamera) {
+                return QhyCcd;
+            } else if (item is ASICamera) {
+                return Zwo;
+            } else if (item is SVBonyCamera) {
+                return SVBony;
             } else if (item is GenericCamera) {
                 return Generic;
             } else {
