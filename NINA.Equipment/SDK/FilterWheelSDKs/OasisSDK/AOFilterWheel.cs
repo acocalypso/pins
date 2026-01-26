@@ -7,7 +7,7 @@ using System.Text;
 
 namespace Astroasis.AstroasisSDK {
     public class AOFilterWheel {
-        private const string DLLNAME = "OasisFilterWheel.dll";
+        private const string DLLNAME = "liboasisfilterwheel.so";
 
         static AOFilterWheel() {
             DllLoader.LoadDll(Path.Combine("Oasis", DLLNAME));
