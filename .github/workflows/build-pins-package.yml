@@ -242,6 +242,56 @@ jobs:
             artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb
             artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb.sha256
           retention-days: 30
+
+      - name: Checkout pinsdaemon
+        uses: actions/checkout@v4
+        with:
+          repository: acocalypso/pinsdaemon
+          path: pinsdaemon
+
+      - name: Build PinsDaemon Package
+        working-directory: pinsdaemon
+        run: |
+          mkdir -p build/opt/pinsdaemon
+          mkdir -p build/usr/local/bin
+          mkdir -p build/etc/systemd/system
+          mkdir -p build/etc/sudoers.d
+          mkdir -p build/DEBIAN
+          
+          # App files
+          cp -r app build/opt/pinsdaemon/
+          cp requirements.txt build/opt/pinsdaemon/
+          cp README.md build/opt/pinsdaemon/
+          
+          # Scripts
+          cp scripts/system-upgrade.sh build/usr/local/bin/
+          
+          # Systemd
+          cp systemd/sysupdate-api.service build/etc/systemd/system/
+          
+          # Sudoers
+          cp packaging/sudoers build/etc/sudoers.d/sysupdate-api
+          
+          # Debian control files
+          cp packaging/DEBIAN/* build/DEBIAN/
+          chmod 755 build/DEBIAN/postinst
+          chmod 755 build/DEBIAN/prerm
+
+          # Versioning
+          BASE_VERSION=$(grep "^Version:" packaging/DEBIAN/control | awk '{print $2}')
+          FULL_VERSION="${BASE_VERSION}-${{ github.run_number }}"
+          FILENAME="pinsdaemon_${FULL_VERSION}_arm64.deb"
+          
+          echo "Setting version to $FULL_VERSION"
+          sed -i "s/^Version:.*/Version: $FULL_VERSION/" build/DEBIAN/control
+          
+          # Build
+          dpkg-deb --root-owner-group --build build "$FILENAME"
+          
+          # Move to artifacts
+          mkdir -p ../artifacts
+          mv "$FILENAME" ../artifacts/
+
       - name: Prepare plugin packaging workspace
         run: |
           rm -rf "${{ env.PLUGIN_DEB_BASE }}"
@@ -712,6 +762,7 @@ jobs:
             Automated release ${{ steps.release_tag.outputs.value }} containing the Raspberry Pi build and plugin Debian packages.
           files: |
             artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb
+            artifacts/pinsdaemon_*.deb
             artifacts/plugins/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
