@@ -25,6 +25,7 @@ namespace NINA.View.Equipment {
         public DataTemplate Zwo { get; set; }
         public DataTemplate PlayerOne { get; set; }
         public DataTemplate ToupTekAlike { get; set; }
+        public DataTemplate Oasis { get; set; }
         public DataTemplate FailedToLoadTemplate { get; set; }
 
         public string Postfix { get; set; }
@@ -32,6 +33,8 @@ namespace NINA.View.Equipment {
         public override DataTemplate SelectTemplate(object item, DependencyObject container) {
             if (item is ASIFilterWheel) {
                 return Zwo;
+            } else if (item is OasisFilterWheel) {
+                return Oasis;
             } else if (item is ToupTekAlikeFilterWheel) {
                 return ToupTekAlike;
             } else {

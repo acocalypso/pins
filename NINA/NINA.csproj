@@ -71,6 +71,9 @@
     <Content Include="External\$(RuntimeIdentifier)\Oasis\liboasisfocuser.so">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="External\$(RuntimeIdentifier)\Oasis\liboasisfilterwheel.so">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="External\$(RuntimeIdentifier)\ToupTek\libtoupcam.so">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
