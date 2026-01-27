@@ -78,18 +78,24 @@ namespace NINA.INDI.Devices {
         public string Category => "INDI Device";
         public string Id => _device.Id;
         public string DeviceName => _device.Name;
-        public string Name => DeviceName;
+        public string Name => _device.Name;
         public string DisplayName => DeviceName;
         public string Description => $"INDI Device: {DeviceName}";
         public string DriverInfo => _device?.Driver ?? "INDI Driver";
         public string DriverVersion => _device?.Version ?? "1.0";
 
         private readonly Dictionary<string, INDIProperty> _properties = new();
+        private TaskCompletionSource<bool> _propertiesReadyTcs;
 
         public void AddProperty(INDIProperty property) {
             lock (_properties) {
-                var isNew = !_properties.ContainsKey(property.Name);
                 _properties[property.Name] = property;
+                
+                // Signal when CONNECTION property arrives (if we're waiting)
+                if (property.Name == "CONNECTION" && _propertiesReadyTcs != null && !_propertiesReadyTcs.Task.IsCompleted) {
+                    Logger.Debug($"Device {DeviceName}: CONNECTION property received");
+                    _propertiesReadyTcs.TrySetResult(true);
+                }
             }
         }
 
@@ -255,19 +261,53 @@ namespace NINA.INDI.Devices {
 
                 Logger.Info($"Connecting to INDI device: {DeviceName}");
 
-                // Initialize operation TCS
+                // Request fresh properties from the driver
+                INDIClient.Instance.GetProperties(Id);
+
+                // Check if CONNECTION property already exists (from initial load or previous connect)
+                var hasConnection = GetSwitchProperty("CONNECTION") != null;
+                
+                if (!hasConnection) {
+                    // If not, wait for it to arrive
+                    Logger.Debug($"Waiting for CONNECTION property from {DeviceName}");
+                    
+                    lock (_operationLock) {
+                        _propertiesReadyTcs = new TaskCompletionSource<bool>();
+                    }
+
+                    try {
+                        ct.ThrowIfCancellationRequested();
+
+                        var propertyWaitTask = _propertiesReadyTcs.Task;
+                        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5), ct);
+                        var completedTask = await Task.WhenAny(propertyWaitTask, timeoutTask);
+
+                        if (completedTask == timeoutTask) {
+                            // Timeout waiting for properties
+                            if (ct.IsCancellationRequested) {
+                                Logger.Warning($"Waiting for properties from {DeviceName} was cancelled");
+                            } else {
+                                Logger.Error($"Timeout waiting for properties from {DeviceName}");
+                            }
+                            return false;
+                        }
+
+                        Logger.Debug($"Received CONNECTION property for {DeviceName}");
+                    } catch (OperationCanceledException) {
+                        Logger.Warning($"Waiting for properties from {DeviceName} was cancelled");
+                        return false;
+                    } catch (Exception ex) {
+                        Logger.Error($"Error waiting for properties: {ex.Message}");
+                        return false;
+                    }
+                } else {
+                    Logger.Debug($"CONNECTION property already available for {DeviceName}");
+                }
+
+                // Initialize operation TCS for connection
                 lock (_operationLock) {
                     _operationTcs = new TaskCompletionSource<bool>();
                 }
-
-                // Load driver first, which makes properties available
-                if (!await INDIClient.Instance.LoadDriver(_device.Driver, null, ct)) {
-                    Logger.Error($"Failed to load driver for {DeviceName}");
-                    return false;
-                }
-
-                // Wait briefly for driver properties to become available
-                await Task.Delay(500, ct);
 
                 // Call hook to configure connection properties before connecting
                 OnPreConnect();
@@ -280,7 +320,7 @@ namespace NINA.INDI.Devices {
                     ct.ThrowIfCancellationRequested();
 
                     // Wait for the connection callback with timeout and cancellation support
-                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(15), ct);
+                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5), ct);
                     var completedTask = await Task.WhenAny(_operationTcs.Task, timeoutTask);
 
                     if (completedTask == timeoutTask) {
@@ -361,12 +401,6 @@ namespace NINA.INDI.Devices {
                     }
                 } else {
                     Logger.Warning($"Disconnecting from {DeviceName} timed out (server may be disconnected)");
-                }
-
-                // Always try to unload driver after disconnect (or timeout)
-                // Only try to unload driver if server is still connected
-                if (INDIClient.Instance.IsConnected) {
-                    INDIClient.Instance.UnloadDriver(_device.Driver);
                 }
             } catch (Exception ex) {
                 Logger.Error($"Error during disconnect: {ex.Message}");

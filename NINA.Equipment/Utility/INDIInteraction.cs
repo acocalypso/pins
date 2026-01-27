@@ -37,14 +37,18 @@ namespace NINA.Equipment.Utility {
             return l;
         }
 
-        public static async Task<List<IFocuser>> GetFocusers() {
+        public async Task<List<IFocuser>> GetFocusers() {
             var l = new List<IFocuser>();
-            // Wait for INDI server to be ready before trying to enumerate drivers.
             if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI focusers enumeration");
+                Logger.Debug("INDI server not ready - skipping INDI focuser enumeration");
                 return l;
             }
-            foreach (var device in await INDIClient.Instance.GetDrivers(IndiDeviceInterface.FOCUSER_INTERFACE)) {
+
+            // Fetch the INDI driver that is supposed to be used from profile
+            string driver = profileService.ActiveProfile.FocuserSettings.IndiDriver;
+
+            // Query devices for this driver
+            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.FOCUSER_INTERFACE, driver)) {
                 IndiFocuser focuser = new(device);
                 l.Add(focuser);
             }
@@ -53,12 +57,16 @@ namespace NINA.Equipment.Utility {
 
         public async Task<List<ITelescope>> GetTelescopes() {
             var l = new List<ITelescope>();
-            // Ensure INDI server is up before attempting to get telescope drivers
             if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
                 Logger.Debug("INDI server not ready - skipping INDI telescope enumeration");
                 return l;
             }
-            foreach (var device in await INDIClient.Instance.GetDrivers(IndiDeviceInterface.TELESCOPE_INTERFACE)) {
+
+            // Fetch the INDI driver that is supposed to be used from profile
+            string driver = profileService.ActiveProfile.TelescopeSettings.IndiDriver;
+
+            // Query devices for this driver
+            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.TELESCOPE_INTERFACE, driver)) {
                 IndiTelescope telescope = new(device, profileService);
                 l.Add(telescope);
             }
@@ -71,7 +79,12 @@ namespace NINA.Equipment.Utility {
                 Logger.Debug("INDI server not ready - skipping INDI rotator enumeration");
                 return l;
             }
-            foreach (var device in await INDIClient.Instance.GetDrivers(IndiDeviceInterface.ROTATOR_INTERFACE)) {
+
+            // Fetch the INDI driver that is supposed to be used from profile
+            string driver = profileService.ActiveProfile.RotatorSettings.IndiDriver;
+
+            // Query devices for this driver
+            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.ROTATOR_INTERFACE, driver)) {
                 IndiRotator rotator = new(device, profileService);
                 l.Add(rotator);
             }
@@ -84,24 +97,34 @@ namespace NINA.Equipment.Utility {
                 Logger.Debug("INDI server not ready - skipping INDI filterwheel enumeration");
                 return l;
             }
-            foreach (var device in await INDIClient.Instance.GetDrivers(IndiDeviceInterface.FILTER_INTERFACE)) {
+
+            // Fetch the INDI driver that is supposed to be used from profile
+            string driver = profileService.ActiveProfile.FilterWheelSettings.IndiDriver;
+
+            // Query devices for this driver
+            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.FILTER_INTERFACE, driver)) {
                 IndiFilterWheel filterWheel = new(device, profileService);
                 l.Add(filterWheel);
             }
             return l;
         }
 
-        public static async Task<List<IWeatherData>> GetWeatherData() {
+        public async Task<List<IWeatherData>> GetWeatherData() {
             var l = new List<IWeatherData>();
             if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI weather-data enumeration");
+                Logger.Debug("INDI server not ready - skipping INDI weather data enumeration");
                 return l;
             }
-            foreach (var device in await INDIClient.Instance.GetDrivers(IndiDeviceInterface.WEATHER_INTERFACE)) {
+
+            // Fetch the INDI driver that is supposed to be used from profile
+            string driver = profileService.ActiveProfile.WeatherDataSettings.IndiDriver;
+
+            // Query devices for this driver
+            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.WEATHER_INTERFACE, driver)) {
                 IndiWeatherData weatherData = new(device);
                 l.Add(weatherData);
             }
-            return l;
+            return l;        
         }
 
         public static string GetVersion() {

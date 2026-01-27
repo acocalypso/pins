@@ -53,6 +53,7 @@ namespace NINA.Profile {
             filterWheelFilters = new ObserveAllCollection<FilterInfo>();
             disableGuidingOnFilterChange = false;
             unidirectional = true;
+            indiDriver = "indi_simulator_wheel";
         }
 
         private string id;
@@ -125,6 +126,18 @@ namespace NINA.Profile {
                     if (filterWheelFilters != null) {
                         filterWheelFilters.CollectionChanged += FilterWheelFilters_CollectionChanged;
                     }
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private string indiDriver;
+        [DataMember]
+        public string IndiDriver {
+            get => indiDriver;
+            set {
+                if(indiDriver != value) {
+                    indiDriver = value;
                     RaisePropertyChanged();
                 }
             }

@@ -23,5 +23,6 @@ namespace NINA.Profile.Interfaces {
         string LastDeviceName { get; set; }
         bool DisableGuidingOnFilterChange { get; set; }
         bool Unidirectional { get; set; }
+        string IndiDriver { get; set; }
     }
 }

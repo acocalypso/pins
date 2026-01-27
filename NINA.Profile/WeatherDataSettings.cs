@@ -34,6 +34,7 @@ namespace NINA.Profile {
             TheWeatherCompanyAPIKey = string.Empty;
             WeatherUndergroundAPIKey = string.Empty;
             WeatherUndergroundStation = string.Empty;
+            indiDriver = "indi_simulator_weather";
         }
 
         private string id = string.Empty;
@@ -101,6 +102,18 @@ namespace NINA.Profile {
             set {
                 weatherUndergroundStation = value;
                 RaisePropertyChanged();
+            }
+        }
+
+        private string indiDriver;
+        [DataMember]
+        public string IndiDriver {
+            get => indiDriver;
+            set {
+                if(indiDriver != value) {
+                    indiDriver = value;
+                    RaisePropertyChanged();
+                }
             }
         }
     }
