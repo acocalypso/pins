@@ -116,23 +116,13 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Focuser {
 
                 /* INDI focusers */
                 try {
-                    var indiFocusers = await INDIInteraction.GetFocusers();
+                    var indiInteraction = new INDIInteraction(profileService);
+                    var indiFocusers = await indiInteraction.GetFocusers();
                     devices.AddRange(indiFocusers);
                     Logger.Info($"Found {indiFocusers?.Count} INDI Focusers");
                 } catch (Exception ex) {
                     Logger.Error(ex);
                 }
-
-                /* INDIGO focusers */
-                /*                try {
-                                    var indigoInteraction = new INDIGOInteraction(profileService);
-                                    var indigoFocusers = indigoInteraction.GetFocusers();
-                                    devices.AddRange(indigoFocusers);
-                                    Logger.Info($"Found {indigoFocusers?.Count} INDIGO Focusers");
-                                } catch (Exception ex) {
-                                    Logger.Error(ex);
-                                }
-                */
 
                 /* Alpaca */
                 try {

@@ -17,5 +17,6 @@ namespace NINA.Profile.Interfaces {
     public interface ISwitchSettings : ISettings {
         string Id { get; set; }
         string LastDeviceName { get; set; }
+        string IndiDriver { get; set; }
     }
 }

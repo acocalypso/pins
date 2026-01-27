@@ -58,5 +58,17 @@ namespace NINA.Profile {
                 }
             }
         }
+
+        private string indiDriver;
+        [DataMember]
+        public string IndiDriver {
+            get => indiDriver;
+            set {
+                if(indiDriver != value) {
+                    indiDriver = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
     }
 }

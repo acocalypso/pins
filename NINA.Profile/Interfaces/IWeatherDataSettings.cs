@@ -21,5 +21,6 @@ namespace NINA.Profile.Interfaces {
         string TheWeatherCompanyAPIKey { get; set; }
         string WeatherUndergroundAPIKey { get; set; }
         string WeatherUndergroundStation { get; set; }
+        string IndiDriver { get; set; }
     }
 }

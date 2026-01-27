@@ -72,10 +72,11 @@ namespace NINA.INDI.Devices {
         /// <summary>
         /// Specify critical properties that must arrive before Connect() completes
         /// </summary>
-        protected override string[] GetRequiredConnectionProperties() {
+        protected override string[] GetRequiredConnectionProperties()
+        {
             return ["FILTER_SLOT"];
         }
-
+        
         public int[] FocusOffsets {
             get {
                 var prop = GetNumberProperty("FILTER_FOCUS_OFFSET");
@@ -103,14 +104,14 @@ namespace NINA.INDI.Devices {
         }
 
         public int Position {
-            get => (int)GetNumberPropertyValue("FILTER_SLOT", "FILTER_SLOT_VALUE").GetValueOrDefault(1);
+            get => (int)GetNumberPropertyValue("FILTER_SLOT", "FILTER_SLOT_VALUE").GetValueOrDefault(1) - 1;
             set {
                 if (!Connected) {
                     Logger.Warning("Cannot set filter position: not connected");
                     return;
                 }
                 _isMoving = true;
-                SetNumberValue("FILTER_SLOT", "FILTER_SLOT_VALUE", value);
+                SetNumberValue("FILTER_SLOT", "FILTER_SLOT_VALUE", value + 1);
                 Logger.Info($"Commanded filter wheel to position {value}");
             }
         }

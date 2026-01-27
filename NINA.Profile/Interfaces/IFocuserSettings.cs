@@ -43,5 +43,6 @@ namespace NINA.Profile.Interfaces {
         string ConnectionMode { get; set; }
         string DevicePort { get; set; }
         int BaudRate { get; set; }
+        string IndiDriver { get; set; }
     }
 }
