@@ -30,5 +30,6 @@ namespace NINA.Profile.Interfaces {
         TrainedFlatExposureSetting GetTrainedFlatExposureSetting(short? filterPosition, BinningMode binning, int gain, int offset);
         void AddEmptyTrainedExposureSetting();
         void AddTrainedFlatExposureSetting(short? filterPosition, BinningMode binning, int gain, int offset, int brightness, double exposureTime);
+        string IndiDriver { get; set; }
     }
 }

@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -96,6 +96,15 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Guider {
             if(e.PropertyName == nameof(IGuiderSettings.DitherPixels)) {
                 RaisePropertyChanged(nameof(MainCameraPixelScale));
                 RaisePropertyChanged(nameof(MainCameraDitherPixels));
+            } else if(e.PropertyName == nameof(IGuiderSettings.MaxY)) {
+                GuideStepsHistory.MaxY = profileService.ActiveProfile.GuiderSettings.MaxY;
+                RaisePropertyChanged(nameof(GuiderMaxY));
+            } else if(e.PropertyName == nameof(IGuiderSettings.PHD2GuiderScale)) {
+                GuideStepsHistory.Scale = profileService.ActiveProfile.GuiderSettings.PHD2GuiderScale;
+                RaisePropertyChanged(nameof(GuiderScale));
+            } else if(e.PropertyName == nameof(IGuiderSettings.PHD2HistorySize)) {
+                GuideStepsHistory.HistorySize = profileService.ActiveProfile.GuiderSettings.PHD2HistorySize;
+                RaisePropertyChanged(nameof(HistorySize));
             }
         }
 
@@ -354,6 +363,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Guider {
             set {
                 profileService.ActiveProfile.GuiderSettings.MaxY = value;
                 GuideStepsHistory.MaxY = value;
+                RaisePropertyChanged();
             }
         }
 

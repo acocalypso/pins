@@ -55,6 +55,7 @@ namespace NINA.Profile {
             connectionMode = "SERIAL";
             devicePort = "/dev/ttyUSB0";
             baudRate = 9600;
+            indiDriver = "indi_simulator_focus";
         }
 
         private string id;
@@ -405,6 +406,18 @@ namespace NINA.Profile {
             set {
                 if(baudRate != value) {
                     baudRate = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private string indiDriver;
+        [DataMember]
+        public string IndiDriver {
+            get => indiDriver;
+            set {
+                if(indiDriver != value) {
+                    indiDriver = value;
                     RaisePropertyChanged();
                 }
             }

@@ -32,9 +32,10 @@ namespace NINA.Profile.Interfaces {
         bool SecondaryReversed { get; set; }
 
         TelescopeLocationSyncDirection TelescopeLocationSyncDirection { get; set; }
-        
+
         string ConnectionMode { get; set; }
         string DevicePort { get; set; }
         int BaudRate { get; set; }
+        string IndiDriver { get; set; }
     }
 }

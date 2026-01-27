@@ -39,8 +39,13 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
         public string[] Names => GetProperty(nameof(IINDIFilterWheel.Names), new string[] { });
 
         public short Position {
-            get => GetProperty<short>(nameof(IINDIFilterWheel.Position), -1);
-            set => SetProperty(nameof(IINDIFilterWheel.Position), value);
+            get => (short)(device?.Position ?? -1);
+            set {
+                if (device != null && ShouldBeConnected) {
+                    device.Position = (int)value;
+                    InvalidatePropertyCache();
+                }
+            }
         }
 
         private IProfileService profileService;

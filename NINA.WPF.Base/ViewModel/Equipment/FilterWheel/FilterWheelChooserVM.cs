@@ -190,7 +190,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FilterWheel {
                     }
                 }
 
-                /* INDI telescopes */
+                /* INDI filter wheels */
                 try {
                     var indiInteraction = new INDIInteraction(profileService);
                     var indiFilterWheel = await indiInteraction.GetFilterWheels();
@@ -199,17 +199,6 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FilterWheel {
                 } catch (Exception ex) {
                     Logger.Error(ex);
                 }
-
-                /* INDIGO filter wheels */
-                /*                try {
-                                    var indigoInteraction = new INDIGOInteraction(profileService);
-                                    var indigoFilterWheels = indigoInteraction.GetFilterWheels();
-                                    devices.AddRange(indigoFilterWheels);
-                                    Logger.Info($"Found {indigoFilterWheels?.Count} INDIGO FilterWheels");
-                                } catch (Exception ex) {
-                                    Logger.Error(ex);
-                                }
-                */
 
                 /* Alpaca */
                 try {

@@ -59,6 +59,7 @@ namespace NINA.Profile {
         protected override void SetDefaultValues() {
             Id = "No_Device";
             lastDeviceName = string.Empty;
+            indiDriver = "indi_simulator_lightpanel";
         }
 
         private string id;
@@ -225,6 +226,17 @@ namespace NINA.Profile {
             return setting;
         }
 
+        private string indiDriver;
+        [DataMember]
+        public string IndiDriver {
+            get => indiDriver;
+            set {
+                if(indiDriver != value) {
+                    indiDriver = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
     }
 
     [Serializable]

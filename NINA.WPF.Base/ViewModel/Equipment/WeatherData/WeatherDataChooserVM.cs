@@ -52,7 +52,8 @@ namespace NINA.WPF.Base.ViewModel.Equipment.WeatherData {
 
                 /* INDI weather data */
                 try {
-                    var indiWeatherData = await INDIInteraction.GetWeatherData();
+                    var indiInteraction = new INDIInteraction(profileService);
+                    var indiWeatherData = await indiInteraction.GetWeatherData();
                     devices.AddRange(indiWeatherData);
                     Logger.Info($"Found {indiWeatherData?.Count} INDI Weather Data");
                 } catch (Exception ex) {
