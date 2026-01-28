@@ -494,6 +494,13 @@ namespace NINA.INDI.Devices {
         }
 
         public virtual void OnSwitchPropertyUpdated(INDISwitchProperty p) {
+            /*
+            Logger.Info($"{p.Name}, {p.Label}, {p.State}, {p.Rule}");
+            foreach (var s in p.Switches)
+            {
+                Logger.Info($"        {s.Name}, {s.Label}, {s.Value}");
+            }
+            */
             // Check for CONNECTION property updates (for device connection flow)
             if (p.Name == "CONNECTION") {
                 var connectSwitch = p.Switches.FirstOrDefault(s => s.Name == "CONNECT");
@@ -520,10 +527,26 @@ namespace NINA.INDI.Devices {
             }
         }
 
-        public virtual void OnNumberPropertyUpdated(INDINumberProperty p) {
+        public virtual void OnNumberPropertyUpdated(INDINumberProperty p)
+        {
+            /*
+            Logger.Info($"{p.Name}, {p.Label}, {p.State}");
+            foreach (var n in p.Numbers)
+            {
+                Logger.Info($"        {n.Name}, {n.Label}, {n.Value}, {n.Min}, {n.Max}, {n.Step}, {n.Format}");
+            }
+            */
         }
 
-        public virtual void OnTextPropertyUpdated(INDITextProperty p) {
+        public virtual void OnTextPropertyUpdated(INDITextProperty p)
+        {
+            /*
+            Logger.Info($"{p.Name}, {p.Label}, {p.State}");
+            foreach (var t in p.Texts)
+            {
+                Logger.Info($"        {t.Name}, {t.Label}, {t.Value}");
+            }
+            */
         }
 
         public virtual void OnBlobPropertyUpdated(INDIBlobProperty p) {
