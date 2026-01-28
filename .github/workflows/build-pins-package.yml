@@ -17,7 +17,7 @@ env:
   PLUGINS_INSTALL_BASE: /home/pi/.local/share/NINA/Plugins/3.0.0
   PLUGIN_DEB_BASE: artifacts/plugin-debroot
   PLUGIN_ARTIFACT_DIR: artifacts/plugins
-  PLUGIN_MSBUILD_ARGS: -p:DisableImplicitSystemDrawingReference=true -p:Platform=AnyCPU -p:PlatformTarget=AnyCPU
+  PLUGIN_MSBUILD_ARGS: -p:DisableImplicitSystemDrawingReference=true -p:Platform=AnyCPU -p:PlatformTarget=AnyCPU -p:SatelliteResourceLanguages="en-US"
   PLUGIN_FAILURES_FILE: artifacts/plugin-build-failures.log
 
 jobs:
@@ -351,6 +351,8 @@ jobs:
             (cd "$core_publish_dir" && find . -type f -printf "%P\n") > "$exclude_list"
             rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
             rm -f "$exclude_list"
+            find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??-??" -exec rm -rf {} +
+            find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??" -exec rm -rf {} +
             extra_libs="$plugin_dir/extra-libs"
             if [ -d "$extra_libs" ]; then
               find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
@@ -443,6 +445,8 @@ jobs:
             (cd "$core_publish_dir" && find . -type f -printf "%P\n") > "$exclude_list"
             rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
             rm -f "$exclude_list"
+            find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??-??" -exec rm -rf {} +
+            find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??" -exec rm -rf {} +
             extra_libs="$plugin_dir/extra-libs"
             if [ -d "$extra_libs" ]; then
               find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
@@ -535,6 +539,8 @@ jobs:
             (cd "$core_publish_dir" && find . -type f -printf "%P\n") > "$exclude_list"
             rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
             rm -f "$exclude_list"
+            find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??-??" -exec rm -rf {} +
+            find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??" -exec rm -rf {} +
             extra_libs="$plugin_dir/extra-libs"
             if [ -d "$extra_libs" ]; then
               find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
@@ -627,6 +633,8 @@ jobs:
             (cd "$core_publish_dir" && find . -type f -printf "%P\n") > "$exclude_list"
             rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
             rm -f "$exclude_list"
+            find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??-??" -exec rm -rf {} +
+            find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??" -exec rm -rf {} +
             extra_libs="$plugin_dir/extra-libs"
             if [ -d "$extra_libs" ]; then
               find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
@@ -727,6 +735,8 @@ jobs:
             (cd "$core_publish_dir" && find . -type f -printf "%P\n") > "$exclude_list"
             rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
             rm -f "$exclude_list"
+            find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??-??" -exec rm -rf {} +
+            find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??" -exec rm -rf {} +
             app_dir="$plugin_dir/app"
             if [ -d "$app_dir" ]; then
               rm -rf "$install_root/app"
