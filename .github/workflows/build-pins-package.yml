@@ -345,7 +345,12 @@ jobs:
             install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
             rm -rf "$deb_root"
             mkdir -p "$install_root"
-            rsync -a "$tfm_dir/" "$install_root/"
+            # Exclude core NINA files from plugin package
+            core_publish_dir="${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}"
+            exclude_list="$(pwd)/core_excludes.txt"
+            (cd "$core_publish_dir" && find . -type f -printf "%P\n") > "$exclude_list"
+            rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
+            rm -f "$exclude_list"
             extra_libs="$plugin_dir/extra-libs"
             if [ -d "$extra_libs" ]; then
               find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
@@ -432,7 +437,12 @@ jobs:
             install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
             rm -rf "$deb_root"
             mkdir -p "$install_root"
-            rsync -a "$tfm_dir/" "$install_root/"
+            # Exclude core NINA files from plugin package
+            core_publish_dir="${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}"
+            exclude_list="$(pwd)/core_excludes.txt"
+            (cd "$core_publish_dir" && find . -type f -printf "%P\n") > "$exclude_list"
+            rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
+            rm -f "$exclude_list"
             extra_libs="$plugin_dir/extra-libs"
             if [ -d "$extra_libs" ]; then
               find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
@@ -519,7 +529,12 @@ jobs:
             install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
             rm -rf "$deb_root"
             mkdir -p "$install_root"
-            rsync -a "$tfm_dir/" "$install_root/"
+            # Exclude core NINA files from plugin package
+            core_publish_dir="${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}"
+            exclude_list="$(pwd)/core_excludes.txt"
+            (cd "$core_publish_dir" && find . -type f -printf "%P\n") > "$exclude_list"
+            rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
+            rm -f "$exclude_list"
             extra_libs="$plugin_dir/extra-libs"
             if [ -d "$extra_libs" ]; then
               find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
@@ -606,7 +621,12 @@ jobs:
             install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
             rm -rf "$deb_root"
             mkdir -p "$install_root"
-            rsync -a "$tfm_dir/" "$install_root/"
+            # Exclude core NINA files from plugin package
+            core_publish_dir="${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}"
+            exclude_list="$(pwd)/core_excludes.txt"
+            (cd "$core_publish_dir" && find . -type f -printf "%P\n") > "$exclude_list"
+            rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
+            rm -f "$exclude_list"
             extra_libs="$plugin_dir/extra-libs"
             if [ -d "$extra_libs" ]; then
               find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
@@ -701,7 +721,12 @@ jobs:
             install_root="$deb_root${{ env.PLUGINS_INSTALL_BASE }}/$install_folder"
             rm -rf "$deb_root"
             mkdir -p "$install_root"
-            rsync -a "$tfm_dir/" "$install_root/"
+            # Exclude core NINA files from plugin package
+            core_publish_dir="${{ env.PUBLISH_DIRECTORY }}/${{ env.TARGET_RUNTIME }}"
+            exclude_list="$(pwd)/core_excludes.txt"
+            (cd "$core_publish_dir" && find . -type f -printf "%P\n") > "$exclude_list"
+            rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
+            rm -f "$exclude_list"
             app_dir="$plugin_dir/app"
             if [ -d "$app_dir" ]; then
               rm -rf "$install_root/app"
