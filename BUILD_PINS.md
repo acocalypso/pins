@@ -31,7 +31,7 @@ sudo apt-get install -y \
 Install required SDKs:
 
 - .NET SDK `10.0.x`
-- Node.js `20.x`
+- Node.js `22.x`
 
 How you install those (apt, asdf, mise, official installers) is up to you.
 
@@ -569,3 +569,55 @@ build_dotnet_plugin_deb \
   "Touch-N-Stars" \
   "pins-plugin-touch-n-stars"
 ```
+
+---
+
+## PINS APT Repository
+
+We host an APT repository for Raspberry Pi (arm64) containing PINS builds, plugins, and dependencies.
+
+### Adding the Repository
+
+1.  **Add the GPG key:**
+
+    ```bash
+    curl -fsSL https://repo.touch-n-stars.eu/repository-key.asc | sudo gpg --dearmor -o /usr/share/keyrings/pins-archive-keyring.gpg
+    ```
+
+2.  **Add the repository source:**
+
+    ```bash
+    echo "deb [arch=arm64 signed-by=/usr/share/keyrings/pins-archive-keyring.gpg] https://repo.touch-n-stars.eu/reprepro trixie main" | sudo tee /etc/apt/sources.list.d/pins.list
+    ```
+
+3.  **Update APT:**
+
+    ```bash
+    sudo apt-get update
+    ```
+
+### Available Packages
+
+You can install these packages using `sudo apt-get install <package_name>`.
+
+| Package Name | Description | Version (Example) |
+| :--- | :--- | :--- |
+| **PINS Core** | | |
+| `pins` | Main PINS application for Raspberry Pi | 3.3.0.1000-nightly |
+| `pinsdaemon` | System daemon for updates and management | 1.0.0 |
+| **Plugins** | | |
+| `pins-plugin-joko` | HocusFocus Plugin | 3.0.0.24 |
+| `pins-plugin-livestack` | LiveStack Plugin | 1.0.1.2 |
+| `pins-plugin-ninaapi` | ninaAPI Plugin | 2.2.14.1 |
+| `pins-plugin-polaralignment` | PolarAlignment Plugin | 2.2.3.4 |
+| `pins-plugin-touch-n-stars` | Touch-N-Stars Plugin | 1.2.4.0 |
+| **Dependencies / Tools** | | |
+| `libindi1` | INDI Shared Library | 2.1.7 |
+| `libindi-dev` | INDI Development Files | 2.1.7 |
+| `libindi-data` | INDI Data Files | 2.1.7 |
+| `indi-bin` | INDI Server and Drivers | 2.1.7 |
+| `indi-dbg` | INDI Debug Symbols | 2.1.7 |
+| `opencv` | OpenCV Libraries | 4.11.0 |
+| `opencv-dbgsym` | OpenCV Debug Symbols | 4.11.0 |
+| `opencv-qeng` | OpenCV PI Optimized Build | 4.11.0 |
+| `phd2` | PHD2 Guiding | 2.6.13dev8 |
