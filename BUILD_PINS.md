@@ -621,3 +621,18 @@ You can install these packages using `sudo apt-get install <package_name>`.
 | `opencv-dbgsym` | OpenCV Debug Symbols | 4.11.0 |
 | `opencv-qeng` | OpenCV PI Optimized Build | 4.11.0 |
 | `phd2` | PHD2 Guiding | 2.6.13dev8 |
+| `astap_cli` | ASTAP Plate Solving (Manual) | `command-line_version_Linux_aarch64` |
+
+### Installing ASTAP CLI
+
+If you need the ASTAP CLI capability:
+
+1.  Download the package:
+    [astap_command-line_version_Linux_aarch64.zip](https://sourceforge.net/projects/astap-program/files/linux_installer/astap_command-line_version_Linux_aarch64.zip/download)
+
+2.  Extract and install to path:
+    ```bash
+    unzip astap_command-line_version_Linux_aarch64.zip
+    sudo cp astap_cli /usr/local/bin/
+    sudo chmod +x /usr/local/bin/astap_cli
+    ```
