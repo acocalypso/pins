@@ -194,6 +194,33 @@ jobs:
           mkdir -p "$install_root"
           rsync -a "${{ env.PACKAGE_ROOT }}/pins/" "$install_root/"
 
+      - name: Bundle ASTAP CLI
+        run: |
+          deb_root="${{ env.DEB_ROOT }}"
+          target_dir="$deb_root/usr/local/bin"
+          mkdir -p "$target_dir"
+          
+          url="https://sourceforge.net/projects/astap-program/files/linux_installer/astap_command-line_version_Linux_aarch64.zip/download"
+          tmp_zip="$(mktemp)"
+          tmp_extract="$(mktemp -d)"
+          
+          echo "Downloading ASTAP CLI from $url"
+          curl -L -o "$tmp_zip" "$url"
+          
+          unzip -q "$tmp_zip" -d "$tmp_extract"
+          
+          # Find the binary, it might be in a subdir or named differently
+          binary_path=$(find "$tmp_extract" -type f -name "astap_cli" | head -n 1)
+          if [ -z "$binary_path" ]; then
+             echo "Could not find astap_cli in downloaded zip" >&2
+             exit 1
+          fi
+          
+          cp "$binary_path" "$target_dir/astap_cli"
+          chmod 755 "$target_dir/astap_cli"
+          rm -rf "$tmp_zip" "$tmp_extract"
+          echo "Bundled astap_cli to $target_dir/astap_cli"
+
       - name: Add systemd service
         run: |
           deb_root="${{ env.DEB_ROOT }}"
