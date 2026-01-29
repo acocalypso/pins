@@ -34,3 +34,6 @@
 	path = NINA.Plugins/nina.plugin.orbuculum
 	url = https://github.com/nitr57/nina.plugin.orbuculum.git
 	branch = master
+[submodule "NINA.Plugins/nina.plugin.phd2tools"]
+	path = NINA.Plugins/nina.plugin.phd2tools
+	url = https://github.com/nitr57/nina.plugin.phd2tools.git
