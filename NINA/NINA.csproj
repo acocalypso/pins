@@ -83,6 +83,9 @@
     <Content Include="External\$(RuntimeIdentifier)\Wanderer\libWandererRotatorSDK.so">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="External\$(RuntimeIdentifier)\Wanderer\libWandererCoverSDK.so">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="External\$(RuntimeIdentifier)\SOFA\libsofa_c.so">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
@@ -123,7 +126,7 @@
     <PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.21" />
     <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
-    <PackageReference Include="OpenCvSharp4.official.runtime.$(RuntimeIdentifier)" Version="4.11.0.20250507" />
+    <PackageReference Include="OpenCvSharp4.official.runtime.$(RuntimeIdentifier)" Version="4.11.0.20250507" Condition="'$(RuntimeIdentifier)'=='linux-x64'" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     <!-- Exclude System.Drawing.Common as it conflicts with our compat library -->
     <PackageReference Include="System.Drawing.Common" Version="*" ExcludeAssets="all" />
