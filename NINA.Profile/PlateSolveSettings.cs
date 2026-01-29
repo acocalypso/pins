@@ -62,7 +62,7 @@ namespace NINA.Profile {
                 ? defaultASPSLocation
                 : string.Empty;
 
-            var defaultASTAPLocation = Environment.ExpandEnvironmentVariables(@"/usr/bin/astap");
+            var defaultASTAPLocation = Environment.ExpandEnvironmentVariables(@"/usr/local/bin/astap_cli");
             aSTAPLocation = File.Exists(defaultASTAPLocation)
                  ? defaultASTAPLocation
                  : string.Empty;

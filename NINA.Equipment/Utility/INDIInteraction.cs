@@ -25,6 +25,7 @@ using System.Threading.Tasks;
 using NINA.Equipment.Equipment.MyTelescope;
 using NINA.Equipment.Equipment.MyRotator;
 using NINA.Equipment.Equipment.MyFilterWheel;
+using NINA.Equipment.Equipment.MyFlatDevice;
 using NINA.Equipment.Equipment.MyWeatherData;
 
 namespace NINA.Equipment.Utility {
@@ -109,9 +110,32 @@ namespace NINA.Equipment.Utility {
             return l;
         }
 
-        public async Task<List<IWeatherData>> GetWeatherData() {
+        public async Task<List<IFlatDevice>> GetFlatDevices()
+        {
+            var l = new List<IFlatDevice>();
+            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15)))
+            {
+                Logger.Debug("INDI server not ready - skipping INDI flat device enumeration");
+                return l;
+            }
+
+            // Fetch the INDI driver that is supposed to be used from profile
+            string driver = profileService.ActiveProfile.FlatDeviceSettings.IndiDriver;
+
+            // Query devices for this driver
+            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.LIGHTBOX_INTERFACE, driver))
+            {
+                IndiFlatDevice flatDevice = new(device);
+                l.Add(flatDevice);
+            }
+            return l;
+        }
+
+        public async Task<List<IWeatherData>> GetWeatherData()
+        {
             var l = new List<IWeatherData>();
-            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
+            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15)))
+            {
                 Logger.Debug("INDI server not ready - skipping INDI weather data enumeration");
                 return l;
             }
@@ -120,11 +144,12 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.WeatherDataSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.WEATHER_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.WEATHER_INTERFACE, driver))
+            {
                 IndiWeatherData weatherData = new(device);
                 l.Add(weatherData);
             }
-            return l;        
+            return l;
         }
 
         public static string GetVersion() {

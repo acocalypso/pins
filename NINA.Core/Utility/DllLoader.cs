@@ -13,8 +13,11 @@
 #endregion "copyright"
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace NINA.Core.Utility {
@@ -33,6 +36,8 @@ namespace NINA.Core.Utility {
 
         private static object lockobj = new object();
         private static System.Collections.Generic.HashSet<string> loadedDlls = new System.Collections.Generic.HashSet<string>();
+        private static Dictionary<string, string> libraryPathMap = new Dictionary<string, string>(); // Maps library name to full path
+        private static bool _resolverRegistered = false;
 
         public static void LoadDll(string dllSubPath) {
             lock (lockobj) {
@@ -56,6 +61,12 @@ namespace NINA.Core.Utility {
                     Logger.Info($"DllLoader: Loading bundled library: {path}");
                     if (LoadDllFromAbsolutePath(path)) {
                         loadedDlls.Add(dllSubPath);
+                        // Track the library by filename for P/Invoke resolution
+                        var libName = Path.GetFileName(path);
+                        if (!libraryPathMap.ContainsKey(libName)) {
+                            libraryPathMap[libName] = path;
+                        }
+                        EnsureResolverRegistered();
                         return;
                     }
                 }
@@ -66,8 +77,46 @@ namespace NINA.Core.Utility {
 
                 if (LoadDllFromAbsolutePath(libraryName, global: true)) {
                     loadedDlls.Add(dllSubPath);
+                    EnsureResolverRegistered();
                 }
             }
+        }
+
+        private static void EnsureResolverRegistered() {
+            lock (lockobj) {
+                if (!_resolverRegistered) {
+                    try {
+                        // Register on NINA.Equipment assembly so all vendor SDKs can use it
+                        var equipmentAssembly = AppDomain.CurrentDomain.GetAssemblies()
+                            .FirstOrDefault(a => a.GetName().Name == "NINA.Equipment");
+                        
+                        if (equipmentAssembly != null) {
+                            NativeLibrary.SetDllImportResolver(equipmentAssembly, ResolveLibrary);
+                            Logger.Debug("DllLoader: Registered DllImportResolver on NINA.Equipment assembly");
+                        } else {
+                            // Fallback: register on this assembly
+                            NativeLibrary.SetDllImportResolver(typeof(DllLoader).Assembly, ResolveLibrary);
+                            Logger.Debug("DllLoader: Registered DllImportResolver on NINA.Core assembly");
+                        }
+                    } catch (Exception ex) {
+                        Logger.Warning($"DllLoader: Failed to register resolver: {ex.Message}");
+                    }
+                    _resolverRegistered = true;
+                }
+            }
+        }
+
+        private static IntPtr ResolveLibrary(string libraryName, Assembly assembly, DllImportSearchPath? searchPath) {
+            lock (lockobj) {
+                // Check if we have a tracked path for this library
+                if (libraryPathMap.TryGetValue(libraryName, out var fullPath)) {
+                    Logger.Debug($"DllLoader: Resolving {libraryName} to {fullPath}");
+                    if (NativeLibrary.TryLoad(fullPath, out var handle)) {
+                        return handle;
+                    }
+                }
+            }
+            return IntPtr.Zero;
         }
 
         public static bool LoadDllFromAbsolutePath(string dllPath, bool global = false) {
