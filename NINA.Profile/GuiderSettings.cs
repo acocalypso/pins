@@ -61,7 +61,7 @@ namespace NINA.Profile {
             skyGuardTimeLapsDithering = 60;
             skyGuardTimeOutGuiding = 5;
 
-            var defaultPHD2Path = Environment.ExpandEnvironmentVariables(@"%programfiles(x86)%\PHDGuiding2\phd2.exe");
+            var defaultPHD2Path = Environment.ExpandEnvironmentVariables(@"/usr/bin/phd2");
 
             phd2Path =
                 File.Exists(defaultPHD2Path)

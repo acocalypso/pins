@@ -63,26 +63,29 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FlatDevice {
                     }
                 }
 
-                /* INDIGO cover calibrators */
-                /*                try {
-                                    var indigoInteraction = new INDIGOInteraction(profileService);
-                                    var indigoCoverCalibrators = indigoInteraction.GetCoverCalibrators();
-                                    devices.AddRange(indigoCoverCalibrators);
-                                    Logger.Info($"Found {indigoCoverCalibrators?.Count} INDIGO CoverCalibrators");
-                                } catch (Exception ex) {
-                                    Logger.Error(ex);
-                                }
-                */
+                /* INDI flat devices */
+                try {
+                    var indiInteraction = new INDIInteraction(profileService);
+                    var indiFlatDevices = await indiInteraction.GetFlatDevices();
+                    devices.AddRange(indiFlatDevices);
+                    Logger.Info($"Found {indiFlatDevices?.Count} INDI FlatDevices");
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
 
                 /* Alpaca */
-                try {
+                try
+                {
                     var alpacaInteraction = new AlpacaInteraction(profileService);
                     var alpacaCoverCalibrators = await alpacaInteraction.GetCoverCalibrators(default);
-                    foreach (IFlatDevice fd in alpacaCoverCalibrators) {
+                    foreach (IFlatDevice fd in alpacaCoverCalibrators)
+                    {
                         devices.Add(fd);
                     }
                     Logger.Info($"Found {alpacaCoverCalibrators?.Count} Alpaca Cover Calibrators");
-                } catch (Exception ex) {
+                }
+                catch (Exception ex)
+                {
                     Logger.Error(ex);
                 }
 
