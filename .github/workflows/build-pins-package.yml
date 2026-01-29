@@ -601,7 +601,7 @@ jobs:
               echo "AssemblyInfo.cs not found for $deb_package" >&2
               exit 1
             fi
-            assembly_version_line=$(grep -E 'AssemblyVersion' "$assembly_info" || true)
+            assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyVersion' "$assembly_info" || true)
             plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^\"]+)".*/\1/')
             if [ -z "$plugin_version" ]; then
               echo "AssemblyVersion not found in $assembly_info" >&2
