@@ -31,9 +31,9 @@ namespace Nitecrawler {
         }
 
         // Constants
-        public const int MLNC_MAX_NUM = 32;                    // Maximum focuser numbers supported by this SDK
-        public const int MLNC_VERSION_LEN = 32;               // Buffer length for version strings
-        public const int MLNC_NAME_LEN = 32;                  // Buffer length for name strings
+        public const int NC_MAX_NUM = 32;                    // Maximum focuser numbers supported by this SDK
+        public const int NC_VERSION_LEN = 32;               // Buffer length for version strings
+        public const int NC_NAME_LEN = 32;                  // Buffer length for name strings
         public const uint TEMPERATURE_INVALID = 0xFFFFFFFF;   // Invalid temperature value
 
         // Configuration masks for device
@@ -61,29 +61,29 @@ namespace Nitecrawler {
         /// <summary>
         /// Error types returned by SDK functions
         /// </summary>
-        public enum MLNC_ERROR_TYPE {
-            MLNC_SUCCESS = 0,                   // Success
-            MLNC_ERROR_INVALID_ID,              // Device ID is invalid
-            MLNC_ERROR_INVALID_PARAMETER,       // One or more parameters are invalid
-            MLNC_ERROR_INVALID_STATE,           // Device is not in correct state for specific API call
-            MLNC_ERROR_COMMUNICATION,           // Data communication error such as device has been removed from USB port
-            MLNC_ERROR_NULL_POINTER,            // Caller passes null-pointer parameter which is not expected
+        public enum NC_ERROR_TYPE {
+            NC_SUCCESS = 0,                   // Success
+            NC_ERROR_INVALID_ID,              // Device ID is invalid
+            NC_ERROR_INVALID_PARAMETER,       // One or more parameters are invalid
+            NC_ERROR_INVALID_STATE,           // Device is not in correct state for specific API call
+            NC_ERROR_COMMUNICATION,           // Data communication error such as device has been removed from USB port
+            NC_ERROR_NULL_POINTER,            // Caller passes null-pointer parameter which is not expected
         }
 
         /// <summary>
         /// Version information structure
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
-        public struct MLNC_VERSION {
-            public uint hardware;   // Focuser hardware version
-            public uint firmware;   // Focuser firmware version
+        public struct NC_VERSION {
+            public uint firmware;   // Nitecrawler firmware version
+            public uint serial;     // Nitecrawler serial
         }
 
         /// <summary>
         /// Device configuration structure
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
-        public struct MLNC_DEVICE_CONFIG {
+        public struct NC_DEVICE_CONFIG {
             public uint mask;                   // Bitmask for which fields to set
             public int displayBrightness;       // Display brightness
             public int sleepBrightness;         // Sleep mode brightness
@@ -96,7 +96,7 @@ namespace Nitecrawler {
         /// Device status structure
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
-        public struct MLNC_DEVICE_STATUS {
+        public struct NC_DEVICE_STATUS {
             public int dcPower;                 // Current DC power in 0.1V unit
         }
 
@@ -104,7 +104,7 @@ namespace Nitecrawler {
         /// Focuser configuration structure
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
-        public struct MLNC_FOCUSER_CONFIG {
+        public struct NC_FOCUSER_CONFIG {
             public uint mask;                   // Bitmask for which fields to set
             public int maxStep;                 // Maximum step or position
             public int backlash;                // Backlash value
@@ -118,7 +118,7 @@ namespace Nitecrawler {
         /// Focuser status structure
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
-        public struct MLNC_FOCUSER_STATUS {
+        public struct NC_FOCUSER_STATUS {
             public int temperatureExt;          // External (ambient) temperature in 0.01 degree unit
             public int temperatureDetection;    // 0 - no probe, others - probe inserted
             public int position;                // Current motor position
@@ -130,7 +130,7 @@ namespace Nitecrawler {
         /// Rotator configuration structure
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
-        public struct MLNC_ROTATOR_CONFIG {
+        public struct NC_ROTATOR_CONFIG {
             public uint mask;                   // Bitmask for which fields to set
             public int reverseDirection;        // 0 - Not reverse, others - Reverse
             public int stepRate;                // Step rate/delay (7-100)
@@ -140,7 +140,7 @@ namespace Nitecrawler {
         /// Rotator status structure
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
-        public struct MLNC_ROTATOR_STATUS {
+        public struct NC_ROTATOR_STATUS {
             public float position;              // Current motor position in degrees
             public int moving;                  // 0 - not moving, others - moving
             public int stepsPerRevolution;      // Steps per full revolution (hardware dependent)
@@ -149,170 +149,170 @@ namespace Nitecrawler {
 
         // P/Invoke declarations
         [DllImport(DLLNAME, SetLastError = true, CharSet = CharSet.Ansi)]
-        private static extern MLNC_ERROR_TYPE MLNCGetProductModel(int id, StringBuilder model);
+        private static extern NC_ERROR_TYPE NCGetProductModel(int id, StringBuilder model);
 
         [DllImport(DLLNAME, SetLastError = true, CharSet = CharSet.Ansi)]
-        private static extern MLNC_ERROR_TYPE MLNCGetSDKVersion(StringBuilder version);
+        private static extern NC_ERROR_TYPE NCGetSDKVersion(StringBuilder version);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCGetVersion(int id, out MLNC_VERSION version);
+        private static extern NC_ERROR_TYPE NCGetVersion(int id, out NC_VERSION version);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCGetConfig(int id, out MLNC_DEVICE_CONFIG config);
+        private static extern NC_ERROR_TYPE NCGetConfig(int id, out NC_DEVICE_CONFIG config);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCSetConfig(int id, ref MLNC_DEVICE_CONFIG config);
+        private static extern NC_ERROR_TYPE NCSetConfig(int id, ref NC_DEVICE_CONFIG config);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCGetStatus(int id, out MLNC_DEVICE_STATUS status);
+        private static extern NC_ERROR_TYPE NCGetStatus(int id, out NC_DEVICE_STATUS status);
 
         // Focuser functions
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserScan(out int number, [Out] int[] ids);
+        private static extern NC_ERROR_TYPE NCFocuserScan(out int number, [Out] int[] ids);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserOpen(int id);
+        private static extern NC_ERROR_TYPE NCFocuserOpen(int id);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserClose(int id);
+        private static extern NC_ERROR_TYPE NCFocuserClose(int id);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserGetConfig(int id, out MLNC_FOCUSER_CONFIG config);
+        private static extern NC_ERROR_TYPE NCFocuserGetConfig(int id, out NC_FOCUSER_CONFIG config);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserSetConfig(int id, ref MLNC_FOCUSER_CONFIG config);
+        private static extern NC_ERROR_TYPE NCFocuserSetConfig(int id, ref NC_FOCUSER_CONFIG config);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserGetStatus(int id, out MLNC_FOCUSER_STATUS status);
+        private static extern NC_ERROR_TYPE NCFocuserGetStatus(int id, out NC_FOCUSER_STATUS status);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserFindHome(int id);
+        private static extern NC_ERROR_TYPE NCFocuserFindHome(int id);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserSyncPosition(int id, int position);
+        private static extern NC_ERROR_TYPE NCFocuserSyncPosition(int id, int position);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserMove(int id, int step);
+        private static extern NC_ERROR_TYPE NCFocuserMove(int id, int step);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserMoveTo(int id, int position);
+        private static extern NC_ERROR_TYPE NCFocuserMoveTo(int id, int position);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCFocuserStopMove(int id);
+        private static extern NC_ERROR_TYPE NCFocuserStopMove(int id);
 
         // Rotator functions
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorScan(out int number, [Out] int[] ids);
+        private static extern NC_ERROR_TYPE NCRotatorScan(out int number, [Out] int[] ids);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorOpen(int id);
+        private static extern NC_ERROR_TYPE NCRotatorOpen(int id);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorClose(int id);
+        private static extern NC_ERROR_TYPE NCRotatorClose(int id);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorGetConfig(int id, out MLNC_ROTATOR_CONFIG config);
+        private static extern NC_ERROR_TYPE NCRotatorGetConfig(int id, out NC_ROTATOR_CONFIG config);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorSetConfig(int id, ref MLNC_ROTATOR_CONFIG config);
+        private static extern NC_ERROR_TYPE NCRotatorSetConfig(int id, ref NC_ROTATOR_CONFIG config);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorGetStatus(int id, out MLNC_ROTATOR_STATUS status);
+        private static extern NC_ERROR_TYPE NCRotatorGetStatus(int id, out NC_ROTATOR_STATUS status);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorFindHome(int id);
+        private static extern NC_ERROR_TYPE NCRotatorFindHome(int id);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorSyncPosition(int id, int position);
+        private static extern NC_ERROR_TYPE NCRotatorSyncPosition(int id, int position);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorMove(int id, float angle);
+        private static extern NC_ERROR_TYPE NCRotatorMove(int id, float angle);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorMoveTo(int id, float angle);
+        private static extern NC_ERROR_TYPE NCRotatorMoveTo(int id, float angle);
 
         [DllImport(DLLNAME, SetLastError = true)]
-        private static extern MLNC_ERROR_TYPE MLNCRotatorStopMove(int id);
+        private static extern NC_ERROR_TYPE NCRotatorStopMove(int id);
 
         // Wrapper methods for easier use
         public static string GetProductModel(int id) {
-            var model = new StringBuilder(MLNC_NAME_LEN);
-            MLNCGetProductModel(id, model);
+            var model = new StringBuilder(NC_NAME_LEN);
+            NCGetProductModel(id, model);
             return model.ToString();
         }
 
         public static string GetSDKVersion() {
-            var version = new StringBuilder(MLNC_VERSION_LEN);
-            MLNCGetSDKVersion(version);
+            var version = new StringBuilder(NC_VERSION_LEN);
+            NCGetSDKVersion(version);
             return version.ToString();
         }
 
-        public static MLNC_ERROR_TYPE GetVersion(int id, out MLNC_VERSION version) {
-            return MLNCGetVersion(id, out version);
+        public static NC_ERROR_TYPE GetVersion(int id, out NC_VERSION version) {
+            return NCGetVersion(id, out version);
         }
 
-        public static MLNC_ERROR_TYPE GetDeviceConfig(int id, out MLNC_DEVICE_CONFIG config) {
-            return MLNCGetConfig(id, out config);
+        public static NC_ERROR_TYPE GetDeviceConfig(int id, out NC_DEVICE_CONFIG config) {
+            return NCGetConfig(id, out config);
         }
 
-        public static MLNC_ERROR_TYPE SetDeviceConfig(int id, MLNC_DEVICE_CONFIG config) {
-            return MLNCSetConfig(id, ref config);
+        public static NC_ERROR_TYPE SetDeviceConfig(int id, NC_DEVICE_CONFIG config) {
+            return NCSetConfig(id, ref config);
         }
 
-        public static MLNC_ERROR_TYPE GetDeviceStatus(int id, out MLNC_DEVICE_STATUS status) {
-            return MLNCGetStatus(id, out status);
+        public static NC_ERROR_TYPE GetDeviceStatus(int id, out NC_DEVICE_STATUS status) {
+            return NCGetStatus(id, out status);
         }
 
         // Focuser wrapper methods
-        public static MLNC_ERROR_TYPE ScanFocusers(out int number, [Out] int[] ids) {
-            return MLNCFocuserScan(out number, ids);
+        public static NC_ERROR_TYPE ScanFocusers(out int number, [Out] int[] ids) {
+            return NCFocuserScan(out number, ids);
         }
 
-        public static MLNC_ERROR_TYPE FocuserOpen(int id) => MLNCFocuserOpen(id);
-        public static MLNC_ERROR_TYPE FocuserClose(int id) => MLNCFocuserClose(id);
+        public static NC_ERROR_TYPE FocuserOpen(int id) => NCFocuserOpen(id);
+        public static NC_ERROR_TYPE FocuserClose(int id) => NCFocuserClose(id);
 
-        public static MLNC_ERROR_TYPE GetFocuserConfig(int id, out MLNC_FOCUSER_CONFIG config) {
-            return MLNCFocuserGetConfig(id, out config);
+        public static NC_ERROR_TYPE GetFocuserConfig(int id, out NC_FOCUSER_CONFIG config) {
+            return NCFocuserGetConfig(id, out config);
         }
 
-        public static MLNC_ERROR_TYPE SetFocuserConfig(int id, MLNC_FOCUSER_CONFIG config) {
-            return MLNCFocuserSetConfig(id, ref config);
+        public static NC_ERROR_TYPE SetFocuserConfig(int id, NC_FOCUSER_CONFIG config) {
+            return NCFocuserSetConfig(id, ref config);
         }
 
-        public static MLNC_ERROR_TYPE GetFocuserStatus(int id, out MLNC_FOCUSER_STATUS status) {
-            return MLNCFocuserGetStatus(id, out status);
+        public static NC_ERROR_TYPE GetFocuserStatus(int id, out NC_FOCUSER_STATUS status) {
+            return NCFocuserGetStatus(id, out status);
         }
 
-        public static MLNC_ERROR_TYPE FocuserFindHome(int id) => MLNCFocuserFindHome(id);
-        public static MLNC_ERROR_TYPE FocuserSyncPosition(int id, int position) => MLNCFocuserSyncPosition(id, position);
-        public static MLNC_ERROR_TYPE FocuserMove(int id, int step) => MLNCFocuserMove(id, step);
-        public static MLNC_ERROR_TYPE FocuserMoveTo(int id, int position) => MLNCFocuserMoveTo(id, position);
-        public static MLNC_ERROR_TYPE FocuserStopMove(int id) => MLNCFocuserStopMove(id);
+        public static NC_ERROR_TYPE FocuserFindHome(int id) => NCFocuserFindHome(id);
+        public static NC_ERROR_TYPE FocuserSyncPosition(int id, int position) => NCFocuserSyncPosition(id, position);
+        public static NC_ERROR_TYPE FocuserMove(int id, int step) => NCFocuserMove(id, step);
+        public static NC_ERROR_TYPE FocuserMoveTo(int id, int position) => NCFocuserMoveTo(id, position);
+        public static NC_ERROR_TYPE FocuserStopMove(int id) => NCFocuserStopMove(id);
 
         // Rotator wrapper methods
-        public static MLNC_ERROR_TYPE ScanRotators(out int number, [Out] int[] ids) {
-            return MLNCRotatorScan(out number, ids);
+        public static NC_ERROR_TYPE ScanRotators(out int number, [Out] int[] ids) {
+            return NCRotatorScan(out number, ids);
         }
 
-        public static MLNC_ERROR_TYPE RotatorOpen(int id) => MLNCRotatorOpen(id);
-        public static MLNC_ERROR_TYPE RotatorClose(int id) => MLNCRotatorClose(id);
+        public static NC_ERROR_TYPE RotatorOpen(int id) => NCRotatorOpen(id);
+        public static NC_ERROR_TYPE RotatorClose(int id) => NCRotatorClose(id);
 
-        public static MLNC_ERROR_TYPE GetRotatorConfig(int id, out MLNC_ROTATOR_CONFIG config) {
-            return MLNCRotatorGetConfig(id, out config);
+        public static NC_ERROR_TYPE GetRotatorConfig(int id, out NC_ROTATOR_CONFIG config) {
+            return NCRotatorGetConfig(id, out config);
         }
 
-        public static MLNC_ERROR_TYPE SetRotatorConfig(int id, MLNC_ROTATOR_CONFIG config) {
-            return MLNCRotatorSetConfig(id, ref config);
+        public static NC_ERROR_TYPE SetRotatorConfig(int id, NC_ROTATOR_CONFIG config) {
+            return NCRotatorSetConfig(id, ref config);
         }
 
-        public static MLNC_ERROR_TYPE GetRotatorStatus(int id, out MLNC_ROTATOR_STATUS status) {
-            return MLNCRotatorGetStatus(id, out status);
+        public static NC_ERROR_TYPE GetRotatorStatus(int id, out NC_ROTATOR_STATUS status) {
+            return NCRotatorGetStatus(id, out status);
         }
 
-        public static MLNC_ERROR_TYPE RotatorFindHome(int id) => MLNCRotatorFindHome(id);
-        public static MLNC_ERROR_TYPE RotatorSyncPosition(int id, int position) => MLNCRotatorSyncPosition(id, position);
-        public static MLNC_ERROR_TYPE RotatorMove(int id, float angle) => MLNCRotatorMove(id, angle);
-        public static MLNC_ERROR_TYPE RotatorMoveTo(int id, float angle) => MLNCRotatorMoveTo(id, angle);
-        public static MLNC_ERROR_TYPE RotatorStopMove(int id) => MLNCRotatorStopMove(id);
+        public static NC_ERROR_TYPE RotatorFindHome(int id) => NCRotatorFindHome(id);
+        public static NC_ERROR_TYPE RotatorSyncPosition(int id, int position) => NCRotatorSyncPosition(id, position);
+        public static NC_ERROR_TYPE RotatorMove(int id, float angle) => NCRotatorMove(id, angle);
+        public static NC_ERROR_TYPE RotatorMoveTo(int id, float angle) => NCRotatorMoveTo(id, angle);
+        public static NC_ERROR_TYPE RotatorStopMove(int id) => NCRotatorStopMove(id);
     }
 }

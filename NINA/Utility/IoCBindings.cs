@@ -86,6 +86,7 @@ namespace NINA.Utility {
                 // Load system libraries globally before any other initialization
                 DllLoader.LoadDll("libudev.so.1");
                 DllLoader.LoadDll("libhidapi-hidraw.so");
+                DllLoader.LoadDll("libusb-1.0.so.0");
 
                 services.AddSingleton(f => new ProjectVersion(CoreUtil.Version));
 
