@@ -36,6 +36,5 @@ namespace NINA.INDI.Interfaces {
         void CommandBlind(string command, bool raw = false);
         bool CommandBool(string command, bool raw = false);
         string CommandString(string command, bool raw = false);
-        void ConfigureConnectionProperties(string connectionMode, string devicePort, int baudRate);
     }
 }

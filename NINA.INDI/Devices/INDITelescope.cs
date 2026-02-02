@@ -74,7 +74,7 @@ namespace NINA.INDI.Devices {
         public double ApertureArea => ApertureDiameter * ApertureDiameter * 0.25 * Math.PI;
         public double ApertureDiameter => GetNumberPropertyValue("TELESCOPE_INFO", "TELESCOPE_APERTURE") ?? double.NaN;
         public bool AtHome { get; }
-        public bool AtPark => (bool)GetSwitchPropertyValue("TELESCOPE_PARK", "PARK");
+        public bool AtPark => GetSwitchPropertyValue("TELESCOPE_PARK", "PARK") ?? false;
         public double Azimuth {
             get {
                 var azimuth = GetNumberPropertyValue("HORIZONTAL_COORD", "AZ");
@@ -95,7 +95,15 @@ namespace NINA.INDI.Devices {
         public bool IsPulseGuiding { get; }
         public double RightAscension => GetNumberPropertyValue("EQUATORIAL_EOD_COORD", "RA") ?? double.NaN;
         public double RightAscensionRate { get; set; }
-        public PierSide SideOfPier => (bool)GetSwitchPropertyValue("TELESCOPE_PIER_SIDE", "PIER_EAST") ? PierSide.pierEast : PierSide.pierWest;
+        public PierSide SideOfPier {
+            get {
+                var pierSide = GetSwitchPropertyValue("TELESCOPE_PIER_SIDE", "PIER_EAST");
+                if (pierSide.HasValue) {
+                    return pierSide.Value ? PierSide.pierEast : PierSide.pierWest;
+                }
+                return PierSide.pierUnknown;
+            }
+        }
         public double SiderealTime {
             get {
                 double? lst = GetNumberPropertyValue("TIME_LST", "LST");
@@ -128,19 +136,19 @@ namespace NINA.INDI.Devices {
         public int SlewSettleTime { get; }
         public bool Slewing {
             get {
-                bool motionWest = (bool)GetSwitchPropertyValue("TELESCOPE_MOTION_WE", "MOTION_WEST");
-                bool motionEast = (bool)GetSwitchPropertyValue("TELESCOPE_MOTION_WE", "MOTION_EAST");
-                bool motionNorth = (bool)GetSwitchPropertyValue("TELESCOPE_MOTION_NS", "MOTION_NORTH");
-                bool motionSouth = (bool)GetSwitchPropertyValue("TELESCOPE_MOTION_NS", "MOTION_SOUTH");
-                bool motionRaDec = GetProperty("EQUATORIAL_EOD_COORD")?.State == PropertyState.Busy;
-                bool motionAltAz = GetProperty("HORIZONTAL_COORD")?.State == PropertyState.Busy;
+                bool motionWest = GetSwitchPropertyValue("TELESCOPE_MOTION_WE", "MOTION_WEST") ?? false;
+                bool motionEast = GetSwitchPropertyValue("TELESCOPE_MOTION_WE", "MOTION_EAST") ?? false;
+                bool motionNorth = GetSwitchPropertyValue("TELESCOPE_MOTION_NS", "MOTION_NORTH") ?? false;
+                bool motionSouth = GetSwitchPropertyValue("TELESCOPE_MOTION_NS", "MOTION_SOUTH") ?? false;
+                var motionRaDec = GetProperty("EQUATORIAL_EOD_COORD")?.State == PropertyState.Busy;
+                var motionAltAz = GetProperty("HORIZONTAL_COORD")?.State == PropertyState.Busy;
                 return motionWest || motionEast || motionNorth || motionSouth || motionRaDec || motionAltAz;
             }
         }
         public double TargetDeclination { get; }
         public double TargetRightAscension { get; }
         public bool Tracking {
-            get => (bool)GetSwitchPropertyValue("TELESCOPE_TRACK_STATE", "TRACK_ON");
+            get => GetSwitchPropertyValue("TELESCOPE_TRACK_STATE", "TRACK_ON") ?? false;
             set {
                 // Use SetSwitchProperty to respect OneOfMany rule
                 var switchValues = new Dictionary<string, bool> {
