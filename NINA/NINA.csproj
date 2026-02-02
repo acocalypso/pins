@@ -13,6 +13,7 @@
   <PropertyGroup Condition="$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))">
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)'=='' and $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().Contains('Arm64'))">linux-arm64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)'==''">linux-x64</RuntimeIdentifier>
+    <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>Logo_Nina.ico</ApplicationIcon>

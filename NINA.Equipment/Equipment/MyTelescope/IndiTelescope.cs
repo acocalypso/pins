@@ -1040,11 +1040,7 @@ namespace NINA.Equipment.Equipment.MyTelescope {
         }
 
         protected override Task PreConnect() {
-            // Configure connection properties from profile before connecting
-            var settings = profileService.ActiveProfile.TelescopeSettings;
-            var instance = GetInstance();
-            instance.ConfigureConnectionProperties(settings.ConnectionMode, settings.DevicePort, settings.BaudRate);
-            return Task.CompletedTask;
+            return base.PreConnect();
         }
 
         protected override Task PostConnect() {

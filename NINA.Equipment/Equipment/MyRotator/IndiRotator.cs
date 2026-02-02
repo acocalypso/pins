@@ -122,10 +122,6 @@ namespace NINA.Equipment.Equipment.MyRotator {
             offset = 0;
             Synced = false;
 
-            // Configure connection properties from profile before connecting
-            var settings = profileService.ActiveProfile.RotatorSettings;
-            var instance = GetInstance();
-            instance.ConfigureConnectionProperties(settings.ConnectionMode, settings.DevicePort, settings.BaudRate);
             return Task.CompletedTask;
         }
 
