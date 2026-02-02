@@ -62,7 +62,7 @@ namespace NINA.ViewModel {
         public void StatusUpdate(ApplicationStatus status) {
             _dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => {
                 try {
-                    var item = ApplicationStatus.Where((x) => x.Source == status.Source).FirstOrDefault();
+                    var item = ApplicationStatus.FirstOrDefault(x => x?.Source == status.Source);
                     if (item != null) {
                         if (!string.IsNullOrEmpty(status.Status)) {
                             item.Status = status.Status;
@@ -102,7 +102,9 @@ namespace NINA.ViewModel {
                             Progress.PublishNewStatus(status);
                         }
                     }
-                } catch { }
+                } catch (Exception ex) {
+                    NINA.Core.Utility.Logger.Error($"Error in StatusUpdate for {status?.Source}: {ex.Message}", ex);
+                }
             }));
         }
     }

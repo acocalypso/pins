@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -144,6 +144,7 @@ namespace NINA.Core.Utility {
             status = string.IsNullOrWhiteSpace(status) ? NINA.Core.Locale.Loc.Instance["LblWaiting"] : status;
 
             var elapsed = new TimeSpan(0);
+            var lastReportedSeconds = -1; // Track last reported seconds to avoid duplicate "0 s" messages
             while (elapsed < t) {
                 var delta = await Delay(100, token);
                 elapsed += delta;
@@ -154,6 +155,8 @@ namespace NINA.Core.Utility {
                     if (t.Hours > 0) {
                         if(progressCountDown) {
                             var remaining = t - elapsed;
+                            // Clamp to 0 to avoid negative values
+                            if (remaining.TotalSeconds < 0) remaining = TimeSpan.Zero;
                             progressStatus = $"{status} {remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
                         } else {
                             progressStatus = $"{status} {elapsed.Hours:D2}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2} / {t.Hours:D2}:{t.Minutes:D2}:{t.Seconds:D2}";
@@ -161,6 +164,8 @@ namespace NINA.Core.Utility {
                     } else if (t.Minutes > 0) {
                         if (progressCountDown) {
                             var remaining = t - elapsed;
+                            // Clamp to 0 to avoid negative values
+                            if (remaining.TotalSeconds < 0) remaining = TimeSpan.Zero;
                             progressStatus = $"{status} {remaining.Minutes:D2}:{remaining.Seconds:D2}";
                         } else {
                             progressStatus = $"{status} {elapsed.Minutes:D2}:{elapsed.Seconds:D2} / {t.Minutes:D2}:{t.Seconds:D2}";
@@ -168,7 +173,18 @@ namespace NINA.Core.Utility {
                     } else {
                         if (progressCountDown) {
                             var remaining = t - elapsed;
-                            progressStatus = $"{status} {remaining.Seconds} s";
+                            // Clamp to 0 to avoid negative values
+                            if (remaining.TotalSeconds < 0) remaining = TimeSpan.Zero;
+                            var currentSeconds = (int)remaining.TotalSeconds;
+                            
+                            // Only report if seconds changed to avoid duplicate "0 s" messages
+                            if (currentSeconds != lastReportedSeconds) {
+                                progressStatus = $"{status} {currentSeconds} s";
+                                lastReportedSeconds = currentSeconds;
+                            } else {
+                                // Skip this iteration to avoid duplicate reports
+                                continue;
+                            }
                         } else {
                             progressStatus = $"{status} {elapsed.Seconds} s / {t.Seconds} s";
                         }
