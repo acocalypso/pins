@@ -43,12 +43,14 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Rotator {
                 /* Nitecrawler rotators */
                 try {
                     Logger.Trace("Adding Nitecrawler Rotators");
-                    int[] ids = new int[NitecrawlerSDK.MLNC_MAX_NUM];
+                    int[] ids = new int[NitecrawlerSDK.NC_MAX_NUM];
                     NitecrawlerSDK.ScanRotators(out var rotators, ids);
                     for (int i = 0; i < rotators; i++) {
-                        var rotator = new NitecrawlerRotator(ids[i], profileService);
-                        Logger.Info($"Adding Nitecrawler Rotator: {rotator.Name}");
-                        devices.Add(rotator);
+                        if (NitecrawlerSDK.GetVersion(ids[i], out var version) == NitecrawlerSDK.NC_ERROR_TYPE.NC_SUCCESS) {
+                            var rotator = new NitecrawlerRotator(ids[i], version.serial, profileService);
+                            Logger.Info($"Adding Nitecrawler Rotator: {rotator.Name}");
+                            devices.Add(rotator);
+                        }
                     }
                 } catch (Exception ex) {
                     Logger.Error(ex);
@@ -60,9 +62,11 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Rotator {
                     int[] ids = new int[WandererRotatorSDK.WR_MAX_NUM];
                     WandererRotatorSDK.RotatorScan(out var rotators, ids);
                     for (int i = 0; i < rotators; i++) {
-                        var rotator = new WandererRotator(ids[i], profileService);
-                        Logger.Info($"Adding Wanderer Rotator: {rotator.Name}");
-                        devices.Add(rotator);
+                        if (WandererRotatorSDK.RotatorGetVersion(ids[i], out var version) == WandererRotatorSDK.WR_ERROR_TYPE.WR_SUCCESS) {
+                            var rotator = new WandererRotator(ids[i], version.model, profileService);
+                            Logger.Info($"Adding Wanderer Rotator: {rotator.Name}");
+                            devices.Add(rotator);
+                        }
                     }
                 } catch (Exception ex) {
                     Logger.Error(ex);
@@ -88,17 +92,6 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Rotator {
                 } catch (Exception ex) {
                     Logger.Error(ex);
                 }
-
-                /* INDIGO focuser */
-                /*                try {
-                                    var indigoInteraction = new INDIGOInteraction(profileService);
-                                    var indigoRotator = indigoInteraction.GetRotators();
-                                    devices.AddRange(indigoRotator);
-                                    Logger.Info($"Found {indigoRotator?.Count} INDIGO Rotators");
-                                } catch (Exception ex) {
-                                    Logger.Error(ex);
-                                }
-                */
 
                 /* Alpaca */
                 try {

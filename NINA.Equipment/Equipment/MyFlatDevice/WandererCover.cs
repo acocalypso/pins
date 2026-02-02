@@ -29,19 +29,20 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
     public partial class WandererCover : BaseINPC, IFlatDevice {
         private readonly IProfileService _profileService;
-        private readonly int _id;
+        private readonly int _uniqueId;
 
-        public WandererCover(int id, IProfileService profileService) {
+        public WandererCover(int id, string model, IProfileService profileService) {
+            Id = $"{id}.{model}";
             _profileService = profileService;
-            _id = id;
+            _uniqueId = id;
 
             // Grab model
-            Name = $"Wanderer Cover ({_id})";
+            Name = $"Wanderer.Cover.{_uniqueId} ({model})";
         }
 
         public bool HasSetupDialog => false;
-        public string Id => $"{_id}";
-        public string Name { get; private set; }
+        public string Id { get; }
+        public string Name { get; }
         public string DisplayName => Name;
         public string Category => "WandererCover";
 
@@ -58,12 +59,12 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                 // Verify, the flat panel id actually exists
                 int[] ids = new int[WC_MAX_NUM];
                 CoverScan(out var count, ids);
-                if (!ids.Take(count).Contains(_id)) {
+                if (!ids.Take(count).Contains(_uniqueId)) {
                     Notification.ShowError(Loc.Instance["LblWandererCoverNotAvailableError"]);
                     Logger.Error("Selected WandererCover FlatDevices not available (disconnected?)");
                     return false;
                 }
-                if (CoverOpen(_id) == WC_ERROR_TYPE.WC_SUCCESS) {
+                if (CoverOpen(_uniqueId) == WC_ERROR_TYPE.WC_SUCCESS) {
                     DriverInfo = $"SDK: {DriverVersion}";
                     Connected = true;
                     return true;
@@ -75,7 +76,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
         }
 
         public void Disconnect() {
-            _ = CoverClose(_id);
+            _ = CoverClose(_uniqueId);
             Connected = false;
         }
 
@@ -98,7 +99,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                     return CoverState.Unknown;
                 }
 
-                var err = CoverGetStatus(_id, out var status);
+                var err = CoverGetStatus(_uniqueId, out var status);
                 if (err == WC_ERROR_TYPE.WC_SUCCESS) {
                     return status.coverState switch {
                         0 => CoverState.Closed,
@@ -125,7 +126,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
         public async Task<bool> Open(CancellationToken ct, int delay = 300) {
             if (!Connected) return await Task.Run(() => false, ct);
             return await Task.Run(async () => {
-                var err = CoverOpenCover(_id);
+                var err = CoverOpenCover(_uniqueId);
                 if (err != WC_ERROR_TYPE.WC_SUCCESS) {
                     if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
                         Logger.Error($"WandererCover communication error to open cover {err}");
@@ -137,7 +138,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                 }
                 while (!ct.IsCancellationRequested) {
                     await CoreUtil.Delay(delay, ct);
-                    _ = CoverGetStatus(_id, out var status);
+                    _ = CoverGetStatus(_uniqueId, out var status);
                     if (status.coverState == 3) {
                         // Still moving
                         continue;
@@ -155,7 +156,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
         public async Task<bool> Close(CancellationToken ct, int delay = 300) {
             if (!Connected) return await Task.Run(() => false, ct);
             return await Task.Run(async () => {
-                var err = CoverCloseCover(_id);
+                var err = CoverCloseCover(_uniqueId);
                 if (err != WC_ERROR_TYPE.WC_SUCCESS) {
                     if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
                         Logger.Error($"WandererCover communication error to close cover {err}");
@@ -167,7 +168,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                 }
                 while (!ct.IsCancellationRequested) {
                     await CoreUtil.Delay(delay, ct);
-                    _ = CoverGetStatus(_id, out var status);
+                    _ = CoverGetStatus(_uniqueId, out var status);
                     if (status.coverState == 3) {
                         // Still moving
                         continue;
@@ -188,7 +189,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                     return false;
                 }
 
-                var err = CoverGetConfig(_id, out var config);
+                var err = CoverGetConfig(_uniqueId, out var config);
                 if (err == WC_ERROR_TYPE.WC_SUCCESS) {
                     return config.brightness > 0;
                 } else {
@@ -206,7 +207,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                     mask = MASK_COVER_BRIGHTNESS,
                     brightness = value ? (lastBrightness != 0 ? lastBrightness : MaxBrightness) : 0
                 };
-                _ = CoverSetConfig(_id, config);
+                _ = CoverSetConfig(_uniqueId, config);
                 RaisePropertyChanged(nameof(Brightness));
             }
         }
@@ -219,7 +220,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                     return -1;
                 }
 
-                var err = CoverGetConfig(_id, out var config);
+                var err = CoverGetConfig(_uniqueId, out var config);
                 if (err == WC_ERROR_TYPE.WC_SUCCESS) {
                     return config.brightness;
                 } else {
@@ -238,7 +239,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                     brightness = value
                 };
                 Logger.Info($"Setting brightness to {value}");
-                _ = CoverSetConfig(_id, config);
+                _ = CoverSetConfig(_uniqueId, config);
                 lastBrightness = value;
                 RaisePropertyChanged(nameof(Brightness));
             }

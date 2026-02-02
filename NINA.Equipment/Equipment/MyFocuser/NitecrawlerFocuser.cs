@@ -31,15 +31,15 @@ using static Nitecrawler.NitecrawlerSDK;
 namespace NINA.Equipment.Equipment.MyFocuser {
     public partial class NitecrawlerFocuser : BaseINPC, IFocuser {
         private readonly IProfileService _profileService;
-        private readonly int _id;
+        private readonly int _uniqueId;
         private readonly static TimeSpan _sameFocuserPositionTimeout = TimeSpan.FromMinutes(1);
 
-        public NitecrawlerFocuser(int id, IProfileService profileService) {
+        public NitecrawlerFocuser(int id, uint serial, IProfileService profileService) {
+            Id = $"{serial}";
             _profileService = profileService;
-            _id = id;
+            _uniqueId = id;
 
-            // Grab model
-            Name = $"Nitecrawler Focuser ({_id})";
+            Name = $"Nitecrawler.Focuser.{_uniqueId} ({serial})";
         }
 
         public bool IsMoving {
@@ -47,11 +47,11 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (!Connected) {
                     return false;
                 }
-                var err = GetFocuserStatus(_id, out var status);
-                if (err == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                var err = GetFocuserStatus(_uniqueId, out var status);
+                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
                     return status.moving == 1;
                 } else {
-                    if (err == MLNC_ERROR_TYPE.MLNC_ERROR_COMMUNICATION) {
+                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
                         Logger.Error($"Nitecrawler communication error to get moving state {err}");
                         DisconnectOnRemovedError();
                     } else {
@@ -70,8 +70,8 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (!Connected) {
                     return -1;
                 }
-                var err = GetFocuserConfig(_id, out var config);
-                if (err == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                var err = GetFocuserConfig(_uniqueId, out var config);
+                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
                     return config.maxStep;
                 } else {
                     Logger.Error($"Nitecrawler error to get MaxStep {err}");
@@ -79,11 +79,11 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 }
             }
             set {
-                MLNC_FOCUSER_CONFIG config = new() {
+                NC_FOCUSER_CONFIG config = new() {
                     mask = (uint)MASK_FOCUSER_MAX_STEP,
                     maxStep = value
                 };
-                _ = SetFocuserConfig(_id, config);
+                _ = SetFocuserConfig(_uniqueId, config);
                 RaisePropertyChanged(nameof(MaxStep));
                 RaisePropertyChanged(nameof(MaxIncrement));
             }
@@ -97,11 +97,11 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (!Connected) {
                     return -1;
                 }
-                var err = GetFocuserStatus(_id, out var status);
-                if (err == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                var err = GetFocuserStatus(_uniqueId, out var status);
+                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
                     return status.position;
                 } else {
-                    if (err == MLNC_ERROR_TYPE.MLNC_ERROR_COMMUNICATION) {
+                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
                         Logger.Error($"Nitecrawler communication error to get Position state {err}");
                         DisconnectOnRemovedError();
                     } else {
@@ -127,11 +127,11 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (!Connected) {
                     return float.NaN;
                 }
-                var err = GetFocuserStatus(_id, out var status);
-                if (err == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                var err = GetFocuserStatus(_uniqueId, out var status);
+                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
                     return status.micronsPerStep;
                 } else {
-                    if (err == MLNC_ERROR_TYPE.MLNC_ERROR_COMMUNICATION) {
+                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
                         Logger.Error($"Nitecrawler communication error to get step size state {err}");
                         DisconnectOnRemovedError();
                     } else {
@@ -147,8 +147,8 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (!Connected) {
                     return double.NaN;
                 }
-                var err = GetFocuserStatus(_id, out var status);
-                if (err == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                var err = GetFocuserStatus(_uniqueId, out var status);
+                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
                     if (status.temperatureDetection == 0 || (uint)status.temperatureExt == TEMPERATURE_INVALID) {
                         // Ambient probe not connected
                         return double.NaN;
@@ -156,7 +156,7 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                         return status.temperatureExt / 100.0;
                     }
                 } else {
-                    if (err == MLNC_ERROR_TYPE.MLNC_ERROR_COMMUNICATION) {
+                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
                         Logger.Error($"Nitecrawler communication error to get Temperature {err}");
                         DisconnectOnRemovedError();
                     } else {
@@ -167,8 +167,8 @@ namespace NINA.Equipment.Equipment.MyFocuser {
             }
         }
 
-        public string Id => $"{_id}";
-        public string Name { get; private set; }
+        public string Id { get; }
+        public string Name { get; }
         public string DisplayName => Name;
 
         public string Category => "Nitecrawler";
@@ -180,10 +180,10 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         private int targetMaxStep;
 
         partial void OnTargetMaxStepChanged(int value) {
-            MLNC_FOCUSER_CONFIG config = new MLNC_FOCUSER_CONFIG();
+            NC_FOCUSER_CONFIG config = new NC_FOCUSER_CONFIG();
             config.mask = (uint)MASK_FOCUSER_MAX_STEP;
             config.maxStep = value;
-            _ = SetFocuserConfig(_id, config);
+            _ = SetFocuserConfig(_uniqueId, config);
             RaisePropertyChanged(nameof(MaxStep));
             RaisePropertyChanged(nameof(MaxIncrement));
         }
@@ -192,7 +192,7 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         public void ResetPosition() {
             if (MyMessageBox.Show(Loc.Instance["LblZwoResetZeroPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
                 if (Position > 0) {
-                    FocuserSyncPosition(_id, 0);
+                    FocuserSyncPosition(_uniqueId, 0);
                     RaisePropertyChanged(nameof(Position));
                 }
             }
@@ -213,7 +213,7 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         public void SyncToPosition() {
             if (MyMessageBox.Show(Loc.Instance["LblNitecrawlerSyncPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
                 if (Position != SyncPosition) {
-                    FocuserSyncPosition(_id, SyncPosition);
+                    FocuserSyncPosition(_uniqueId, SyncPosition);
                     RaisePropertyChanged(nameof(Position));
                 }
             }
@@ -227,18 +227,18 @@ namespace NINA.Equipment.Equipment.MyFocuser {
 
         public Task<bool> Connect(CancellationToken token) {
             return Task.Run(() => {
-                // Verify, the focuser _id actually exists
-                int[] ids = new int[MLNC_MAX_NUM];
+                // Verify, the focuser _uniqueId actually exists
+                int[] ids = new int[NC_MAX_NUM];
                 ScanFocusers(out var count, ids);
-                if (!ids.Take(count).Contains(_id)) {
+                if (!ids.Take(count).Contains(_uniqueId)) {
                     Notification.ShowError(Loc.Instance["LblNitecrawlerFocuserNotAvailableError"]);
                     Logger.Error("Selected Nitecrawler focuser not available (disconnected?)");
                     return false;
                 }
-                if (FocuserOpen(_id) == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                if (FocuserOpen(_uniqueId) == NC_ERROR_TYPE.NC_SUCCESS) {
                     DriverInfo = $"SDK: {DriverVersion}; FW: {GetFwVersionString()}";
 
-                    GetFocuserConfig(_id, out var config);
+                    GetFocuserConfig(_uniqueId, out var config);
                     TargetMaxStep = config.maxStep;
 
                     RaisePropertyChanged(nameof(MaxStep));
@@ -253,8 +253,8 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         }
 
         private string GetFwVersionString() {
-            MLNC_VERSION version = new();
-            _ = GetVersion(_id, out version);
+            NC_VERSION version = new();
+            _ = GetVersion(_uniqueId, out version);
 
             uint major = (version.firmware >> 24) & 0xFF;
             uint minor = (version.firmware >> 16) & 0xFF;
@@ -264,12 +264,12 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         }
 
         public void Disconnect() {
-            _ = FocuserClose(_id);
+            _ = FocuserClose(_uniqueId);
             Connected = false;
         }
 
         public void Halt() {
-            FocuserStopMove(_id);
+            FocuserStopMove(_uniqueId);
         }
 
         public async Task Move(int position, CancellationToken ct, int waitInMs = 1000) {
@@ -278,19 +278,19 @@ namespace NINA.Equipment.Equipment.MyFocuser {
             var lastMovementTime = DateTime.Now;
             while (position != Position && !ct.IsCancellationRequested) {
                 // Issue move command
-                var err = FocuserMoveTo(_id, position);
-                if (err != MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                var err = FocuserMoveTo(_uniqueId, position);
+                if (err != NC_ERROR_TYPE.NC_SUCCESS) {
                     Logger.Error($"Nitecrawler failed to issue move command {err}");
                     throw new Exception($"Failed to move focuser {err}");
                 }
 
                 await CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
-                MLNC_FOCUSER_STATUS status;
+                NC_FOCUSER_STATUS status;
                 do {
-                    err = GetFocuserStatus(_id, out status);
+                    err = GetFocuserStatus(_uniqueId, out status);
 
-                    if (err != MLNC_ERROR_TYPE.MLNC_SUCCESS) {
-                        if (err == MLNC_ERROR_TYPE.MLNC_ERROR_COMMUNICATION) {
+                    if (err != NC_ERROR_TYPE.NC_SUCCESS) {
+                        if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
                             DisconnectOnRemovedError();
                         } else {
                             Logger.Error($"Nitecrawler error to get moving state {err}");
