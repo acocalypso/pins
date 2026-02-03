@@ -102,9 +102,7 @@ namespace NINA.ViewModel {
                             Progress.PublishNewStatus(status);
                         }
                     }
-                } catch (Exception ex) {
-                    NINA.Core.Utility.Logger.Error($"Error in StatusUpdate for {status?.Source}: {ex.Message}", ex);
-                }
+                } catch { }
             }));
         }
     }

@@ -124,8 +124,8 @@ namespace ZWOptical.ASISDK {
             [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.U1, SizeConst = 64)]
             public byte[] name;// char[64]; //the name of the camera, you can display this to the UI
             public int CameraID; //this is used to control everything of the camera in other functions
-            public int MaxHeight; //the max height of the camera
-            public int MaxWidth;	//the max width of the camera
+            public long MaxHeight; //the max height of the camera
+            public long MaxWidth;	//the max width of the camera
 
             public ASI_BOOL IsColorCam;
             public ASI_BAYER_PATTERN BayerPattern;
@@ -160,9 +160,9 @@ namespace ZWOptical.ASISDK {
             public byte[] name; //the name of the Control like Exposure, Gain etc..
             [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.U1, SizeConst = 128)]
             public byte[] description; //description of this control
-            public int MaxValue;
-            public int MinValue;
-            public int DefaultValue;
+            public long MaxValue;
+            public long MinValue;
+            public long DefaultValue;
             public ASI_BOOL IsAutoSupported; //support auto set 1, don't support 0
             public ASI_BOOL IsWritable; //some control like temperature can only be read by some cameras 
             public ASI_CONTROL_TYPE ControlType;//this is used to get value and set value of the control
@@ -235,10 +235,10 @@ namespace ZWOptical.ASISDK {
         private static extern ASI_ERROR_CODE ASIGetControlCaps(int iCameraID, int iControlIndex, out ASI_CONTROL_CAPS pControlCaps);
 
         [DllImport(DLLNAME, EntryPoint = "ASISetControlValue", CallingConvention = CallingConvention.Cdecl)]
-        private static extern ASI_ERROR_CODE ASISetControlValue(int iCameraID, ASI_CONTROL_TYPE ControlType, int lValue, ASI_BOOL bAuto);
+        private static extern ASI_ERROR_CODE ASISetControlValue(int iCameraID, ASI_CONTROL_TYPE ControlType, long lValue, ASI_BOOL bAuto);
 
         [DllImport(DLLNAME, EntryPoint = "ASIGetControlValue", CallingConvention = CallingConvention.Cdecl)]
-        private static extern ASI_ERROR_CODE ASIGetControlValue(int iCameraID, ASI_CONTROL_TYPE ControlType, out int plValue, out ASI_BOOL pbAuto);
+        private static extern ASI_ERROR_CODE ASIGetControlValue(int iCameraID, ASI_CONTROL_TYPE ControlType, out long plValue, out ASI_BOOL pbAuto);
 
         [DllImport(DLLNAME, EntryPoint = "ASISetROIFormat", CallingConvention = CallingConvention.Cdecl)]
         private static extern ASI_ERROR_CODE ASISetROIFormat(int iCameraID, int iWidth, int iHeight, int iBin, ASI_IMG_TYPE Img_type);
@@ -262,7 +262,7 @@ namespace ZWOptical.ASISDK {
         private static extern ASI_ERROR_CODE ASIStopVideoCapture(int iCameraID);
 
         [DllImport(DLLNAME, EntryPoint = "ASIGetVideoData", CallingConvention = CallingConvention.Cdecl)]
-        private static extern ASI_ERROR_CODE ASIGetVideoData(int iCameraID, [Out] ushort[] pBuffer, int lBuffSize, int iWaitms);
+        private static extern ASI_ERROR_CODE ASIGetVideoData(int iCameraID, [Out] ushort[] pBuffer, long lBuffSize, int iWaitms);
 
         [DllImport(DLLNAME, EntryPoint = "ASIPulseGuideOn", CallingConvention = CallingConvention.Cdecl)]
         private static extern ASI_ERROR_CODE ASIPulseGuideOn(int iCameraID, ASI_GUIDE_DIRECTION direction);
@@ -280,7 +280,7 @@ namespace ZWOptical.ASISDK {
         private static extern ASI_ERROR_CODE ASIGetExpStatus(int iCameraID, out ASI_EXPOSURE_STATUS pExpStatus);
 
         [DllImport(DLLNAME, EntryPoint = "ASIGetDataAfterExp", CallingConvention = CallingConvention.Cdecl)]
-        private static extern ASI_ERROR_CODE ASIGetDataAfterExp(int iCameraID, [Out] ushort[] pBuffer, int lBuffSize);
+        private static extern ASI_ERROR_CODE ASIGetDataAfterExp(int iCameraID, [Out] ushort[] pBuffer, long lBuffSize);
 
         [DllImport(DLLNAME, EntryPoint = "ASIGetGainOffset", CallingConvention = CallingConvention.Cdecl)]
         private static extern ASI_ERROR_CODE ASIGetGainOffset(int iCameraID, out int Offset_HighestDR, out int Offset_UnityGain, out int Gain_LowestRN, out int Offset_LowestRN);
@@ -380,17 +380,17 @@ namespace ZWOptical.ASISDK {
         }
 
         [SecurityCritical]
-        public static int GetControlValue(int cameraId, ASI_CONTROL_TYPE controlType, out bool isAuto) {
+        public static long GetControlValue(int cameraId, ASI_CONTROL_TYPE controlType, out bool isAuto) {
             using var scope = lockobj.EnterScope();
             ASI_BOOL auto;
-            int result;
+            long result;
             CheckReturn(ASIGetControlValue(cameraId, controlType, out result, out auto), MethodBase.GetCurrentMethod(), cameraId, controlType);
             isAuto = auto != ASI_BOOL.ASI_FALSE;
             return result;
         }
 
         [SecurityCritical]
-        public static void SetControlValue(int cameraId, ASI_CONTROL_TYPE controlType, int value, bool auto) {
+        public static void SetControlValue(int cameraId, ASI_CONTROL_TYPE controlType, long value, bool auto) {
             using var scope = lockobj.EnterScope();
             CheckReturn(ASISetControlValue(cameraId, controlType, value, auto ? ASI_BOOL.ASI_TRUE : ASI_BOOL.ASI_FALSE), MethodBase.GetCurrentMethod(), cameraId, controlType, value, auto);
         }
@@ -443,7 +443,7 @@ namespace ZWOptical.ASISDK {
         }
 
         [SecurityCritical]
-        public static bool GetVideoData(int cameraId, ushort[] buffer, int bufferSize, int waitMs) {
+        public static bool GetVideoData(int cameraId, ushort[] buffer, long bufferSize, int waitMs) {
             using var scope = lockobj.EnterScope();
             var result = ASIGetVideoData(cameraId, buffer, bufferSize, waitMs);
 
@@ -487,7 +487,7 @@ namespace ZWOptical.ASISDK {
         }
 
         [SecurityCritical]
-        public static bool GetDataAfterExp(int cameraId, ushort[] buffer, int bufferSize) {
+        public static bool GetDataAfterExp(int cameraId, ushort[] buffer, long bufferSize) {
             using var scope = lockobj.EnterScope();
             var result = ASIGetDataAfterExp(cameraId, buffer, bufferSize);
             if (result == ASI_ERROR_CODE.ASI_ERROR_TIMEOUT)
