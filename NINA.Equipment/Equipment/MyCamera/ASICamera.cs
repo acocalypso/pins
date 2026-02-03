@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -105,7 +105,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
         public int SubSampleWidth {
             get {
                 if (subSampleWidth == 0) {
-                    subSampleWidth = _info.MaxWidth;
+                    subSampleWidth = (int)_info.MaxWidth;
                 }
 
                 return subSampleWidth;
@@ -118,7 +118,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
         public int SubSampleHeight {
             get {
                 if (subSampleHeight == 0) {
-                    subSampleHeight = _info.MaxHeight;
+                    subSampleHeight = (int)_info.MaxHeight;
                 }
 
                 return subSampleHeight;
@@ -267,9 +267,9 @@ namespace NINA.Equipment.Equipment.MyCamera {
         public short BayerOffsetX { get; } = 0;
         public short BayerOffsetY { get; } = 0;
 
-        public int CameraXSize => _info.MaxWidth;
+        public int CameraXSize => (int)_info.MaxWidth;
 
-        public int CameraYSize => _info.MaxHeight;
+        public int CameraYSize => (int)_info.MaxHeight;
 
         public double ExposureMin => (double)GetControlMinValue(ASICameraDll.ASI_CONTROL_TYPE.ASI_EXPOSURE) / 1000000;
 
@@ -377,7 +377,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         public Size Resolution {
             get {                
-                return new Size(_info.MaxWidth, _info.MaxHeight);
+                return new Size((int)_info.MaxWidth, (int)_info.MaxHeight);
             }
         }
 
@@ -919,15 +919,15 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         public string Name => _props.Name;
         public string Description => _props.Description;
-        public int MinValue => _props.MinValue;
-        public int MaxValue => _props.MaxValue;
-        public int DefaultValue => _props.DefaultValue;
+        public int MinValue => (int)_props.MinValue;
+        public int MaxValue => (int)_props.MaxValue;
+        public int DefaultValue => (int)_props.DefaultValue;
         public ASICameraDll.ASI_CONTROL_TYPE ControlType => _props.ControlType;
         public bool IsAutoAvailable => _props.IsAutoSupported != ASICameraDll.ASI_BOOL.ASI_FALSE;
         public bool IsWritable => _props.IsWritable != ASICameraDll.ASI_BOOL.ASI_FALSE;
 
         public int Value {
-            get => ASICameraDll.GetControlValue(_cameraId, _props.ControlType, out var isAuto);
+            get => (int)ASICameraDll.GetControlValue(_cameraId, _props.ControlType, out var isAuto);
             set => ASICameraDll.SetControlValue(_cameraId, _props.ControlType, value, IsAuto);
         }
 
