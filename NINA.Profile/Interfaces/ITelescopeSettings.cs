@@ -33,9 +33,11 @@ namespace NINA.Profile.Interfaces {
 
         TelescopeLocationSyncDirection TelescopeLocationSyncDirection { get; set; }
 
-        string ConnectionMode { get; set; }
-        string DevicePort { get; set; }
-        int BaudRate { get; set; }
+        string IndiConnectionMode { get; set; }
+        bool IndiAutoSearch { get; set; }
+        string IndiAddress { get; set; }
+        string IndiPort { get; set; }
+        int IndiBaudRate { get; set; }
         string IndiDriver { get; set; }
     }
 }

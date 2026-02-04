@@ -14,6 +14,7 @@
 
 using NINA.INDI;
 using NINA.INDI.Devices;
+using NINA.INDI.Enums;
 using NINA.Equipment.Equipment.MyFocuser;
 using NINA.Equipment.Interfaces;
 using NINA.Image.Interfaces;
@@ -49,7 +50,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.FocuserSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.FOCUSER_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.FOCUSER_INTERFACE, driver)) {
                 IndiFocuser focuser = new(device);
                 l.Add(focuser);
             }
@@ -67,7 +68,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.TelescopeSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.TELESCOPE_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.TELESCOPE_INTERFACE, driver)) {
                 IndiTelescope telescope = new(device, profileService);
                 l.Add(telescope);
             }
@@ -85,7 +86,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.RotatorSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.ROTATOR_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.ROTATOR_INTERFACE, driver)) {
                 IndiRotator rotator = new(device, profileService);
                 l.Add(rotator);
             }
@@ -103,7 +104,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.FilterWheelSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.FILTER_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.FILTER_INTERFACE, driver)) {
                 IndiFilterWheel filterWheel = new(device, profileService);
                 l.Add(filterWheel);
             }
@@ -123,7 +124,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.FlatDeviceSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.LIGHTBOX_INTERFACE, driver))
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.LIGHTBOX_INTERFACE, driver))
             {
                 IndiFlatDevice flatDevice = new(device);
                 l.Add(flatDevice);
@@ -144,7 +145,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.WeatherDataSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(IndiDeviceInterface.WEATHER_INTERFACE, driver))
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.WEATHER_INTERFACE, driver))
             {
                 IndiWeatherData weatherData = new(device);
                 l.Add(weatherData);
