@@ -442,13 +442,15 @@ namespace NINA.INDI.Devices {
                                 INDIClient.Instance.SendProperty(prop);
                             }
                         } else {
-                            // Stop motion - set both to false
+                            // Stop motion - only send if actually moving
                             var prop = GetSwitchProperty("TELESCOPE_MOTION_WE");
                             if (prop != null) {
-                                foreach (var sw in prop.Switches) {
-                                    sw.Value = false;
+                                if (prop.Switches.Any(sw => sw.Value)) {
+                                    foreach (var sw in prop.Switches) {
+                                        sw.Value = false;
+                                    }
+                                    INDIClient.Instance.SendProperty(prop);
                                 }
-                                INDIClient.Instance.SendProperty(prop);
                             }
                         }
                         break;
@@ -475,13 +477,15 @@ namespace NINA.INDI.Devices {
                                 INDIClient.Instance.SendProperty(prop);
                             }
                         } else {
-                            // Stop motion - set both to false
+                            // Stop motion - only send if actually moving
                             var prop = GetSwitchProperty("TELESCOPE_MOTION_NS");
                             if (prop != null) {
-                                foreach (var sw in prop.Switches) {
-                                    sw.Value = false;
+                                if (prop.Switches.Any(sw => sw.Value)) {
+                                    foreach (var sw in prop.Switches) {
+                                        sw.Value = false;
+                                    }
+                                    INDIClient.Instance.SendProperty(prop);
                                 }
-                                INDIClient.Instance.SendProperty(prop);
                             }
                         }
                         break;
