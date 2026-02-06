@@ -85,6 +85,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                 }
 
                 /* QHYCCD */
+/*
                 try {
                     var qhy = new QHYCameras(exposureDataFactory);
                     uint numCameras = qhy.Count;
@@ -102,7 +103,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                 } catch (Exception ex) {
                     Logger.Error(ex);
                 }
-
+*/
                 ///* Player One */
                 //try {
                 //    var provider = new PlayerOneProvider(profileService, exposureDataFactory);

@@ -31,11 +31,12 @@ namespace NINA.INDI.Interfaces {
         void Disconnect();
         void Dispose();
 
+        void ConfigureConnectionProperties(string connectionMode, bool autoSearch, string address, string port, int baudRate);
+
         IList<string> SupportedActions { get; }
         string Action(string actionName, string actionParameters);
         void CommandBlind(string command, bool raw = false);
         bool CommandBool(string command, bool raw = false);
         string CommandString(string command, bool raw = false);
-        void ConfigureConnectionProperties(string connectionMode, string devicePort, int baudRate);
     }
 }

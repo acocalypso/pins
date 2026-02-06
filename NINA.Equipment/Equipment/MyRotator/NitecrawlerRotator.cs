@@ -32,14 +32,14 @@ using static Nitecrawler.NitecrawlerSDK;
 namespace NINA.Equipment.Equipment.MyRotator {
     public partial class NitecrawlerRotator : BaseINPC, IRotator {
         private readonly IProfileService _profileService;
-        private readonly int _id;
+        private readonly int _uniqueId;
 
-        public NitecrawlerRotator(int id, IProfileService profileService) {
+        public NitecrawlerRotator(int id, uint serial, IProfileService profileService) {
+            Id = $"{serial}";
             _profileService = profileService;
-            _id = id;
+            _uniqueId = id;
 
-            // Grab model
-            Name = $"Nitecrawler Rotator ({_id})";
+            Name = $"Nitecrawler Rotator.{_uniqueId} ({serial})";
         }
 
         public bool IsMoving {
@@ -47,11 +47,11 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return false;
                 }
-                var err = GetRotatorStatus(_id, out var status);
-                if (err == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                var err = GetRotatorStatus(_uniqueId, out var status);
+                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
                     return status.moving == 1;
                 } else {
-                    if (err == MLNC_ERROR_TYPE.MLNC_ERROR_COMMUNICATION) {
+                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
                         Logger.Error($"Nitecrawler communication error to get moving state {err}");
                         DisconnectOnRemovedError();
                     } else {
@@ -68,8 +68,8 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return false;
                 }
-                var err = GetRotatorConfig(_id, out var config);
-                if (err == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                var err = GetRotatorConfig(_uniqueId, out var config);
+                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
                     return config.reverseDirection != 0;
                 } else {
                     Logger.Error($"Nitecrawler error to get reverse direction state {err}");
@@ -77,11 +77,11 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 }
             }
             set {
-                MLNC_ROTATOR_CONFIG config = new() {
+                NC_ROTATOR_CONFIG config = new() {
                     mask = (uint)MASK_ROTATOR_REVERSE_DIRECTION,
                     reverseDirection = value ? 1 : 0
                 };
-                _ = SetRotatorConfig(_id, config);
+                _ = SetRotatorConfig(_uniqueId, config);
                 RaisePropertyChanged(nameof(Reverse));
             }
         }
@@ -105,11 +105,11 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return -1;
                 }
-                var err = GetRotatorStatus(_id, out var status);
-                if (err == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                var err = GetRotatorStatus(_uniqueId, out var status);
+                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
                     return status.position;
                 } else {
-                    if (err == MLNC_ERROR_TYPE.MLNC_ERROR_COMMUNICATION) {
+                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
                         Logger.Error($"Nitecrawler communication error to get Position state {err}");
                         DisconnectOnRemovedError();
                     } else {
@@ -142,11 +142,11 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return float.NaN;
                 }
-                var err = GetRotatorStatus(_id, out var status);
-                if (err == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                var err = GetRotatorStatus(_uniqueId, out var status);
+                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
                     return status.stepSize;
                 } else {
-                    if (err == MLNC_ERROR_TYPE.MLNC_ERROR_COMMUNICATION) {
+                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
                         Logger.Error($"Nitecrawler communication error to get step size state {err}");
                         DisconnectOnRemovedError();
                     } else {
@@ -156,8 +156,8 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 }
             }
         }
-        public string Id => $"{_id}";
-        public string Name { get; private set; }
+        public string Id { get; }
+        public string Name { get; }
         public string DisplayName => Name;
 
         public string Category => "Nitecrawler";
@@ -169,7 +169,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
         public void ResetPosition() {
             if (MyMessageBox.Show(Loc.Instance["LblZwoResetZeroPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
                 if (Position > 0) {
-                    RotatorSyncPosition(_id, 0);
+                    RotatorSyncPosition(_uniqueId, 0);
                     RaisePropertyChanged(nameof(Position));
                 }
             }
@@ -190,7 +190,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
         public void SyncToPosition() {
             if (MyMessageBox.Show(Loc.Instance["LblNitecrawlerSyncPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
                 if (Position != SyncPosition) {
-                    RotatorSyncPosition(_id, SyncPosition);
+                    RotatorSyncPosition(_uniqueId, SyncPosition);
                     RaisePropertyChanged(nameof(Position));
                 }
             }
@@ -204,18 +204,18 @@ namespace NINA.Equipment.Equipment.MyRotator {
 
         public Task<bool> Connect(CancellationToken token) {
             return Task.Run(() => {
-                // Verify, the Rotator _id actually exists
-                int[] ids = new int[MLNC_MAX_NUM];
+                // Verify, the Rotator _uniqueId actually exists
+                int[] ids = new int[NC_MAX_NUM];
                 ScanRotators(out var count, ids);
-                if (!ids.Take(count).Contains(_id)) {
+                if (!ids.Take(count).Contains(_uniqueId)) {
                     Notification.ShowError(Loc.Instance["LblNitecrawlerRotatorNotAvailableError"]);
                     Logger.Error("Selected Nitecrawler Rotator not available (disconnected?)");
                     return false;
                 }
-                if (RotatorOpen(_id) == MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+                if (RotatorOpen(_uniqueId) == NC_ERROR_TYPE.NC_SUCCESS) {
                     DriverInfo = $"SDK: {DriverVersion}; FW: {GetFwVersionString()}";
 
-                    GetRotatorConfig(_id, out var config);
+                    GetRotatorConfig(_uniqueId, out var config);
 
                     Connected = true;
                     return true;
@@ -227,8 +227,8 @@ namespace NINA.Equipment.Equipment.MyRotator {
         }
 
         private string GetFwVersionString() {
-            MLNC_VERSION version = new();
-            _ = GetVersion(_id, out version);
+            NC_VERSION version = new();
+            _ = GetVersion(_uniqueId, out version);
 
             uint major = (version.firmware >> 24) & 0xFF;
             uint minor = (version.firmware >> 16) & 0xFF;
@@ -238,12 +238,12 @@ namespace NINA.Equipment.Equipment.MyRotator {
         }
 
         public void Disconnect() {
-            _ = RotatorClose(_id);
+            _ = RotatorClose(_uniqueId);
             Connected = false;
         }
 
         public void Halt() {
-            RotatorStopMove(_id);
+            RotatorStopMove(_uniqueId);
         }
 
         public async Task<bool> Move(float angle, CancellationToken ct) {
@@ -260,19 +260,19 @@ namespace NINA.Equipment.Equipment.MyRotator {
 
             Logger.Debug($"Move relative by {angle}° - Mechanical Position reported by rotator {MechanicalPosition}° and offset {offset}");
 
-            var err = RotatorMove(_id, angle);
-            if (err != MLNC_ERROR_TYPE.MLNC_SUCCESS) {
+            var err = RotatorMove(_uniqueId, angle);
+            if (err != NC_ERROR_TYPE.NC_SUCCESS) {
                 Logger.Error($"Nitecrawler failed to issue move command {err}");
                 throw new Exception($"Failed to move Rotator {err}");
             }
 
             await CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
-            MLNC_ROTATOR_STATUS status;
+            NC_ROTATOR_STATUS status;
             do {
-                err = GetRotatorStatus(_id, out status);
+                err = GetRotatorStatus(_uniqueId, out status);
 
-                if (err != MLNC_ERROR_TYPE.MLNC_SUCCESS) {
-                    if (err == MLNC_ERROR_TYPE.MLNC_ERROR_COMMUNICATION) {
+                if (err != NC_ERROR_TYPE.NC_SUCCESS) {
+                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
                         DisconnectOnRemovedError();
                     } else {
                         Logger.Error($"Nitecrawler error to get moving state {err}");

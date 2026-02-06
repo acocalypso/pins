@@ -24,26 +24,6 @@ using NINA.Core.Utility;
 
 namespace NINA.INDI.Devices {
 
-    [Flags]
-    public enum IndiDeviceInterface {
-        GENERAL_INTERFACE = 0,
-        TELESCOPE_INTERFACE = (1 << 0),
-        CCD_INTERFACE = (1 << 1),
-        GUIDER_INTERFACE = (1 << 2),
-        FOCUSER_INTERFACE = (1 << 3),
-        FILTER_INTERFACE = (1 << 4),
-        DOME_INTERFACE = (1 << 5),
-        GPS_INTERFACE = (1 << 6),
-        WEATHER_INTERFACE = (1 << 7),
-        AO_INTERFACE = (1 << 8),
-        DUSTCAP_INTERFACE = (1 << 9),
-        LIGHTBOX_INTERFACE = (1 << 10),
-        DETECTOR_INTERFACE = (1 << 11),
-        ROTATOR_INTERFACE = (1 << 12),
-        SPECTROGRAPH_INTERFACE = (1 << 13),
-        AUX_INTERFACE = (1 << 14),
-    }
-
     public class PropertyEventArgs : EventArgs {
         public INDIProperty Property { get; }
 
@@ -61,6 +41,19 @@ namespace NINA.INDI.Devices {
 
             // Register device to receive property updates
             INDIClient.Instance.RegisterDevice(this);
+
+            // Request fresh properties from the driver
+            INDIClient.Instance.GetProperties(Id);
+
+            // Required driver properties
+            string[] requiredProps = ["CONNECTION_MODE", "CONNECTION"];
+
+            // Poll for required properties with timeout
+            var propTimeout = DateTime.Now.AddSeconds(20);
+            while (!HasRequiredProperties(requiredProps) && DateTime.Now < propTimeout)
+            {
+                CoreUtil.Wait(TimeSpan.FromMilliseconds(1000)).Wait();
+            }
         }
 
         private bool _connected;
@@ -168,7 +161,6 @@ namespace NINA.INDI.Devices {
 
         public void SetSwitchValue(string propertyName, string elementName, bool value) {
             var prop = GetSwitchProperty(propertyName) ?? throw new ArgumentException($"Switch property '{propertyName}' not found");
-            if (prop == null) return;
 
             // Handle switch rules
             if (prop.Rule == SwitchRule.OneOfMany) {
@@ -250,6 +242,7 @@ namespace NINA.INDI.Devices {
         }
 
         private TaskCompletionSource<bool> _operationTcs;
+        private string _pendingOperation; // Track which operation ("CONNECT" or "DISCONNECT") is pending
         private readonly object _operationLock = new();
 
         public Task<bool> Connect(CancellationToken ct) {
@@ -261,56 +254,14 @@ namespace NINA.INDI.Devices {
 
                 Logger.Info($"Connecting to INDI device: {DeviceName}");
 
-                // Request fresh properties from the driver
-                INDIClient.Instance.GetProperties(Id);
-
-                // Check if CONNECTION property already exists (from initial load or previous connect)
-                var hasConnection = GetSwitchProperty("CONNECTION") != null;
-                
-                if (!hasConnection) {
-                    // If not, wait for it to arrive
-                    Logger.Debug($"Waiting for CONNECTION property from {DeviceName}");
-                    
-                    lock (_operationLock) {
-                        _propertiesReadyTcs = new TaskCompletionSource<bool>();
-                    }
-
-                    try {
-                        ct.ThrowIfCancellationRequested();
-
-                        var propertyWaitTask = _propertiesReadyTcs.Task;
-                        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5), ct);
-                        var completedTask = await Task.WhenAny(propertyWaitTask, timeoutTask);
-
-                        if (completedTask == timeoutTask) {
-                            // Timeout waiting for properties
-                            if (ct.IsCancellationRequested) {
-                                Logger.Warning($"Waiting for properties from {DeviceName} was cancelled");
-                            } else {
-                                Logger.Error($"Timeout waiting for properties from {DeviceName}");
-                            }
-                            return false;
-                        }
-
-                        Logger.Debug($"Received CONNECTION property for {DeviceName}");
-                    } catch (OperationCanceledException) {
-                        Logger.Warning($"Waiting for properties from {DeviceName} was cancelled");
-                        return false;
-                    } catch (Exception ex) {
-                        Logger.Error($"Error waiting for properties: {ex.Message}");
-                        return false;
-                    }
-                } else {
-                    Logger.Debug($"CONNECTION property already available for {DeviceName}");
-                }
+                // Call hook to configure connection properties before connecting
+                await OnPreConnect();
 
                 // Initialize operation TCS for connection
                 lock (_operationLock) {
                     _operationTcs = new TaskCompletionSource<bool>();
+                    _pendingOperation = "CONNECT";
                 }
-
-                // Call hook to configure connection properties before connecting
-                OnPreConnect();
 
                 // Now send the actual CONNECT command using SetSwitchValue
                 SetSwitchValue("CONNECTION", "CONNECT", true);
@@ -320,7 +271,7 @@ namespace NINA.INDI.Devices {
                     ct.ThrowIfCancellationRequested();
 
                     // Wait for the connection callback with timeout and cancellation support
-                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30), ct);
                     var completedTask = await Task.WhenAny(_operationTcs.Task, timeoutTask);
 
                     if (completedTask == timeoutTask) {
@@ -373,38 +324,55 @@ namespace NINA.INDI.Devices {
             Logger.Info($"Disconnecting from INDI device: {DeviceName}");
 
             // Check if INDI client is still connected to server
-            if (!INDIClient.Instance.IsConnected) {
+            if (!INDIClient.Instance.IsConnected)
+            {
                 Logger.Info($"INDI server already disconnected, skipping graceful disconnect for {DeviceName}");
                 _connected = false;
                 return;
             }
 
             // Initialize operation TCS for disconnect
-            lock (_operationLock) {
+            Logger.Info("Waiting on lock ...");
+            lock (_operationLock)
+            {
                 _operationTcs = new TaskCompletionSource<bool>();
+                _pendingOperation = "DISCONNECT";
             }
 
-            // Now send the actual DISCONNECT command using SetSwitchValue
-            SetSwitchValue("CONNECTION", "DISCONNECT", true);
+            Logger.Info("Setting connection switch to false");
 
             // Wait for disconnection synchronously to avoid race with Dispose()
-            try {
-                // Wait for the disconnection callback with shorter timeout (server may be dead)
-                var completedTask = Task.WhenAny(_operationTcs.Task, Task.Delay(TimeSpan.FromSeconds(2))).Result;
+            try
+            {
+                // Now send the actual DISCONNECT command using SetSwitchValue
+                SetSwitchValue("CONNECTION", "DISCONNECT", true);
 
-                if (completedTask == _operationTcs.Task) {
+                // Wait for the disconnection callback with shorter timeout (server may be dead)
+                var completedTask = Task.WhenAny(_operationTcs.Task, Task.Delay(TimeSpan.FromSeconds(60))).Result;
+
+                if (completedTask == _operationTcs.Task)
+                {
                     bool isConnected = _operationTcs.Task.Result;
-                    if (!isConnected) {
+                    if (!isConnected)
+                    {
                         Logger.Info($"Disconnected from INDI device: {DeviceName}");
-                    } else {
+                    }
+                    else
+                    {
                         Logger.Warning($"Disconnect command completed but device reports still connected");
                     }
-                } else {
+                }
+                else
+                {
                     Logger.Warning($"Disconnecting from {DeviceName} timed out (server may be disconnected)");
                 }
-            } catch (Exception ex) {
+            }
+            catch (Exception ex)
+            {
                 Logger.Error($"Error during disconnect: {ex.Message}");
             }
+            
+            Logger.Info("Disconnected state reached");
 
             // Update the backing field directly to avoid recursion
             _connected = false;
@@ -430,48 +398,56 @@ namespace NINA.INDI.Devices {
         /// <summary>
         /// Override this to configure device properties after driver load but before CONNECT
         /// </summary>
-        protected virtual void OnPreConnect() {
-            if (string.IsNullOrEmpty(_connectionMode) && string.IsNullOrEmpty(_devicePort) && _baudRate == 0) {
-                return; // No configuration stored
+        protected virtual async Task OnPreConnect() {
+            // Initialize operation TCS for connection
+            lock (_operationLock) {
+                _operationTcs = new TaskCompletionSource<bool>();
+            }
+
+            // Set connection mode
+            if (!string.IsNullOrEmpty(_connectionMode)) {
+                try {
+                    SetSwitchValue("CONNECTION_MODE", _connectionMode, true);
+                    Logger.Info($"Set CONNECTION_MODE to {_connectionMode}");
+                } catch (Exception ex) {
+                    Logger.Info($"Could not set CONNECTION_MODE: {ex.Message}");
+                }
             }
 
             try {
-                // Set connection mode
-                if (!string.IsNullOrEmpty(_connectionMode)) {
-                    try {
-                        SetTextValue("CONNECTION_TYPE", "CONNECTION_TYPE", _connectionMode);
-                        Logger.Info($"Set CONNECTION_TYPE to {_connectionMode}");
-                        Task.Delay(100).Wait();
-                    } catch (Exception ex) {
-                        Logger.Debug($"Could not set CONNECTION_TYPE: {ex.Message}");
-                    }
-                }
+                // Wait for the connection mode switch to happen with timeout
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10));
+                var completedTask = await Task.WhenAny(_operationTcs.Task, timeoutTask);
 
-                // Set device port
-                if (!string.IsNullOrEmpty(_devicePort)) {
-                    try {
-                        SetTextValue("DEVICE_PORT", "PORT", _devicePort);
-                        Logger.Info($"Set DEVICE_PORT to {_devicePort}");
-                        Task.Delay(100).Wait();
-                    } catch (Exception ex) {
-                        Logger.Debug($"Could not set DEVICE_PORT: {ex.Message}");
-                    }
+                if (completedTask == timeoutTask) {
+                    Logger.Error($"Setting CONNECTION_MODE to {DeviceName} timed out");
+                    return;
                 }
-
-                // Set baud rate for non-network connections
-                if (_baudRate > 0 && _connectionMode != "NETWORK") {
-                    try {
-                        SetSwitchValue("DEVICE_BAUD_RATE", $"BAUD_{_baudRate}", true);
-                        Logger.Info($"Set DEVICE_BAUD_RATE to {_baudRate}");
-                        Task.Delay(100).Wait();
-                    } catch (Exception ex) {
-                        Logger.Debug($"Could not set DEVICE_BAUD_RATE: {ex.Message}");
-                    }
-                }
-
-                Logger.Info($"Applied INDI connection properties: Mode={_connectionMode}, Port={_devicePort}, Baud={_baudRate}");
             } catch (Exception ex) {
-                Logger.Error($"Failed to apply INDI connection properties: {ex.Message}");
+                Logger.Error($"Setting CONNECTION_MODE failed: {ex.Message}");
+                return;
+            }
+
+            // Set device address, if we are using network mode
+            if (_connectionMode == "CONNECTION_TCP" && !string.IsNullOrEmpty(_address)) {
+                try {
+                    SetTextValue("DEVICE_ADDRESS", "ADDRESS", _address);
+                    SetTextValue("DEVICE_ADDRESS", "PORT", _port);
+                    Logger.Info($"Set DEVICE_ADDRESS to {_address}:{_port}");
+                } catch (Exception ex) {
+                    Logger.Info($"Could not set DEVICE_ADDRESS: {ex.Message}");
+                }
+            } else if (_connectionMode == "CONNECTION_SERIAL" && !string.IsNullOrEmpty(_port)) {
+                try {
+                    if (_autoSearch) {
+                    } else {
+                        SetTextValue("DEVICE_PORT", "PORT", _port);
+                        SetSwitchValue("DEVICE_BAUD_RATE", "_baudRate", true);
+                        Logger.Info($"Set DEVICE_PORT to {_port} ({_baudRate})");
+                    }
+                } catch (Exception ex) {
+                    Logger.Info($"Could not set DEVICE_PORT: {ex.Message}");
+                }
             }
         }
 
@@ -503,7 +479,9 @@ namespace NINA.INDI.Devices {
             */
             // Check for CONNECTION property updates (for device connection flow)
             if (p.Name == "CONNECTION") {
+                // Check the actual CONNECT switch to determine connection state
                 var connectSwitch = p.Switches.FirstOrDefault(s => s.Name == "CONNECT");
+                var disconnectSwitch = p.Switches.FirstOrDefault(s => s.Name == "DISCONNECT");
 
                 if (connectSwitch != null) {
                     bool isConnected = connectSwitch.Value;
@@ -511,39 +489,57 @@ namespace NINA.INDI.Devices {
                     // Complete the operation when:
                     // - State is Ok (successful connection/disconnection)
                     // - State is Alert (connection/disconnection failed)
-                    // - Don't complete for Idle (initial property definition or waiting state)
+                    // - State is Idle with the matching switch state (some drivers like LX200 OnStep report Idle after successful operation)
+                    //   For CONNECT: when CONNECT=True (Idle state)
+                    //   For DISCONNECT: when DISCONNECT=True and CONNECT=False (Idle state)
                     // - Don't complete for Busy (operation in progress)
-                    if (p.State == PropertyState.Ok || p.State == PropertyState.Alert) {
+                    bool shouldComplete = (p.State == PropertyState.Ok || p.State == PropertyState.Alert);
+
+                    if (!shouldComplete && p.State == PropertyState.Idle && _pendingOperation != null) {
+                        if (_pendingOperation == "CONNECT" && isConnected) {
+                            shouldComplete = true;
+                        } else if (_pendingOperation == "DISCONNECT" && !isConnected && disconnectSwitch?.Value == true) {
+                            shouldComplete = true;
+                        }
+                    }
+
+                    if (shouldComplete) {
                         lock (_operationLock) {
                             if (_operationTcs != null && !_operationTcs.Task.IsCompleted) {
-                                Logger.Info($"Completing connection TCS with result: {isConnected} (state: {p.State})");
+                                Logger.Info($"Completing connection TCS with result: {isConnected} (state: {p.State}, pending: {_pendingOperation})");
                                 _operationTcs.SetResult(isConnected);
+                                _pendingOperation = null; // Clear pending operation
                             }
                         }
                     } else {
-                        Logger.Debug($"CONNECTION property state is {p.State}, isConnected={isConnected}, waiting for completion state");
+                        Logger.Debug($"CONNECTION property state is {p.State}, CONNECT={isConnected}, DISCONNECT={disconnectSwitch?.Value}, pending={_pendingOperation}, waiting for completion state");
+                    }
+                }
+            }
+
+            // Check for CONNECTION_MODE property updates
+            if (p.Name == "CONNECTION_MODE") {
+                lock (_operationLock) {
+                    if (_operationTcs != null && !_operationTcs.Task.IsCompleted) {
+                        _operationTcs.SetResult(true);
                     }
                 }
             }
         }
 
-        public virtual void OnNumberPropertyUpdated(INDINumberProperty p)
-        {
+        public virtual void OnNumberPropertyUpdated(INDINumberProperty p) {
             /*
             Logger.Info($"{p.Name}, {p.Label}, {p.State}");
-            foreach (var n in p.Numbers)
-            {
+            foreach (var n in p.Numbers) {
                 Logger.Info($"        {n.Name}, {n.Label}, {n.Value}, {n.Min}, {n.Max}, {n.Step}, {n.Format}");
             }
             */
         }
 
-        public virtual void OnTextPropertyUpdated(INDITextProperty p)
-        {
+        public virtual void OnTextPropertyUpdated(INDITextProperty p) {
             /*
             Logger.Info($"{p.Name}, {p.Label}, {p.State}");
-            foreach (var t in p.Texts)
-            {
+            foreach (var t in p.Texts) {
                 Logger.Info($"        {t.Name}, {t.Label}, {t.Value}");
             }
             */
@@ -553,17 +549,17 @@ namespace NINA.INDI.Devices {
         }
 
         private string _connectionMode;
-        private string _devicePort;
+        private bool _autoSearch;
+        private string _address;
+        private string _port;
         private int _baudRate;
 
-        /// <summary>
-        /// Store connection properties to be applied before connecting
-        /// </summary>
-        public void ConfigureConnectionProperties(string connectionMode, string devicePort, int baudRate) {
+        public void ConfigureConnectionProperties(string connectionMode, bool autoSearch, string address, string port, int baudRate) {
             _connectionMode = connectionMode;
-            _devicePort = devicePort;
+            _autoSearch = autoSearch;
+            _address = address;
+            _port = port;
             _baudRate = baudRate;
-            Logger.Info($"Stored INDI connection config: Mode={connectionMode}, Port={devicePort}, Baud={baudRate}");
         }
 
         #region Unsupported

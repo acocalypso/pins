@@ -15,6 +15,7 @@
 using NINA.Core.Utility;
 using NINA.INDI.Devices;
 using NINA.INDI.Protocol;
+using NINA.INDI.Enums;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -31,7 +32,7 @@ namespace NINA.INDI {
     public class INDIDeviceInfo {
         public string Id { get; set; }
         public string Name { get; set; }
-        public IndiDeviceInterface Interface { get; set; }
+        public DeviceInterface Interface { get; set; }
         public string Version;
         public string Driver;
     }
@@ -69,7 +70,7 @@ namespace NINA.INDI {
         private readonly Dictionary<string, INDIDeviceInfo> _discoveredDevices = [];
         private readonly Dictionary<string, INDIDevice> _registeredDevices = [];
 
-        private readonly Dictionary<string, IndiDeviceInterface> _loadedDrivers = [];
+        private readonly Dictionary<string, DeviceInterface> _loadedDrivers = [];
 
         public INDIClient(int port) {
             if (port < 1 || port > 65535) {
@@ -153,7 +154,7 @@ namespace NINA.INDI {
             }
         }
 
-        private async Task<bool> LoadDriver(string driverName, IndiDeviceInterface deviceInterface, TimeSpan? loadTimeout = null, CancellationToken ct = default) {
+        private async Task<bool> LoadDriver(string driverName, DeviceInterface deviceInterface, TimeSpan? loadTimeout = null, CancellationToken ct = default) {
             // We explicitly allow empty string to NOT load any driver
             if (driverName == string.Empty)
             {
@@ -318,7 +319,7 @@ namespace NINA.INDI {
             }
         }
 
-        public async Task<IReadOnlyList<INDIDeviceInfo>> GetDevices(IndiDeviceInterface deviceInterface, string driver, CancellationToken ct = default) {
+        public async Task<IReadOnlyList<INDIDeviceInfo>> GetDevices(DeviceInterface deviceInterface, string driver, CancellationToken ct = default) {
             // Serialize GetDevices calls to prevent concurrent driver load/unload operations
             await _getDriversSemaphore.WaitAsync(ct);
             try {
@@ -452,7 +453,7 @@ namespace NINA.INDI {
                             _discoveredDevices.Add(t.DeviceName, new INDIDeviceInfo {
                                 Id = id,
                                 Name = name,
-                                Interface = (IndiDeviceInterface)deviceInterface,
+                                Interface = (DeviceInterface)deviceInterface,
                                 Version = version,
                                 Driver = exec
                             });

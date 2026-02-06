@@ -32,14 +32,14 @@ using static Wanderer.WandererRotatorSDK;
 namespace NINA.Equipment.Equipment.MyRotator {
     public partial class WandererRotator : BaseINPC, IRotator {
         private readonly IProfileService _profileService;
-        private readonly int _id;
+        private readonly int _uniqueId;
 
-        public WandererRotator(int id, IProfileService profileService) {
+        public WandererRotator(int id, string model, IProfileService profileService) {
+            Id = $"{id}.{model}";
             _profileService = profileService;
-            _id = id;
+            _uniqueId = id;
 
-            // Grab model
-            Name = $"Wanderer Rotator ({_id})";
+            Name = $"Wanderer.Rotator.{_uniqueId} ({model})";
         }
 
         public bool IsMoving {
@@ -47,7 +47,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return false;
                 }
-                var err = RotatorGetStatus(_id, out var status);
+                var err = RotatorGetStatus(_uniqueId, out var status);
                 if (err == WR_ERROR_TYPE.WR_SUCCESS) {
                     return status.moving == 1;
                 } else {
@@ -68,7 +68,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return false;
                 }
-                var err = RotatorGetConfig(_id, out var config);
+                var err = RotatorGetConfig(_uniqueId, out var config);
                 if (err == WR_ERROR_TYPE.WR_SUCCESS) {
                     return config.reverseDirection != 0;
                 } else {
@@ -81,7 +81,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
                     mask = (uint)MASK_ROTATOR_REVERSE_DIRECTION,
                     reverseDirection = value ? 1 : 0
                 };
-                _ = RotatorSetConfig(_id, config);
+                _ = RotatorSetConfig(_uniqueId, config);
                 RaisePropertyChanged(nameof(Reverse));
             }
         }
@@ -105,7 +105,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return -1;
                 }
-                var err = RotatorGetStatus(_id, out var status);
+                var err = RotatorGetStatus(_uniqueId, out var status);
                 if (err == WR_ERROR_TYPE.WR_SUCCESS) {
                     return status.position;
                 } else {
@@ -142,7 +142,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return float.NaN;
                 }
-                var err = RotatorGetStatus(_id, out var status);
+                var err = RotatorGetStatus(_uniqueId, out var status);
                 if (err == WR_ERROR_TYPE.WR_SUCCESS) {
                     return status.stepSize;
                 } else {
@@ -156,8 +156,8 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 }
             }
         }
-        public string Id => $"{_id}";
-        public string Name { get; private set; }
+        public string Id { get; }
+        public string Name { get; }
         public string DisplayName => Name;
 
         public string Category => "WandererRotator";
@@ -169,7 +169,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
         public void ResetPosition() {
             if (MyMessageBox.Show(Loc.Instance["LblZwoResetZeroPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
                 if (Position > 0) {
-                    RotatorSyncPosition(_id, 0);
+                    RotatorSyncPosition(_uniqueId, 0);
                     RaisePropertyChanged(nameof(Position));
                 }
             }
@@ -190,7 +190,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
         public void SyncToPosition() {
             if (MyMessageBox.Show(Loc.Instance["LblWandererRotatorSyncPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
                 if (Position != SyncPosition) {
-                    RotatorSyncPosition(_id, SyncPosition);
+                    RotatorSyncPosition(_uniqueId, SyncPosition);
                     RaisePropertyChanged(nameof(Position));
                 }
             }
@@ -204,18 +204,18 @@ namespace NINA.Equipment.Equipment.MyRotator {
 
         public Task<bool> Connect(CancellationToken token) {
             return Task.Run(() => {
-                // Verify, the Rotator _id actually exists
+                // Verify, the Rotator _uniqueId actually exists
                 int[] ids = new int[WR_MAX_NUM];
                 RotatorScan(out var count, ids);
-                if (!ids.Take(count).Contains(_id)) {
+                if (!ids.Take(count).Contains(_uniqueId)) {
                     Notification.ShowError(Loc.Instance["LblWandererRotatorNotAvailableError"]);
                     Logger.Error("Selected WandererRotator Rotator not available (disconnected?)");
                     return false;
                 }
-                if (RotatorOpen(_id) == WR_ERROR_TYPE.WR_SUCCESS) {
+                if (RotatorOpen(_uniqueId) == WR_ERROR_TYPE.WR_SUCCESS) {
                     DriverInfo = $"SDK: {DriverVersion}; FW: {GetFwVersionString()}";
 
-                    RotatorGetConfig(_id, out var config);
+                    RotatorGetConfig(_uniqueId, out var config);
 
                     Connected = true;
                     return true;
@@ -228,7 +228,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
 
         private string GetFwVersionString() {
             WR_VERSION version = new();
-            _ = RotatorGetVersion(_id, out version);
+            _ = RotatorGetVersion(_uniqueId, out version);
 
             uint major = (version.firmware >> 24) & 0xFF;
             uint minor = (version.firmware >> 16) & 0xFF;
@@ -238,12 +238,12 @@ namespace NINA.Equipment.Equipment.MyRotator {
         }
 
         public void Disconnect() {
-            _ = RotatorClose(_id);
+            _ = RotatorClose(_uniqueId);
             Connected = false;
         }
 
         public void Halt() {
-            RotatorStopMove(_id);
+            RotatorStopMove(_uniqueId);
         }
 
         public async Task<bool> Move(float angle, CancellationToken ct) {
@@ -260,7 +260,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
 
             Logger.Debug($"Move relative by {angle}° - Mechanical Position reported by rotator {MechanicalPosition}° and offset {offset}");
 
-            var err = RotatorMove(_id, angle);
+            var err = RotatorMove(_uniqueId, angle);
             if (err != WR_ERROR_TYPE.WR_SUCCESS) {
                 Logger.Error($"WandererRotator failed to issue move command {err}");
                 throw new Exception($"Failed to move Rotator {err}");
@@ -269,7 +269,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
             await CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
             WR_ROTATOR_STATUS status;
             do {
-                err = RotatorGetStatus(_id, out status);
+                err = RotatorGetStatus(_uniqueId, out status);
 
                 if (err != WR_ERROR_TYPE.WR_SUCCESS) {
                     if (err == WR_ERROR_TYPE.WR_ERROR_COMMUNICATION) {

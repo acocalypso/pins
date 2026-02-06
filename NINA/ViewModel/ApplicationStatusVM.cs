@@ -62,7 +62,7 @@ namespace NINA.ViewModel {
         public void StatusUpdate(ApplicationStatus status) {
             _dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => {
                 try {
-                    var item = ApplicationStatus.Where((x) => x.Source == status.Source).FirstOrDefault();
+                    var item = ApplicationStatus.FirstOrDefault(x => x?.Source == status.Source);
                     if (item != null) {
                         if (!string.IsNullOrEmpty(status.Status)) {
                             item.Status = status.Status;

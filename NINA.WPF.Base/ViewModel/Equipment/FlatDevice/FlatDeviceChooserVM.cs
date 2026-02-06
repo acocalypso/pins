@@ -44,9 +44,11 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FlatDevice {
                     int[] ids = new int[WandererCoverSDK.WC_MAX_NUM];
                     WandererCoverSDK.CoverScan(out var covers, ids);
                     for (int i = 0; i < covers; i++) {
-                        var cover = new WandererCover(ids[i], profileService);
-                        Logger.Info($"Adding Wanderer Cover: {cover.Name}");
-                        devices.Add(cover);
+                        if (WandererCoverSDK.CoverGetVersion(ids[i], out var version) == WandererCoverSDK.WC_ERROR_TYPE.WC_SUCCESS) {
+                            var cover = new WandererCover(ids[i], version.model, profileService);
+                            Logger.Info($"Adding Wanderer Cover: {cover.Name}");
+                            devices.Add(cover);
+                        }
                     }
                 } catch (Exception ex) {
                     Logger.Error(ex);
