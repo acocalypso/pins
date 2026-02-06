@@ -121,17 +121,6 @@ jobs:
           mkdir -p "$publish_root/External"
           rsync -a "NINA/External/" "$publish_root/External/"
 
-          # Some native libs must also live in the application root (not under External)
-          opencv_so="$publish_root/External/${{ env.TARGET_RUNTIME }}/libOpenCvSharpExtern.so"
-          if [ ! -f "$opencv_so" ]; then
-            echo "Expected OpenCvSharp native library not found at: $opencv_so" >&2
-            exit 1
-          fi
-
-          cp -f "$opencv_so" "$publish_root/OpenCvSharpExtern.so"
-          chmod 755 "$publish_root/OpenCvSharpExtern.so"
-          echo "Staged libOpenCvSharpExtern.so under: $publish_root/OpenCvSharpExtern.so"
-
           echo "Bundled native files staged under: $publish_root/External"
 
       - name: Determine package version
