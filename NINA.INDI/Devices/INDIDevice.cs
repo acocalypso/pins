@@ -145,18 +145,82 @@ namespace NINA.INDI.Devices {
             INDIClient.Instance.SendProperty(prop);
         }
 
-        public void SetNumberValues(string propertyName, params (string elementName, double value)[] values) {
+        public void SetNumberValues(string propertyName, params (string elementName, double value)[] values)
+        {
             var prop = GetNumberProperty(propertyName) ?? throw new ArgumentException($"Number property '{propertyName}' not found");
             if (prop == null) return;
 
-            foreach (var (elementName, value) in values) {
+            foreach (var (elementName, value) in values)
+            {
                 var number = prop.Numbers.FirstOrDefault(n => n.Name == elementName);
-                if (number != null) {
+                if (number != null)
+                {
                     number.Value = value;
                 }
             }
 
             INDIClient.Instance.SendProperty(prop);
+        }
+        
+        public async Task<bool> SetNumberValuesAsync(string propertyName, TimeSpan timeout, params (string elementName, double value)[] values)
+        {
+            try
+            {
+                // Create a unique operation ID for this async set
+                var operationId = $"{propertyName}_{Guid.NewGuid()}";
+                
+                // Create and register the TaskCompletionSource
+                var tcs = new TaskCompletionSource<bool>();
+                lock (_asyncOperationsLock)
+                {
+                    _pendingAsyncOperations[operationId] = tcs;
+                }
+
+                try
+                {
+                    // Execute the actual set operation
+                    SetNumberValues(propertyName, values);
+
+                    // Wait for server acknowledgement (property state changes to Busy) with timeout
+                    var timeoutTask = Task.Delay(timeout);
+                    var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
+
+                    if (completedTask == timeoutTask)
+                    {
+                        Logger.Error($"SetNumberValuesAsync ({propertyName}) - server did not acknowledge within timeout");
+                        return false;
+                    }
+
+                    var result = await tcs.Task;
+                    if (!result)
+                    {
+                        Logger.Error($"SetNumberValuesAsync ({propertyName}) - server rejected operation (Alert state)");
+                        return false;
+                    }
+
+                    // Server acknowledged the operation (state changed to Busy)
+                    Logger.Debug($"SetNumberValuesAsync ({propertyName}) - server acknowledged, operation proceeding");
+                    return true;
+                }
+                finally
+                {
+                    // Clean up the pending operation
+                    lock (_asyncOperationsLock)
+                    {
+                        _pendingAsyncOperations.Remove(operationId);
+                    }
+                }
+            }
+            catch(OperationCanceledException)
+            {
+                Logger.Warning($"SetNumberValuesAsync ({propertyName}) was cancelled");
+                return false;
+            }
+            catch(Exception ex)
+            {
+                Logger.Error($"SetNumberValuesAsync failed: {ex.Message}");
+                return false;
+            }
         }
 
         public void SetSwitchValue(string propertyName, string elementName, bool value) {
@@ -244,6 +308,10 @@ namespace NINA.INDI.Devices {
         private TaskCompletionSource<bool> _operationTcs;
         private string _pendingOperation; // Track which operation ("CONNECT" or "DISCONNECT") is pending
         private readonly object _operationLock = new();
+        
+        // For tracking multiple concurrent SetNumberValuesAsync operations
+        private readonly Dictionary<string, TaskCompletionSource<bool>> _pendingAsyncOperations = new();
+        private readonly object _asyncOperationsLock = new();
 
         public Task<bool> Connect(CancellationToken ct) {
             return Task.Run(async () => {
@@ -534,6 +602,42 @@ namespace NINA.INDI.Devices {
                 Logger.Info($"        {n.Name}, {n.Label}, {n.Value}, {n.Min}, {n.Max}, {n.Step}, {n.Format}");
             }
             */
+            
+            // Check if there are any pending async operations for this property
+            lock (_asyncOperationsLock)
+            {
+                // Find all pending operations for this property
+                var operationsForProperty = _pendingAsyncOperations
+                    .Where(kvp => kvp.Key.StartsWith(p.Name + "_"))
+                    .ToList();
+
+                foreach (var kvp in operationsForProperty)
+                {
+                    var operationId = kvp.Key;
+                    var tcs = kvp.Value;
+
+                    // Resolve based on property state:
+                    // - Busy: server has acknowledged the command and is processing it
+                    // - Alert: server rejected the command
+                    // - Idle/Ok: ignore (operation completes in background, we don't wait for it)
+                    if (p.State == PropertyState.Busy)
+                    {
+                        if (!tcs.Task.IsCompleted)
+                        {
+                            Logger.Debug($"Async operation {operationId} acknowledged by server (state: Busy)");
+                            tcs.TrySetResult(true);
+                        }
+                    }
+                    else if (p.State == PropertyState.Alert)
+                    {
+                        if (!tcs.Task.IsCompleted)
+                        {
+                            Logger.Warning($"Async operation {operationId} rejected by server (state: Alert)");
+                            tcs.TrySetResult(false);
+                        }
+                    }
+                }
+            }
         }
 
         public virtual void OnTextPropertyUpdated(INDITextProperty p) {

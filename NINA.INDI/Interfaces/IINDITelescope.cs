@@ -65,7 +65,7 @@ namespace NINA.INDI.Interfaces {
         void SetTrackingMode(TrackingMode mode);
         TrackingMode GetTrackingMode();
         IList<TrackingMode> GetSupportedTrackingModes();
-        void SlewToCoordinates(double ra, double dec);
+        Task SlewToCoordinates(double ra, double dec);
         Task SlewToCoordinatesTaskAsync(double ra, double dec, CancellationToken ct = default);
         void SlewToAltAz(double Azimuth, double Altitude);
         Task SlewToAltAzTaskAsync(double azimuth, double altitude, CancellationToken cancellationToken = default);
