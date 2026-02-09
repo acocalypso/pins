@@ -558,7 +558,7 @@ namespace NINA.INDI.Devices {
             }
         }
 
-        public void SlewToCoordinates(double ra, double dec) {
+        public async Task SlewToCoordinates(double ra, double dec) {
             try {
                 // Check mount state before slewing
                 if (AtPark) {
@@ -569,8 +569,10 @@ namespace NINA.INDI.Devices {
                 // Enable slewing mode
                 SetSwitchValue("ON_COORD_SET", "SLEW", true);
 
-                // Send coordinates
-                SetNumberValues("EQUATORIAL_EOD_COORD", ("RA", ra), ("DEC", dec));
+                // Send coordinates and wait for server acknowledgement (Busy state)
+                if (!await SetNumberValuesAsync("EQUATORIAL_EOD_COORD", TimeSpan.FromSeconds(30), ("RA", ra), ("DEC", dec))) {
+                    throw new InvalidOperationException("Mount rejected coordinates");
+                }
             } catch (ArgumentException) {
                 throw new NotImplementedException();
             } catch (Exception ex) {
@@ -582,10 +584,7 @@ namespace NINA.INDI.Devices {
         public async Task SlewToCoordinatesTaskAsync(double ra, double dec, CancellationToken ct = default) {
             try {
                 // Slew
-                SlewToCoordinates(ra, dec);
-
-                // Wait a bit for the slew to start
-                await Task.Delay(1000, ct);
+                await SlewToCoordinates(ra, dec);
 
                 // Check the actual property state
                 var coordProp = GetProperty("EQUATORIAL_EOD_COORD");
