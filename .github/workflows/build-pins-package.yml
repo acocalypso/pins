@@ -47,12 +47,12 @@ jobs:
             fi
 
             echo "Updating submodule $path"
-            if git submodule update --init --recursive --remote "$path"; then
+            # Update to pinned commit (respecting superproject pointer)
+            if git submodule update --init --recursive "$path"; then
               continue
             fi
 
-            echo "Remote update failed for $path; falling back to pinned commit" >&2
-            git submodule update --init --recursive "$path"
+            echo "Update failed for $path" >&2
           done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$')
 
       - name: Populate NINA/External from zip bundle
