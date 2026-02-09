@@ -10,15 +10,18 @@
 */
 #endregion "copyright"
 
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using NINA.Core.Locale;
+using NINA.Core.MyMessageBox;
+using NINA.Core.Utility;
+using NINA.Equipment.Interfaces;
+using NINA.Profile.Interfaces;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using NINA.Core.Utility;
-using NINA.Equipment.Interfaces;
-using NINA.Profile.Interfaces;
 
 namespace NINA.Equipment.Equipment.MyFocuser {
     public partial class ToupTekAlikeFocuser : BaseINPC, IFocuser {
@@ -30,19 +33,17 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         public ToupTekAlikeFocuser(ToupTekAlikeDeviceInfo deviceInfo, IToupTekAlikeCameraSDK toupSdk, IProfileService profileService) {
             this.profileService = profileService;
             sdk = toupSdk;
-            Category = sdk.Category;
             internalId = deviceInfo.id;
-            Id = $"{Category}_{deviceInfo.id}";
-
+            Id = $"{Category}_{internalId}";
             Name = deviceInfo.displayname;
 
             var match = IdExtractorRegex().Match(deviceInfo.id);
-            this.Description = $"{Category} Focuser";
+            Description = $"{Category} Focuser";
             if (match.Success) {
                 var vid = match.Groups[1].Value;
                 var pid = match.Groups[2].Value;
                 var tail = match.Groups[3].Value;
-                this.Description += $" Vendor ID: {vid}, Product ID: {pid}, Filterwheel ID: {tail}";
+                Description += $" Vendor ID: {vid}, Product ID: {pid}, Focuser ID: {tail}";
             }
         }
 
@@ -54,7 +55,6 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (sdk.AAF(ToupTekAlikeAAF.AAF_ISMOVING, 0, out var moving)) {
                     return moving != 0;
                 }
-                // TODO disconnect on removed state
                 Logger.Error("AAF error to get IsMoving state");
                 return false;
             }
@@ -77,7 +77,6 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 RaisePropertyChanged(nameof(MaxIncrement));
             }
         }
-
 
         public bool CanReverse => true;
         public bool Reverse {
@@ -102,21 +101,11 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (sdk.AAF(ToupTekAlikeAAF.AAF_GETPOSITION, 0, out var position)) {
                     return position;
                 }
-                //                        DisconnectOnRemovedError();
                 Logger.Error("AAF error to get Position");
                 return -1;
             }
         }
-        /*
-                private void DisconnectOnRemovedError() {
-                    try {
-                        Logger.Error($"EAF device was removed");
-                        Disconnect();
-                    } catch (Exception ex) {
-                        Logger.Error(ex);
-                    }
-                }
-        */
+
         public double StepSize {
             get {
                 if (sdk.AAF(ToupTekAlikeAAF.AAF_GETMAXINCREMENT, 0, out var stepSize)) {
@@ -132,77 +121,48 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (sdk.AAF(ToupTekAlikeAAF.AAF_GETTEMP, 0, out var temp)) {
                     return temp / 10.0;
                 }
-                //       DisconnectOnRemovedError();
                 Logger.Error($"AAF error to get Temperature");
                 return double.NaN;
             }
         }
 
-        private string id;
-        public string Id {
-            get => id;
-            set {
-                id = value;
-            }
-        }
+        public string Id { get; }
 
-        private string name;
-        public string Name {
-            get => name;
-            set {
-                name = value;
-            }
-        }
+        [ObservableProperty]
+	    private string name;
 
         public string DisplayName => $"{Category} {Name} ({(Id.Length > 8 ? Id[^8..] : Id)})";
 
-        public string Category { get; }
+        public string Category => sdk?.Category;
 
+        [ObservableProperty]
         private bool connected = false;
-        public bool Connected {
-            get => connected;
-            private set {
-                connected = value;
-            }
-        }
 
+        [ObservableProperty]
         private bool reversed = false;
-        public bool Reversed {
-            get => reversed;
-            set {
-                reversed = value;
-            }
-        }
 
-        public void OnReversedChanged(bool value) {
+        partial void OnReversedChanged(bool value) {
             Reverse = value;
         }
 
+        [ObservableProperty]
         private int targetMaxStep;
-        public int TargetMaxStep {
-            get => targetMaxStep;
-            set {
-                targetMaxStep = value;
-            }
-        }
 
-        public void OnTargetMaxStepChanged(int value) {
+        partial void OnTargetMaxStepChanged(int value) {
             MaxStep = value;
         }
 
+        [RelayCommand]
         public void ResetPosition() {
-            if (Position > 0) {
+            if (MyMessageBox.Show(Loc.Instance["LblZwoResetZeroPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
+                if(Position > 0) {
                 _ = sdk.AAF(ToupTekAlikeAAF.AAF_SETZERO, 0, out var _);
+                    RaisePropertyChanged(nameof(Position));
+                }
             }
         }
 
-        private string description;
-        public string Description {
-            get => description;
-            set {
-                description = value;
-            }
-        }
+        public string Description { get; }
 
         public string DriverInfo => $"{Category} SDK";
 
@@ -212,7 +172,7 @@ namespace NINA.Equipment.Equipment.MyFocuser {
             return Task<bool>.Run(() => {
                 var success = false;
                 try {
-                    sdk = sdk.Open(this.internalId);
+                    sdk = sdk.Open(internalId);
                     success = true;
                     var profile = profileService.ActiveProfile.FocuserSettings;
 
