@@ -12,6 +12,7 @@
 
 #endregion "copyright"
 
+using System;
 using System.Collections.Generic;
 using System.Windows.Input;
 
@@ -305,6 +306,10 @@ namespace System.Windows.Data {
         public double Right { get; set; }
         public double Bottom { get; set; }
     }
+
+    public class BindingExpression {
+        public object ResolvedSource { get; set; }
+    }
 }
 
 namespace System.ComponentModel {
@@ -530,6 +535,7 @@ namespace System.Windows {
         public double Top { get; set; } = 0;
         public double Width { get; set; } = 800;
         public double Height { get; set; } = 600;
+        public bool Topmost { get; set; }
 
         public bool? ShowDialog() => true;
         public void Show() { }
@@ -769,6 +775,12 @@ namespace System.Windows.Controls {
 
     public class TextBox : System.Windows.DependencyObject {
         public string Text { get; set; }
+        public static readonly DependencyProperty TextProperty = DependencyProperty.Register("Text", typeof(string), typeof(TextBox));
+        public object ToolTip { get; set; }
+        
+        public System.Windows.Data.BindingExpression GetBindingExpression(DependencyProperty dp) {
+            return null;
+        }
     }
 
     public class Label : System.Windows.DependencyObject {
@@ -866,5 +878,27 @@ namespace System.Windows.Media {
         Overline,
         Baseline
     }
-}
 
+    /// <summary>
+    /// Specifies where theme-specific resources are located.
+    /// </summary>
+    public enum ResourceDictionaryLocation {
+        None = 0,
+        SourceAssembly = 1,
+        ExternalAssembly = 2
+    }
+
+    /// <summary>
+    /// Specifies the location of theme-specific resource dictionaries for a theme-aware custom control library or application.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Assembly)]
+    public class ThemeInfoAttribute : Attribute {
+        public ThemeInfoAttribute(ResourceDictionaryLocation genericDictionaryLocation, ResourceDictionaryLocation themeDictionaryLocation) {
+            GenericDictionaryLocation = genericDictionaryLocation;
+            ThemeDictionaryLocation = themeDictionaryLocation;
+        }
+
+        public ResourceDictionaryLocation GenericDictionaryLocation { get; }
+        public ResourceDictionaryLocation ThemeDictionaryLocation { get; }
+    }
+}

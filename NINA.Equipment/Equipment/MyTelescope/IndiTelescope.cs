@@ -612,7 +612,7 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                         await device.SlewToCoordinatesTaskAsync(TargetCoordinates.RA, TargetCoordinates.Dec, token);
                         InvalidatePropertyCache();
                     } else {
-                        device.SlewToCoordinates(TargetCoordinates.RA, TargetCoordinates.Dec);
+                        await device.SlewToCoordinates(TargetCoordinates.RA, TargetCoordinates.Dec);
                         await Task.Delay(200, token);
                         while (Slewing) {
                             await CoreUtil.Wait(TimeSpan.FromSeconds(profileService.ActiveProfile.ApplicationSettings.DevicePollingInterval), token);

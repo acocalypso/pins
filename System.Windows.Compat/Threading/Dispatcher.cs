@@ -60,6 +60,15 @@ namespace System.Windows.Threading {
             return System.Threading.Tasks.Task.FromResult(callback());
         }
 
+        public System.Threading.Tasks.Task InvokeAsync(Action callback, DispatcherPriority priority, System.Threading.CancellationToken cancellationToken = default) {
+            // Ignore priority in headless mode
+            if (cancellationToken.IsCancellationRequested) {
+                return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
+            }
+            callback();
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
         public System.Threading.Tasks.Task BeginInvoke(Action callback) {
             return System.Threading.Tasks.Task.Run(callback);
         }
