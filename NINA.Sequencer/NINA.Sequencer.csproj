@@ -32,13 +32,29 @@
     <ProjectReference Include="..\NINA.Image\NINA.Image.csproj" />
     <ProjectReference Include="..\NINA.Platesolving\NINA.PlateSolving.csproj" />
     <ProjectReference Include="..\NINA.Profile\NINA.Profile.csproj" />
-
+    <ProjectReference Include="..\NINA.Sequencer.Generators\NINA.Sequencer.Generators.csproj" OutputItemType="Analyzer" />
     <ProjectReference Include="..\NINA.WPF.Base\NINA.WPF.Base.csproj" />
     <ProjectReference Include="..\System.Windows.Compat\System.Windows.Compat.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="NCalcSync" Version="5.2.11" />
+    <PackageReference Include="Parlot" Version="1.3.3" />
     <PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
     <!-- Exclude System.Drawing.Common as it conflicts with our compat library -->
     <PackageReference Include="System.Drawing.Common" Version="*" ExcludeAssets="all" />
   </ItemGroup>
+  <PropertyGroup>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>$(AssemblyName)</Title>
+    <Version>3.3.0.1000-canary</Version>
+    <Authors>Stefan Berg and the N.I.N.A. Contributors</Authors>
+    <Product>N.I.N.A. - Nighttime Imaging 'N' Astronomy</Product>
+    <Description>This assembly contains the advanced Sequencer components of N.I.N.A. and the plugin definitions.</Description>
+    <Copyright>Copyright ©  2016 - 2025 Stefan Berg and the N.I.N.A. contributors</Copyright>
+    <PackageProjectUrl>https://nighttime-imaging.eu/</PackageProjectUrl>
+    <PackageIcon>ninasplash.png</PackageIcon>
+    <RepositoryUrl>https://github.com/isbeorn/nina.git</RepositoryUrl>
+    <PackageOutputPath>$(SolutionDir)publish</PackageOutputPath>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+  </PropertyGroup>
 </Project>

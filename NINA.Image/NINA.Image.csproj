@@ -44,4 +44,18 @@
     <PackageReference Include="System.Drawing.Common" Version="*" ExcludeAssets="all" />
     <PackageReference Include="ZstdSharp.Port" Version="0.8.7" />
   </ItemGroup>
+  <PropertyGroup>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>$(AssemblyName)</Title>
+    <Version>3.3.0.1000-canary</Version>
+    <Authors>Stefan Berg and the N.I.N.A. Contributors</Authors>
+    <Product>N.I.N.A. - Nighttime Imaging 'N' Astronomy</Product>
+    <Description>This assembly contains the Image components of N.I.N.A.</Description>
+    <Copyright>Copyright ©  2016 - 2025 Stefan Berg and the N.I.N.A. contributors</Copyright>
+    <PackageProjectUrl>https://nighttime-imaging.eu/</PackageProjectUrl>
+    <PackageIcon>ninasplash.png</PackageIcon>
+    <RepositoryUrl>https://github.com/isbeorn/nina.git</RepositoryUrl>
+    <PackageOutputPath>$(SolutionDir)publish</PackageOutputPath>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+  </PropertyGroup>
 </Project>

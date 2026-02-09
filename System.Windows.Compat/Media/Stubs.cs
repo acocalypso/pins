@@ -38,6 +38,7 @@ namespace System.Windows.Media {
         public static Color Purple => Color.FromRgb(128, 0, 128);
         public static Color Pink => Color.FromRgb(255, 192, 203);
         public static Color Brown => Color.FromRgb(165, 42, 42);
+        public static Color GreenYellow => Color.FromRgb(173, 255, 47);
     }
 
     public abstract class ImageSource { }

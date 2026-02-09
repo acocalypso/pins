@@ -33,6 +33,7 @@ using NINA.WPF.Base.Mediator;
 using NINA.WPF.Base.Interfaces.Mediator;
 using NINA.WPF.Base.Interfaces.Utility;
 using NINA.WPF.Base.Utility;
+using NINA.Sequencer.Logic;
 using NINA.WPF.Base.ViewModel.Equipment.FilterWheel;
 using NINA.Core.Interfaces;
 using NINA.WPF.Base.Interfaces;
@@ -98,6 +99,8 @@ namespace NINA.Utility {
                 services.AddSingleton(f => _commandLineArguments);
 
                 services.AddSingleton<IMessageBroker, MessageBroker>();
+                
+                services.AddSingleton<ISymbolBroker, SymbolBroker>();
 
                 services.AddTransient<IUsbDeviceWatcher, UsbDeviceWatcher>();
 
@@ -318,7 +321,8 @@ namespace NINA.Utility {
                     f.GetService<IFlatDeviceMediator>(), f.GetService<IImageGeometryProvider>(), f.GetService<IApplicationStatusMediator>(), f.GetService<IMyMessageBoxVM>(),
                     f.GetService<INighttimeCalculator>(),
                     f.GetService<ITwilightCalculator>(),
-                    f.GetService<IImageSaveMediator>()));
+                    f.GetService<IImageSaveMediator>(),
+                    f.GetService<ISymbolBroker>()));
 
                 services.AddSingleton<IImageSaveController, ImageSaveController>();
                 services.AddSingleton<ISequenceNavigationVM, SequenceNavigationVM>();
