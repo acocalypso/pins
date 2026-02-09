@@ -132,6 +132,9 @@ jobs:
             exit 1
           fi
 
+          # Ensure canary builds sort higher than previous nightly builds (p > n)
+          base_version=$(echo "$base_version" | sed 's/-canary/-pins-canary/')
+
           # Ensure every CI build produces a unique, increasing Debian version.
           # Debian versions support a '+' build metadata suffix.
           version="${base_version}+${GITHUB_RUN_NUMBER}"
