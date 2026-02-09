@@ -319,7 +319,7 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }} -p:TargetFramework=${{ env.PLUGIN_TARGET_FRAMEWORK }}
+            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -413,7 +413,7 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }} -p:TargetFramework=${{ env.PLUGIN_TARGET_FRAMEWORK }}
+            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -507,7 +507,7 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }} -p:TargetFramework=${{ env.PLUGIN_TARGET_FRAMEWORK }}
+            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -601,7 +601,7 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }} -p:TargetFramework=${{ env.PLUGIN_TARGET_FRAMEWORK }}
+            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -702,7 +702,7 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }} -p:TargetFramework=${{ env.PLUGIN_TARGET_FRAMEWORK }}
+            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -796,7 +796,7 @@ jobs:
 
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
-            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }} -p:TargetFramework=${{ env.PLUGIN_TARGET_FRAMEWORK }}
+            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
@@ -898,7 +898,7 @@ jobs:
             npm run build
             popd >/dev/null
             mv "$tmp_dir/dist" "$plugin_dir/app"
-            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }} -p:TargetFramework=${{ env.PLUGIN_TARGET_FRAMEWORK }}
+            dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }}
             dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
