@@ -45,6 +45,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "System.Windows.Compat", "Sy
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NINA.Sequencer.Generators", "NINA.Sequencer.Generators\NINA.Sequencer.Generators.csproj", "{C88753D1-2494-469A-A462-4D1273348FA5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NINA.Sequencer.Generators", "NINA.Sequencer.Generators\NINA.Sequencer.Generators.csproj", "{C88753D1-2494-469A-A462-4D1273348FA5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
