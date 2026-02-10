@@ -45,14 +45,12 @@ namespace NINA.INDI.Devices {
             // Request fresh properties from the driver
             INDIClient.Instance.GetProperties(Id);
 
-            // Required driver properties
-            string[] requiredProps = ["CONNECTION_MODE", "CONNECTION"];
-
-            // Poll for required properties with timeout
-            var propTimeout = DateTime.Now.AddSeconds(20);
+            // Wait for CONNECTION property (always required)
+            string[] requiredProps = ["CONNECTION"];
+            var propTimeout = DateTime.Now.AddSeconds(10);
             while (!HasRequiredProperties(requiredProps) && DateTime.Now < propTimeout)
             {
-                CoreUtil.Wait(TimeSpan.FromMilliseconds(1000)).Wait();
+                CoreUtil.Wait(TimeSpan.FromMilliseconds(500)).Wait();
             }
         }
 
@@ -439,8 +437,8 @@ namespace NINA.INDI.Devices {
             {
                 Logger.Error($"Error during disconnect: {ex.Message}");
             }
-            
-            Logger.Info("Disconnected state reached");
+
+            Logger.Trace("Disconnected state reached");
 
             // Update the backing field directly to avoid recursion
             _connected = false;
@@ -467,33 +465,60 @@ namespace NINA.INDI.Devices {
         /// Override this to configure device properties after driver load but before CONNECT
         /// </summary>
         protected virtual async Task OnPreConnect() {
-            // Initialize operation TCS for connection
-            lock (_operationLock) {
-                _operationTcs = new TaskCompletionSource<bool>();
-            }
-
             // Set connection mode
-            if (!string.IsNullOrEmpty(_connectionMode)) {
-                try {
-                    SetSwitchValue("CONNECTION_MODE", _connectionMode, true);
-                    Logger.Info($"Set CONNECTION_MODE to {_connectionMode}");
-                } catch (Exception ex) {
-                    Logger.Info($"Could not set CONNECTION_MODE: {ex.Message}");
+            if (!string.IsNullOrEmpty(_connectionMode))
+            {
+                // Check if CONNECTION_MODE property arrives (optional, device-dependent)
+                var propTimeout = DateTime.Now.AddSeconds(5);
+                while (!HasRequiredProperties(["CONNECTION_MODE"]) && DateTime.Now < propTimeout)
+                {
+                    CoreUtil.Wait(TimeSpan.FromMilliseconds(500)).Wait();
                 }
-            }
 
-            try {
-                // Wait for the connection mode switch to happen with timeout
-                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10));
-                var completedTask = await Task.WhenAny(_operationTcs.Task, timeoutTask);
+                // Initialize operation TCS for connection
+                TaskCompletionSource<bool> modeCompletionSource;
+                lock (_operationLock)
+                {
+                    _operationTcs = new TaskCompletionSource<bool>();
+                    modeCompletionSource = _operationTcs;
+                }
 
-                if (completedTask == timeoutTask) {
-                    Logger.Error($"Setting CONNECTION_MODE to {DeviceName} timed out");
+                try
+                {
+                    Logger.Trace($"Setting CONNECTION_MODE to {_connectionMode} on {DeviceName}");
+                    SetSwitchValue("CONNECTION_MODE", _connectionMode, true);
+                    Logger.Trace($"Set CONNECTION_MODE request sent to {DeviceName}");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Could not set CONNECTION_MODE: {ex.Message}");
                     return;
                 }
-            } catch (Exception ex) {
-                Logger.Error($"Setting CONNECTION_MODE failed: {ex.Message}");
-                return;
+
+                try
+                {
+                    // Wait for the connection mode switch to happen with timeout
+                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10));
+                    var completedTask = await Task.WhenAny(modeCompletionSource.Task, timeoutTask);
+
+                    if (completedTask == timeoutTask)
+                    {
+                        Logger.Error($"Setting CONNECTION_MODE to {DeviceName} timed out after 10 seconds - property update not received");
+                        // Try to set result to unblock, even though callback didn't fire
+                        try
+                        {
+                            modeCompletionSource.TrySetResult(false);
+                        }
+                        catch { }
+                        return;
+                    }
+                    Logger.Trace($"CONNECTION_MODE successfully set on {DeviceName}");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"Setting CONNECTION_MODE failed: {ex.Message}");
+                    return;
+                }
             }
 
             // Set device address, if we are using network mode
@@ -602,7 +627,7 @@ namespace NINA.INDI.Devices {
                 Logger.Info($"        {n.Name}, {n.Label}, {n.Value}, {n.Min}, {n.Max}, {n.Step}, {n.Format}");
             }
             */
-            
+
             // Check if there are any pending async operations for this property
             lock (_asyncOperationsLock)
             {
