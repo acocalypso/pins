@@ -40,6 +40,9 @@ namespace NINA.Profile {
             pHD2InstanceNumber = 1;
             pHD2LargeHistorySize = 100;
             pHD2GuiderScale = GuiderScaleEnum.ARCSECONDS;
+            pHD2Camera = "None";
+            pHD2CameraId = string.Empty;
+            pHD2CameraDepth = 16;
             phd2ROIPct = 100;
             settlePixels = 1.5;
             settleTimeout = 40;
@@ -166,6 +169,48 @@ namespace NINA.Profile {
             set {
                 if (pHD2ServerPort != value) {
                     pHD2ServerPort = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private string pHD2Camera;
+
+        [DataMember]
+        public string PHD2Camera {
+            get => pHD2Camera;
+            set {
+                if (pHD2Camera != value) {
+                    pHD2Camera = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private string pHD2CameraId;
+
+        [DataMember]
+        public string PHD2CameraId {
+            get => pHD2CameraId;
+            set {
+                if (pHD2CameraId != value) {
+                    pHD2CameraId = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private int pHD2CameraDepth;
+
+        [DataMember]
+        public int PHD2CameraDepth
+        {
+            get => pHD2CameraDepth;
+            set
+            {
+                if (pHD2CameraDepth != value)
+                {
+                    pHD2CameraDepth = value;
                     RaisePropertyChanged();
                 }
             }

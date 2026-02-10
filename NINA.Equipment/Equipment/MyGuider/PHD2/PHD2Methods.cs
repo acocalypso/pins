@@ -13,7 +13,9 @@
 #endregion "copyright"
 
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
+using System.Text.Json.Nodes;
 
 namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
 
@@ -275,6 +277,56 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
         public override string Method => "shutdown";
     }
 
+    public class Phd2GetSelectedMount : Phd2Method {
+        public override string Method => "get_selected_mount";
+    }
+
+    public class Phd2GetSelectedINDIMountDriver : Phd2Method {
+        public override string Method => "get_selected_indi_mount_driver";
+    }
+
+    public class Phd2SetSelectedMount : Phd2Method<JObject> {
+        public override string Method => "set_selected_mount";
+    }
+
+    public class Phd2SetSelectedINDIMountDriver : Phd2Method<JObject> {
+        public override string Method => "set_selected_indi_mount_driver";
+    }
+
+    public class Phd2GetSelectedCamera : Phd2Method {
+        public override string Method => "get_selected_camera";
+    }
+
+    public class Phd2GetSelectedCameraId : Phd2Method {
+        public override string Method => "get_selected_camera_id";
+    }
+
+    public class Phd2GetSelectedINDICameraDriver : Phd2Method
+    {
+        public override string Method => "get_selected_indi_camera_driver";
+    }
+
+    public class Phd2SetSelectedCamera : Phd2Method<JObject> {
+        public override string Method => "set_selected_camera";
+    }
+
+    public class Phd2SetSelectedCameraId : Phd2Method<JObject> {
+        public override string Method => "set_selected_camera_id";
+    }
+
+    public class Phd2GetCameraBitDepth : Phd2Method {
+        public override string Method => "get_camera_bitdepth";
+    }
+
+    public class Phd2SetCameraBitDepth : Phd2Method<JObject> {
+        public override string Method => "set_camera_bitdepth";
+    }
+
+    public class Phd2SetSelectedINDICameraDriver : Phd2Method<JObject>
+    {
+        public override string Method => "set_selected_indi_camera_driver";
+    }
+
     public class PhdMethodResponse {
         public string jsonrpc;
         public PhdError error;
@@ -283,6 +335,10 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
 
     public class GenericPhdMethodResponse : PhdMethodResponse {
         public object result;
+    }
+
+    public class IntegerPhdMethodResponse : PhdMethodResponse {
+        public int result;
     }
 
     public class BooleanPhdMethodResponse : PhdMethodResponse {
@@ -324,6 +380,10 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
 
     public class GetExposureResponse : PhdMethodResponse {
         public int result;
+    }
+
+    public class StringPhdMethodResponse : PhdMethodResponse {
+        public string result;
     }
 
     public class LockShiftParams {

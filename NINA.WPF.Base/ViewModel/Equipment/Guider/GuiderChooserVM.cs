@@ -49,7 +49,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Guider {
             try {
                 var devices = new List<IDevice>();
                 devices.Add(new DummyGuider(profileService));
-                devices.Add(new PHD2Guider(profileService, windowServiceFactory));
+                devices.Add(new PHD2Guider(profileService, windowServiceFactory, telescopeMediator));
                 devices.Add(new DirectGuider(profileService, telescopeMediator));
                 devices.Add(new MetaGuideGuider(profileService, windowServiceFactory));
                 devices.Add(new SkyGuardGuider(profileService, windowServiceFactory));

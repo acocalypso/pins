@@ -28,6 +28,9 @@ namespace NINA.Profile.Interfaces {
         int PHD2ServerPort { get; set; }
         string PHD2ServerUrl { get; set; }
         int PHD2InstanceNumber { get; set; }
+        string PHD2Camera { get; set; }
+        string PHD2CameraId { get; set; }
+        int PHD2CameraDepth { get; set; }
         int SettleTime { get; set; }
         double SettlePixels { get; set; }
         int SettleTimeout { get; set; }

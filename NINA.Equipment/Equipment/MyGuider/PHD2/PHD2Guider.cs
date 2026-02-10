@@ -23,7 +23,9 @@ using NINA.Core.Utility;
 using NINA.Core.Utility.Notification;
 using NINA.Core.Utility.WindowService;
 using NINA.Equipment.Equipment.MyGuider.PHD2.PhdEvents;
+using NINA.Equipment.Equipment.MyTelescope;
 using NINA.Equipment.Interfaces;
+using NINA.Equipment.Interfaces.Mediator;
 using NINA.Profile.Interfaces;
 using System;
 using System.Collections.Concurrent;
@@ -47,13 +49,15 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
 
     public partial class PHD2Guider : BaseINPC, IGuider {
 
-        public PHD2Guider(IProfileService profileService, IWindowServiceFactory windowServiceFactory) {
+        public PHD2Guider(IProfileService profileService, IWindowServiceFactory windowServiceFactory, ITelescopeMediator telescopeMediator) {
             this.profileService = profileService;
             this.windowServiceFactory = windowServiceFactory;
+            this.telescopeMediator = telescopeMediator;
         }
 
         private readonly IProfileService profileService;
         private readonly IWindowServiceFactory windowServiceFactory;
+        private readonly ITelescopeMediator telescopeMediator;
         private TcpClient _client;
         private NetworkStream _stream;
         private StreamReader _reader;
@@ -183,6 +187,23 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
         private bool initialized = false;
 
         public async Task<bool> Connect(CancellationToken token) {
+            // Get the current telescope info from mediator
+            var telescopeInfo = telescopeMediator.GetInfo();
+            if (!telescopeInfo.Connected || string.IsNullOrEmpty(telescopeInfo.DeviceId)) {
+                Logger.Error("No mount is connected in NINA. Cannot connect guider without a mount.");
+                Notification.ShowError(Loc.Instance["LblPhd2NoMountConfigured"] ?? "No mount is connected in NINA");
+                return false;
+            }
+
+            // Get the current guide camera from profile
+            var phd2Camera = profileService.ActiveProfile.GuiderSettings.PHD2Camera;
+            var phd2CameraId = profileService.ActiveProfile.GuiderSettings.PHD2CameraId;
+            if (string.IsNullOrEmpty(phd2Camera) || phd2Camera == "None") {
+                Logger.Error("No guide camera connected in NINA. Cannot connect guider without a camera.");
+                Notification.ShowError(Loc.Instance["LblPhd2NoCameraConfigured"] ?? "No guide camera is connected in NINA");
+                return false;
+            }
+
             bool connected = false;
             IPHostEntry hostEntry;
             _tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -232,6 +253,32 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                         && SelectedProfile?.Id != profileService.ActiveProfile.GuiderSettings.PHD2ProfileId) {
                         await ChangeProfile(profileService.ActiveProfile.GuiderSettings.PHD2ProfileId.Value);
                     }
+
+                    string selectedMount = await GetSelectedMount() ?? "None";
+
+                    // Validate that PHD2 mount matches NINA mount
+                    if (!await ValidateMountMatch(telescopeInfo, selectedMount)) {
+                        Logger.Warning($"Failed to synchronize mounts: NINA mount is '{telescopeInfo.Name}' but PHD2 has '{selectedMount}' selected");
+                        Notification.ShowWarning(Loc.Instance["LblPhd2MountMismatch"] ?? $"Failed to synchronize PHD2 mount with NINA. NINA: '{telescopeInfo.Name}', PHD2: '{selectedMount}'");
+                    }
+
+                    string selectedCamera = await GetSelectedCamera() ?? "None";
+                    string selectedCameraId = await GetSelectedCameraId();
+                    int selectedCameraDepth = await GetSelectedCameraBitDepth();
+
+                    // Set camera if it differs
+                    if (!await ValidateCameraMatch(phd2Camera, phd2CameraId, selectedCamera, selectedCameraId)) {
+                        Logger.Warning($"Failed to synchronize cameras: NINA camera is '{phd2CameraId} ({phd2Camera})' but PHD2 has '{selectedCameraId} ({selectedCamera})' selected");
+                        Notification.ShowWarning(Loc.Instance["LblPhd2CameraMismatch"] ?? $"Failed to synchronize PHD2 camera with NINA. NINA: '{phd2CameraId}', PHD2: '{selectedCameraId}'");
+                    }
+
+                    // Set camera bit depth
+                    int bitDepth = profileService.ActiveProfile.GuiderSettings.PHD2CameraDepth;
+                    if (!await ValidateCameraBitDepth(bitDepth, selectedCameraDepth)) {
+                        Logger.Warning($"Failed to synchronize bit depth to {bitDepth} bit. Currently: {selectedCameraDepth} bit");
+                        Notification.ShowWarning(Loc.Instance["LblPhd2DepthMismatch"] ?? $"Failed to set PHD2 camera to {bitDepth} bit");
+                    }
+
                     await EnsurePHD2EquipmentConnected();
                     await TryRefreshShiftLockParams();
                     await SetPixelScale();
@@ -1062,6 +1109,386 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 AvailableProfiles.Add(new Phd2Profile { Name = profile.name, Id = profile.id });
             }
             SelectedProfile = AvailableProfiles.FirstOrDefault(x => x.Id == _activeProfile.id);
+        }
+
+        private async Task<string> GetSelectedMount()
+        {
+            try
+            {
+                var getSelectedMountMsg = new Phd2GetSelectedMount();
+                var getSelectedMountResponse = await SendMessage<StringPhdMethodResponse>(getSelectedMountMsg);
+
+                if (getSelectedMountResponse.error != null)
+                {
+                    Logger.Error($"Failed to get selected mount: {getSelectedMountResponse.error.message}");
+                    return null;
+                }
+
+                string selectedMount = getSelectedMountResponse.result;
+                Logger.Info($"Currently selected mount by PHD2: {selectedMount}");
+
+                // If INDI mount is selected, also get the INDI driver name
+                if (selectedMount == "INDI")
+                {
+                    var getINDIDriverMsg = new Phd2GetSelectedINDIMountDriver();
+                    var getINDIDriverResponse = await SendMessage<StringPhdMethodResponse>(getINDIDriverMsg);
+
+                    if (getINDIDriverResponse.error != null)
+                    {
+                        Logger.Error($"Failed to get selected INDI mount driver: {getINDIDriverResponse.error.message}");
+                        return selectedMount;
+                    }
+
+                    string indiDriver = getINDIDriverResponse.result;
+                    Logger.Info($"Currently selected INDI driver: {indiDriver}");
+                }
+
+                return selectedMount;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error getting PHD2 mount information: {ex.Message}");
+                return null;
+            }
+        }
+
+        private async Task<bool> ValidateMountMatch(TelescopeInfo telescopeInfo, string phdSelectedMount)
+        {
+            try
+            {
+                // Get NINA mount information
+                string ninaMountName = telescopeInfo.Name;
+                string ninaMountDisplayName = telescopeInfo.DisplayName;
+                string ninaDeviceId = telescopeInfo.DeviceId;
+
+                Logger.Info($"Validating mount match: NINA='{ninaMountName}' (ID: '{ninaDeviceId}'), PHD2='{phdSelectedMount}'");
+
+                // Determine if NINA has an INDI mount - check DisplayName for INDI keyword
+                bool isINDIMount = !string.IsNullOrEmpty(ninaMountDisplayName) && 
+                    ninaMountDisplayName.Contains("INDI", StringComparison.OrdinalIgnoreCase);
+
+                if (isINDIMount)
+                {
+                    // For INDI mounts, PHD2 format is "INDI Mount [$deviceId]"
+                    string expectedPHD2Mount = $"INDI Mount [{ninaDeviceId}]";
+                    
+                    if (phdSelectedMount.Equals(expectedPHD2Mount, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Logger.Info($"Mount match confirmed: both use INDI mount '{expectedPHD2Mount}'");
+                        return true;
+                    }
+                    
+                    // Mounts don't match - attempt to set PHD2 mount to match NINA
+                    Logger.Warning($"Mount mismatch detected: NINA expects '{expectedPHD2Mount}', PHD2 has '{phdSelectedMount}' selected. Attempting to sync...");
+                    return await SetPHD2MountToMatch(telescopeInfo);
+                }
+                else
+                {
+                    // For non-INDI mounts, check if the names match
+                    if (!string.IsNullOrEmpty(ninaMountName) && 
+                        ninaMountName.Equals(phdSelectedMount, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Logger.Info($"Mount match confirmed: both use '{ninaMountName}'");
+                        return true;
+                    }
+
+                    // Mounts don't match - attempt to set PHD2 mount to match NINA
+                    Logger.Warning($"Mount mismatch detected: NINA='{ninaMountName}', PHD2='{phdSelectedMount}'. Attempting to sync...");
+                    return await SetPHD2MountToMatch(telescopeInfo);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error validating mount match: {ex.Message}");
+                return false;
+            }
+        }
+
+        private async Task<string> GetSelectedCamera()
+        {
+            try
+            {
+                var getSelectedCameraMsg = new Phd2GetSelectedCamera();
+                var getSelectedCameraResponse = await SendMessage<StringPhdMethodResponse>(getSelectedCameraMsg);
+
+                if (getSelectedCameraResponse.error != null)
+                {
+                    Logger.Error($"Failed to get selected camera: {getSelectedCameraResponse.error.message}");
+                    return null;
+                }
+
+                string selectedCamera = getSelectedCameraResponse.result;
+                Logger.Info($"Currently selected camera by PHD2: {selectedCamera}");
+
+                // If INDI camera is selected, also get the INDI driver name
+                if (selectedCamera == "INDI")
+                {
+                    var getINDIDriverMsg = new Phd2GetSelectedINDICameraDriver();
+                    var getINDIDriverResponse = await SendMessage<StringPhdMethodResponse>(getINDIDriverMsg);
+
+                    if (getINDIDriverResponse.error != null)
+                    {
+                        Logger.Error($"Failed to get selected INDI camera driver: {getINDIDriverResponse.error.message}");
+                        return selectedCamera;
+                    }
+
+                    string indiDriver = getINDIDriverResponse.result;
+                    Logger.Info($"Currently selected INDI driver: {indiDriver}");
+                }
+
+                return selectedCamera;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error getting PHD2 camera information: {ex.Message}");
+                return null;
+            }
+        }
+
+        private async Task<string> GetSelectedCameraId()
+        {
+            try
+            {
+                var getSelectedCameraIdMsg = new Phd2GetSelectedCameraId();
+                var getSelectedCameraIdResponse = await SendMessage<StringPhdMethodResponse>(getSelectedCameraIdMsg);
+
+                if (getSelectedCameraIdResponse.error != null)
+                {
+                    Logger.Error($"Failed to get selected camera id: {getSelectedCameraIdResponse.error.message}");
+                    return null;
+                }
+
+                string selectedCameraId = getSelectedCameraIdResponse.result;
+                Logger.Info($"Currently selected camera id by PHD2: {selectedCameraId}");
+
+                return selectedCameraId;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error getting PHD2 camera id information: {ex.Message}");
+                return null;
+            }
+        }
+
+        private async Task<int> GetSelectedCameraBitDepth()
+        {
+            try
+            {
+                var getSelectedCameraBitDepthMsg = new Phd2GetCameraBitDepth();
+                var getSelectedCameraBitDepthResponse = await SendMessage<IntegerPhdMethodResponse>(getSelectedCameraBitDepthMsg);
+
+                if (getSelectedCameraBitDepthResponse.error != null)
+                {
+                    Logger.Error($"Failed to get selected camera bit depth: {getSelectedCameraBitDepthResponse.error.message}");
+                    return 0;
+                }
+
+                int selectedCameraBitDepth = getSelectedCameraBitDepthResponse.result;
+                Logger.Info($"Currently selected camera bit depth by PHD2: {selectedCameraBitDepth}");
+
+                return selectedCameraBitDepth;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error getting PHD2 camera bit depth information: {ex.Message}");
+                return 0;
+            }
+        }
+
+        private async Task<bool> ValidateCameraMatch(string ninaCamera, string ninaCameraId, string phdSelectedCamera, string phdSelectedCameraId)
+        {
+            try
+            {
+                Logger.Info($"Validating camera match: NINA='{ninaCameraId}' ({ninaCamera}), PHD2='{phdSelectedCameraId}' ({phdSelectedCamera})");
+
+                if (phdSelectedCamera.Equals(ninaCamera, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (phdSelectedCameraId.Equals(ninaCameraId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Logger.Info($"Camera match confirmed: both use '{ninaCameraId}' ({ninaCamera}");
+                        return true;
+                    }
+
+                    // Camera ids don't match - attempt to set PHD2 camera id to match NINA
+                    Logger.Warning($"Camera id mismatch detected: NINA expects '{ninaCameraId}', PHD2 has '{phdSelectedCameraId}' selected. Attempting to sync...");
+                    return await SetPHD2CameraIdToMatch(ninaCameraId);
+                }
+                else
+                {
+                    // Cameras don't match - attempt to set PHD2 camera to match NINA
+                    Logger.Warning($"Camera mismatch detected: NINA='{ninaCamera}', PHD2='{phdSelectedCamera}'. Attempting to sync...");
+                    return await SetPHD2CameraToMatch(ninaCamera, ninaCameraId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error validating camera match: {ex.Message}");
+                return false;
+            }
+        }
+
+        private async Task<bool> ValidateCameraBitDepth(int ninaBitDepth, int phdBitDepth)
+        {
+            try
+            {
+                Logger.Info($"Validating camera bit depth: NINA={ninaBitDepth}, PHD2={phdBitDepth}");
+
+                if (ninaBitDepth == phdBitDepth)
+                {
+                    Logger.Info($"Camera bit depth match confirmed: both use {ninaBitDepth} bit");
+                    return true;
+                }
+
+                // Camera bit depth don't match
+                Logger.Warning($"Camera bit depth mismatch detected: NINA expects {ninaBitDepth}, PHD2 has {phdBitDepth}. Attempting to sync...");
+                return await SetPHD2CameraBitDepthToMatch(ninaBitDepth);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error validating camera bit depth match: {ex.Message}");
+                return false;
+            }
+        }
+
+        private async Task<bool> SetPHD2MountToMatch(TelescopeInfo telescopeInfo)
+        {
+            try
+            {
+                string ninaMountName = telescopeInfo.Name;
+                string ninaMountDisplayName = telescopeInfo.DisplayName;
+                string ninaDeviceId = telescopeInfo.DeviceId;
+
+                // Determine if we're setting an INDI mount or a regular mount
+                // Check if DisplayName contains "INDI"
+                bool isINDIMount = !string.IsNullOrEmpty(ninaMountDisplayName) &&
+                    ninaMountDisplayName.Contains("INDI", StringComparison.OrdinalIgnoreCase);
+
+                if (isINDIMount)
+                {
+                    // Set INDI mount with format "INDI Mount [$deviceId]"
+                    string phd2MountId = $"INDI Mount [{ninaDeviceId}]";
+                    Logger.Info($"Setting PHD2 mount to INDI format: {phd2MountId}");
+
+                    var setMountMsg = new Phd2SetSelectedMount();
+                    setMountMsg.Parameters = new JObject { ["mount"] = phd2MountId };
+                    var setMountResult = await SendMessage(setMountMsg);
+
+                    if (setMountResult.error != null)
+                    {
+                        Logger.Error($"Failed to set PHD2 mount to '{phd2MountId}': {setMountResult.error.message}");
+                        return false;
+                    }
+
+                    Logger.Info($"Successfully synchronized PHD2 mount to INDI: {phd2MountId}");
+                    return true;
+                }
+                else
+                {
+                    // Set regular mount by name
+                    Logger.Info($"Setting PHD2 mount to: {ninaMountName}");
+
+                    var setMountMsg = new Phd2SetSelectedMount();
+                    setMountMsg.Parameters = new JObject { ["mount"] = ninaMountName };
+                    var setMountResult = await SendMessage(setMountMsg);
+
+                    if (setMountResult.error != null)
+                    {
+                        Logger.Error($"Failed to set PHD2 mount to '{ninaMountName}': {setMountResult.error.message}");
+                        return false;
+                    }
+
+                    Logger.Info($"Successfully synchronized PHD2 mount to: {ninaMountName}");
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error setting PHD2 mount to match NINA: {ex.Message}");
+                return false;
+            }
+        }
+
+        private async Task<bool> SetPHD2CameraIdToMatch(string ninaCameraId)
+        {
+            try
+            {
+                // Set camera id
+                Logger.Info($"Setting PHD2 camera id to: {ninaCameraId}");
+
+                var setCameraIdMsg = new Phd2SetSelectedCameraId();
+                setCameraIdMsg.Parameters = new JObject { ["camera_id"] = ninaCameraId };
+                var setCameraIdResult = await SendMessage(setCameraIdMsg);
+
+                if (setCameraIdResult.error != null)
+                {
+                    Logger.Error($"Failed to set PHD2 camera id to '{ninaCameraId}': {setCameraIdResult.error.message}");
+                    return false;
+                }
+
+                Logger.Info($"Successfully synchronized PHD2 camera id to: {ninaCameraId}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error setting PHD2 camera id to match NINA: {ex.Message}");
+                return false;
+            }
+        }
+
+        private async Task<bool> SetPHD2CameraToMatch(string ninaCamera, string ninaCameraId)
+        {
+            try
+            {
+                // Set camera
+                Logger.Info($"Setting PHD2 camera to: {ninaCamera}");
+
+                var setCameraMsg = new Phd2SetSelectedCamera();
+                setCameraMsg.Parameters = new JObject { ["camera"] = ninaCamera };
+                var setCameraResult = await SendMessage(setCameraMsg);
+
+                if (setCameraResult.error != null)
+                {
+                    Logger.Error($"Failed to set PHD2 camera to '{ninaCamera}': {setCameraResult.error.message}");
+                    return false;
+                }
+
+                Logger.Info($"Successfully synchronized PHD2 camera to: {ninaCamera}");
+
+                // Set camera id
+                return await SetPHD2CameraIdToMatch(ninaCameraId);
+            }
+            catch(Exception ex)
+            {
+                Logger.Error($"Error setting PHD2 camera to match NINA: {ex.Message}");
+                return false;
+            }
+        }
+
+        private async Task<bool> SetPHD2CameraBitDepthToMatch(int ninaBitDepth)
+        {
+            try
+            {
+                // Set camera bit depth
+                Logger.Info($"Setting PHD2 camera bit depth to: {ninaBitDepth}");
+
+                var setCameraBitDepthMsg = new Phd2SetCameraBitDepth();
+                setCameraBitDepthMsg.Parameters = new JObject { ["bitdepth"] = ninaBitDepth };
+                var setCameraBitDepthResult = await SendMessage(setCameraBitDepthMsg);
+
+                if (setCameraBitDepthResult.error != null)
+                {
+                    Logger.Error($"Failed to set PHD2 camera bit depth to '{ninaBitDepth}': {setCameraBitDepthResult.error.message}");
+                    return false;
+                }
+
+                Logger.Info($"Successfully synchronized PHD2 camera bit depth to: {ninaBitDepth}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error setting PHD2 camera bit depth to match NINA: {ex.Message}");
+                return false;
+            }
         }
 
         private async Task<bool> EnsurePHD2EquipmentConnected() {
