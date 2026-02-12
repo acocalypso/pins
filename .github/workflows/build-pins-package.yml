@@ -1,4 +1,4 @@
-name: Build Linux ARM64 Package v2
+name: Build Linux ARM64 Package
 
 on:
   workflow_dispatch:
