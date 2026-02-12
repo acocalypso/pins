@@ -24,6 +24,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NINA.Equipment.Equipment.MyFilterWheel {
@@ -43,9 +44,18 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
             set {
                 if (device != null && ShouldBeConnected) {
                     device.Position = (int)value;
+                    WaitForReadyState();
                     InvalidatePropertyCache();
                 }
             }
+        }
+
+        private Task<bool> WaitForReadyState(CancellationToken ct = default) {
+            do {
+                CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
+            } while (device.IsMoving);
+
+            return Task.FromResult(true);
         }
 
         private IProfileService profileService;

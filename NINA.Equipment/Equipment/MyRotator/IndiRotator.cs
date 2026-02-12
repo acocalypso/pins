@@ -128,7 +128,5 @@ namespace NINA.Equipment.Equipment.MyRotator {
         protected override IINDIRotator GetInstance() {
             return device ??= new INDIRotator(_device);
         }
-
-        public override bool HasSetupDialog => !Connected;
     }
 }

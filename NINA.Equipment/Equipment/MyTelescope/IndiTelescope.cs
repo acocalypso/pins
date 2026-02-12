@@ -1067,7 +1067,5 @@ namespace NINA.Equipment.Equipment.MyTelescope {
             var pierSide = device.DestinationSideOfPier(coordinates.RA, coordinates.Dec);
             return (PierSide)pierSide;
         }
-
-        public override bool HasSetupDialog => !Connected;
     }
 }
