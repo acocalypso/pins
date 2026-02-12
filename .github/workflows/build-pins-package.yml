@@ -1,4 +1,4 @@
-name: Build Linux ARM64 Package
+name: Build Linux ARM64 Package v2
 
 on:
   workflow_dispatch:
@@ -32,28 +32,45 @@ jobs:
           lfs: true
           submodules: false
 
-      - name: Update submodules to latest commits
+      - name: Clone plugins
         shell: bash
         run: |
           set -euo pipefail
 
-          excluded_path="NINA/External"
+          mkdir -p NINA.Plugins
 
-          # Update all submodules except NINA/External (has LFS issues in CI)
-          while read -r _ path; do
-            if [ "$path" = "$excluded_path" ]; then
-              echo "Skipping submodule $path"
-              continue
-            fi
+          # Clone N.I.N.A-Plugin-for-Touch-N-Stars (branch develop) -> NINA.Plugins/Touch-N-Stars
+          rm -rf "NINA.Plugins/Touch-N-Stars"
+          git clone --branch develop --single-branch https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars "NINA.Plugins/Touch-N-Stars"
 
-            echo "Updating submodule $path"
-            # Update to pinned commit (respecting superproject pointer)
-            if git submodule update --init --recursive "$path"; then
-              continue
-            fi
+          # Clone joko.nina.plugins -> NINA.Plugins/joko.nina.plugins
+          rm -rf "NINA.Plugins/joko.nina.plugins"
+          git clone https://github.com/nitr57/joko.nina.plugins "NINA.Plugins/joko.nina.plugins"
 
-            echo "Update failed for $path" >&2
-          done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$')
+          # Clone ninaAPI -> NINA.Plugins/ninaAPI
+          rm -rf "NINA.Plugins/ninaAPI"
+          git clone https://github.com/nitr57/ninaAPI "NINA.Plugins/ninaAPI"
+
+          # Clone nina.plugin.phd2tools -> NINA.Plugins/nina.plugin.phd2tools
+          rm -rf "NINA.Plugins/nina.plugin.phd2tools"
+          git clone https://github.com/nitr57/nina.plugin.phd2tools "NINA.Plugins/nina.plugin.phd2tools"
+
+          # Clone nina.plugin.orbuculum -> NINA.Plugins/nina.plugin.orbuculum
+          rm -rf "NINA.Plugins/nina.plugin.orbuculum"
+          git clone https://github.com/nitr57/nina.plugin.orbuculum "NINA.Plugins/nina.plugin.orbuculum"
+
+          # Clone nina.plugin.polaralignment -> NINA.Plugins/PolarAlignment
+          rm -rf "NINA.Plugins/PolarAlignment"
+          git clone https://github.com/nitr57/nina.plugin.polaralignment "NINA.Plugins/PolarAlignment"
+
+          # Clone nina.plugin.livestack -> NINA.Plugins/LiveStack
+          rm -rf "NINA.Plugins/LiveStack"
+          git clone https://github.com/nitr57/nina.plugin.livestack "NINA.Plugins/LiveStack"
+
+          # Clone NINA.Joko.Plugin.TenMicron -> NINA.Plugins/NINA.Joko.Plugin.TenMicron
+          rm -rf "NINA.Plugins/NINA.Joko.Plugin.TenMicron"
+          git clone https://github.com/nitr57/NINA.Joko.Plugin.TenMicron "NINA.Plugins/NINA.Joko.Plugin.TenMicron"
+
 
       - name: Populate NINA/External from zip bundle
         shell: bash
