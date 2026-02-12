@@ -20,5 +20,6 @@ namespace NINA.INDI.Interfaces {
         int[] FocusOffsets { get; }
         string[] Names { get; }
         int Position { get; set; }
+        bool IsMoving { get; }
     }
 }

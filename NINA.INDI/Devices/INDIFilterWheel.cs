@@ -25,13 +25,6 @@ namespace NINA.INDI.Devices {
 
     public class INDIFilterWheel : INDIDevice, IINDIFilterWheel {
 
-        private bool _isMoving;
-
-
-
-
-
-
         public override void OnTextPropertyUpdated(INDITextProperty p) {
             base.OnTextPropertyUpdated(p);
 
@@ -76,7 +69,10 @@ namespace NINA.INDI.Devices {
         {
             return ["FILTER_SLOT"];
         }
-        
+
+        private bool _isMoving;
+        public bool IsMoving => _isMoving;
+
         public int[] FocusOffsets {
             get {
                 var prop = GetNumberProperty("FILTER_FOCUS_OFFSET");

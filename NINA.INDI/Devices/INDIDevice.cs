@@ -45,16 +45,29 @@ namespace NINA.INDI.Devices {
             // Request fresh properties from the driver
             INDIClient.Instance.GetProperties(Id);
 
-            // Wait for CONNECTION property (always required)
+            // Wait for CONNECTION property (always required, according to INDI)
             string[] requiredProps = ["CONNECTION"];
             var propTimeout = DateTime.Now.AddSeconds(10);
-            while (!HasRequiredProperties(requiredProps) && DateTime.Now < propTimeout)
+            while (!HasProperties(requiredProps) && DateTime.Now < propTimeout)
             {
                 CoreUtil.Wait(TimeSpan.FromMilliseconds(500)).Wait();
             }
+
+            // Other connection properties
+            _hasConnectionModeProperty = HasProperties(["CONNECTION_MODE"]);
+            _hasDevicePortProperty = HasProperties(["DEVICE_PORT"]);
+            _hasDeviceBaudRateProperty = HasProperties(["DEVICE_BAUD_RATE"]);
+            _hasAutoSearchProperty = HasProperties(["DEVICE_AUTO_SEARCH"]);
         }
 
+        private readonly bool _hasConnectionModeProperty;
+        private readonly bool _hasDevicePortProperty;
+        private readonly bool _hasDeviceBaudRateProperty;
+        private readonly bool _hasAutoSearchProperty;
+
         private bool _connected;
+        private bool _connectionAttemptFailed;  // Track if the last connection attempt failed
+
         public bool Connected {
             get => _connected;
             set {
@@ -221,6 +234,67 @@ namespace NINA.INDI.Devices {
             }
         }
 
+        public async Task<bool> SetSwitchValueAsync(string propertyName, string elementName, bool value, TimeSpan timeout)
+        {
+            try
+            {
+                // Create a unique operation ID for this async set
+                var operationId = $"{propertyName}_{Guid.NewGuid()}";
+                
+                // Create and register the TaskCompletionSource
+                var tcs = new TaskCompletionSource<bool>();
+                lock (_asyncOperationsLock)
+                {
+                    _pendingAsyncOperations[operationId] = tcs;
+                }
+
+                try
+                {
+                    // Execute the actual set operation
+                    SetSwitchValue(propertyName, elementName, value);
+
+                    // Wait for server acknowledgement (property state changes to Busy) with timeout
+                    var timeoutTask = Task.Delay(timeout);
+                    var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
+
+                    if (completedTask == timeoutTask)
+                    {
+                        Logger.Error($"SetSwitchValueAsync ({propertyName}) - server did not acknowledge within timeout");
+                        return false;
+                    }
+
+                    var result = await tcs.Task;
+                    if (!result)
+                    {
+                        Logger.Error($"SetSwitchValueAsync ({propertyName}) - server rejected operation (Alert state)");
+                        return false;
+                    }
+
+                    // Server acknowledged the operation (state changed to Busy)
+                    Logger.Debug($"SetSwitchValueAsync ({propertyName}) - server acknowledged, operation proceeding");
+                    return true;
+                }
+                finally
+                {
+                    // Clean up the pending operation
+                    lock (_asyncOperationsLock)
+                    {
+                        _pendingAsyncOperations.Remove(operationId);
+                    }
+                }
+            }
+            catch(OperationCanceledException)
+            {
+                Logger.Warning($"SetSwitchValueAsync ({propertyName}) was cancelled");
+                return false;
+            }
+            catch(Exception ex)
+            {
+                Logger.Error($"SetSwitchValueAsync failed: {ex.Message}");
+                return false;
+            }
+        }
+
         public void SetSwitchValue(string propertyName, string elementName, bool value) {
             var prop = GetSwitchProperty(propertyName) ?? throw new ArgumentException($"Switch property '{propertyName}' not found");
 
@@ -303,9 +377,67 @@ namespace NINA.INDI.Devices {
             INDIClient.Instance.SendProperty(prop);
         }
 
-        private TaskCompletionSource<bool> _operationTcs;
-        private string _pendingOperation; // Track which operation ("CONNECT" or "DISCONNECT") is pending
-        private readonly object _operationLock = new();
+        public async Task<bool> SetTextValueAsync(string propertyName, string elementName, string value, TimeSpan timeout)
+        {
+            try
+            {
+                // Create a unique operation ID for this async set
+                var operationId = $"{propertyName}_{Guid.NewGuid()}";
+                
+                // Create and register the TaskCompletionSource
+                var tcs = new TaskCompletionSource<bool>();
+                lock (_asyncOperationsLock)
+                {
+                    _pendingAsyncOperations[operationId] = tcs;
+                }
+
+                try
+                {
+                    // Execute the actual set operation
+                    SetTextValue(propertyName, elementName, value);
+
+                    // Wait for server acknowledgement (property state changes to Busy) with timeout
+                    var timeoutTask = Task.Delay(timeout);
+                    var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
+
+                    if (completedTask == timeoutTask)
+                    {
+                        Logger.Error($"SetTextValueAsync ({propertyName}) - server did not acknowledge within timeout");
+                        return false;
+                    }
+
+                    var result = await tcs.Task;
+                    if (!result)
+                    {
+                        Logger.Error($"SetTextValueAsync ({propertyName}) - server rejected operation (Alert state)");
+                        return false;
+                    }
+
+                    // Server acknowledged the operation (state changed to Busy)
+                    Logger.Debug($"SetTextValueAsync ({propertyName}) - server acknowledged, operation proceeding");
+                    return true;
+                }
+                finally
+                {
+                    // Clean up the pending operation
+                    lock (_asyncOperationsLock)
+                    {
+                        _pendingAsyncOperations.Remove(operationId);
+                    }
+                }
+            }
+            catch(OperationCanceledException)
+            {
+                Logger.Warning($"SetTextValueAsync ({propertyName}) was cancelled");
+                return false;
+            }
+            catch(Exception ex)
+            {
+                Logger.Error($"SetTextValueAsync failed: {ex.Message}");
+                return false;
+            }
+        }
+
         
         // For tracking multiple concurrent SetNumberValuesAsync operations
         private readonly Dictionary<string, TaskCompletionSource<bool>> _pendingAsyncOperations = new();
@@ -321,127 +453,97 @@ namespace NINA.INDI.Devices {
                 Logger.Info($"Connecting to INDI device: {DeviceName}");
 
                 // Call hook to configure connection properties before connecting
-                await OnPreConnect();
-
-                // Initialize operation TCS for connection
-                lock (_operationLock) {
-                    _operationTcs = new TaskCompletionSource<bool>();
-                    _pendingOperation = "CONNECT";
-                }
-
-                // Now send the actual CONNECT command using SetSwitchValue
-                SetSwitchValue("CONNECTION", "CONNECT", true);
-
-                try {
-                    // Check token before we start
-                    ct.ThrowIfCancellationRequested();
-
-                    // Wait for the connection callback with timeout and cancellation support
-                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30), ct);
-                    var completedTask = await Task.WhenAny(_operationTcs.Task, timeoutTask);
-
-                    if (completedTask == timeoutTask) {
-                        // Check if it was a timeout or cancellation
-                        if (ct.IsCancellationRequested) {
-                            Logger.Warning($"Connecting to {DeviceName} was cancelled");
-                        } else {
-                            Logger.Error($"Connecting to {DeviceName} timed out");
-                        }
-                        return false;
-                    }
-
-                    bool success = await _operationTcs.Task;
-                    if (success) {
-                        Logger.Info($"Connected to INDI device: {DeviceName}");
-
-                        // Wait for initial property definitions to arrive from the driver
-                        var requiredProps = GetRequiredConnectionProperties();
-                        if (requiredProps != null && requiredProps.Length > 0) {
-                            Logger.Debug($"Waiting for required properties: {string.Join(", ", requiredProps)}");
-
-                            // Poll for properties with timeout
-                            var propTimeout = DateTime.Now.AddSeconds(20);
-                            while (!HasRequiredProperties(requiredProps) && DateTime.Now < propTimeout && !ct.IsCancellationRequested) {
-                                await CoreUtil.Wait(TimeSpan.FromMilliseconds(200), ct);
-                            }
-                        }
-                    } else {
-                        Logger.Error($"Connecting to {DeviceName} failed");
-                    }
-
-                    Connected = success;
-                    return success;
-                } catch (OperationCanceledException) {
-                    Logger.Warning($"Connecting to {DeviceName} was cancelled");
-                    return false;
-                } catch (Exception ex) {
-                    Logger.Error(ex.Message);
-                    return false;
-                }
-            });
-        }
-
-        public void Disconnect() {
-            if (!_connected) {
-                Logger.Warning($"Device '{DeviceName}' is not connected");
-                return;
-            }
-
-            Logger.Info($"Disconnecting from INDI device: {DeviceName}");
-
-            // Check if INDI client is still connected to server
-            if (!INDIClient.Instance.IsConnected)
-            {
-                Logger.Info($"INDI server already disconnected, skipping graceful disconnect for {DeviceName}");
-                _connected = false;
-                return;
-            }
-
-            // Initialize operation TCS for disconnect
-            Logger.Info("Waiting on lock ...");
-            lock (_operationLock)
-            {
-                _operationTcs = new TaskCompletionSource<bool>();
-                _pendingOperation = "DISCONNECT";
-            }
-
-            Logger.Info("Setting connection switch to false");
-
-            // Wait for disconnection synchronously to avoid race with Dispose()
-            try
-            {
-                // Now send the actual DISCONNECT command using SetSwitchValue
-                SetSwitchValue("CONNECTION", "DISCONNECT", true);
-
-                // Wait for the disconnection callback with shorter timeout (server may be dead)
-                var completedTask = Task.WhenAny(_operationTcs.Task, Task.Delay(TimeSpan.FromSeconds(60))).Result;
-
-                if (completedTask == _operationTcs.Task)
+                if(!await OnPreConnect())
                 {
-                    bool isConnected = _operationTcs.Task.Result;
-                    if (!isConnected)
+                    Logger.Error($"OnPreConnect failed for {DeviceName}");
+                    return false;
+                }
+
+                // Send the CONNECT command using async mechanism
+                bool success = await SetSwitchValueAsync("CONNECTION", "CONNECT", true, TimeSpan.FromSeconds(30));
+
+                if (success)
+                {
+                    Logger.Info($"Connected to INDI device: {DeviceName}");
+                    _connectionAttemptFailed = false;  // Clear failure flag on successful connection
+
+                    // Wait for initial property definitions to arrive from the driver
+                    var requiredProps = GetRequiredConnectionProperties();
+                    if (requiredProps != null && requiredProps.Length > 0)
                     {
-                        Logger.Info($"Disconnected from INDI device: {DeviceName}");
-                    }
-                    else
-                    {
-                        Logger.Warning($"Disconnect command completed but device reports still connected");
+                        Logger.Debug($"Waiting for required properties: {string.Join(", ", requiredProps)}");
+
+                        // Poll for properties with timeout
+                        var propStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                        while (!HasProperties(requiredProps) && propStopwatch.Elapsed < TimeSpan.FromSeconds(20) && !ct.IsCancellationRequested)
+                        {
+                            await CoreUtil.Wait(TimeSpan.FromMilliseconds(200), ct);
+                        }
                     }
                 }
                 else
                 {
-                    Logger.Warning($"Disconnecting from {DeviceName} timed out (server may be disconnected)");
+                    Logger.Error($"Connecting to {DeviceName} failed");
+                }
+
+                Logger.Info($"[{DeviceName}] Setting Connected to {success}");
+                Connected = success;
+
+                return success;
+            });
+        }
+
+        public async Task<bool> DisconnectAsync() {
+            Logger.Info($"Disconnecting from INDI device: {DeviceName}");
+
+            // Check if INDI client is still connected to server
+            if (!INDIClient.Instance.IsConnected) {
+                Logger.Info($"INDI server already disconnected, skipping graceful disconnect for {DeviceName}");
+                _connected = false;
+                return true;
+            }
+
+            // If the last connection attempt failed, skip DISCONNECT (device never actually connected)
+            if (_connectionAttemptFailed) {
+                Logger.Info($"Device '{DeviceName}' connection failed previously, skipping graceful disconnect");
+                _connected = false;
+                _connectionAttemptFailed = false;  // Reset flag
+                return true;
+            }
+
+            // Check if device is actually connected before trying to disconnect
+            var connProp = GetSwitchProperty("CONNECTION");
+            if (connProp != null) {
+                var connectSwitch = connProp.Switches.FirstOrDefault(s => s.Name == "CONNECT");
+                if (connectSwitch != null && !connectSwitch.Value) {
+                    Logger.Info($"Device '{DeviceName}' is not connected to server (CONNECT=false), skipping graceful disconnect");
+                    _connected = false;
+                    return true;
                 }
             }
-            catch (Exception ex)
-            {
-                Logger.Error($"Error during disconnect: {ex.Message}");
+
+            // Send DISCONNECT command using async mechanism
+            bool success = await SetSwitchValueAsync("CONNECTION", "DISCONNECT", true, TimeSpan.FromSeconds(60));
+            
+            if (success) {
+                Logger.Info($"Disconnected from INDI device: {DeviceName}");
+            } else {
+                Logger.Warning($"Disconnecting from {DeviceName} timed out or failed");
             }
 
-            Logger.Trace("Disconnected state reached");
-
-            // Update the backing field directly to avoid recursion
             _connected = false;
+            return success;
+        }
+
+        public void Disconnect() {
+            // Use async variant as fire-and-forget for Dispose compatibility
+            _ = Task.Run(async () => {
+                try {
+                    await DisconnectAsync();
+                } catch (Exception ex) {
+                    Logger.Error($"Disconnect failed: {ex.Message}");
+                }
+            });
         }
 
         public void Dispose() {
@@ -464,96 +566,138 @@ namespace NINA.INDI.Devices {
         /// <summary>
         /// Override this to configure device properties after driver load but before CONNECT
         /// </summary>
-        protected virtual async Task OnPreConnect() {
-            // Set connection mode
-            if (!string.IsNullOrEmpty(_connectionMode))
+        protected virtual async Task<bool> OnPreConnect()
+        {
+            // Check if we have a valid connection mode setting
+            bool HasConnectionMode = _hasConnectionModeProperty && !string.IsNullOrEmpty(_connectionMode);
+            bool HasAddress = !string.IsNullOrEmpty(_address);
+            bool HasPort = !string.IsNullOrEmpty(_port);
+            bool IsAutoMode = _autoSearch && _hasAutoSearchProperty;
+
+            // Determine actual connection mode
+            bool IsUsingSerialMode = HasConnectionMode && !_connectionMode.Equals("CONNECTION_TCP");
+
+            Logger.Info($"[{DeviceName}] Connection config: HasConnectionMode={HasConnectionMode}, HasAddress={HasAddress}, HasPort={HasPort}, IsAutoMode={IsAutoMode}, IsUsingSerialMode={IsUsingSerialMode}");
+
+            // If no connection configuration is available or configured, skip pre-connect (e.g., direct USB devices)
+            if (!HasConnectionMode && !HasAddress && !HasPort && !IsAutoMode) {
+                Logger.Info($"[{DeviceName}] No connection configuration needed - device will connect directly");
+                return true;
+            }
+            
+            // Validate configuration if we're trying to configure something
+            if (HasConnectionMode || HasPort || HasAddress || IsAutoMode) {
+                if (!IsAutoMode && !HasPort && !HasConnectionMode) {
+                    Logger.Error($"[{DeviceName}] OnPreConnect validation failed: No auto-search and no port specified");
+                    return false;
+                }
+                
+                if(!IsUsingSerialMode && HasConnectionMode && (!HasAddress || !HasPort)) {
+                    Logger.Error($"[{DeviceName}] OnPreConnect validation failed: TCP mode requires both address ({HasAddress}) and port ({HasPort})");
+                    return false;
+                }
+            }
+
+            // Apply connection mode
+            if (HasConnectionMode)
             {
-                // Check if CONNECTION_MODE property arrives (optional, device-dependent)
-                var propTimeout = DateTime.Now.AddSeconds(5);
-                while (!HasRequiredProperties(["CONNECTION_MODE"]) && DateTime.Now < propTimeout)
+                Logger.Info($"[{DeviceName}] Setting CONNECTION_MODE to {_connectionMode}");
+                if(!await SetSwitchValueAsync("CONNECTION_MODE", _connectionMode, true, TimeSpan.FromSeconds(10)))
                 {
-                    CoreUtil.Wait(TimeSpan.FromMilliseconds(500)).Wait();
+                    Logger.Error($"[{DeviceName}] Failed to set CONNECTION_MODE to {_connectionMode}");
+                    return false;
                 }
+                Logger.Info($"[{DeviceName}] CONNECTION_MODE successfully set to {_connectionMode}");
+            }
 
-                // Initialize operation TCS for connection
-                TaskCompletionSource<bool> modeCompletionSource;
-                lock (_operationLock)
+            if (IsUsingSerialMode)
+            {
+                Logger.Info($"[{DeviceName}] Configuring SERIAL mode connection");
+                // Process SERIAL mode
+                if (IsAutoMode)
                 {
-                    _operationTcs = new TaskCompletionSource<bool>();
-                    modeCompletionSource = _operationTcs;
-                }
-
-                try
-                {
-                    Logger.Trace($"Setting CONNECTION_MODE to {_connectionMode} on {DeviceName}");
-                    SetSwitchValue("CONNECTION_MODE", _connectionMode, true);
-                    Logger.Trace($"Set CONNECTION_MODE request sent to {DeviceName}");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error($"Could not set CONNECTION_MODE: {ex.Message}");
-                    return;
-                }
-
-                try
-                {
-                    // Wait for the connection mode switch to happen with timeout
-                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10));
-                    var completedTask = await Task.WhenAny(modeCompletionSource.Task, timeoutTask);
-
-                    if (completedTask == timeoutTask)
+                    // Just set auto mode and return
+                    Logger.Info($"[{DeviceName}] Enabling DEVICE_AUTO_SEARCH");
+                    bool autoSearchResult = await SetSwitchValueAsync("DEVICE_AUTO_SEARCH", "INDI_ENABLED", true, TimeSpan.FromSeconds(10));
+                    if (autoSearchResult)
                     {
-                        Logger.Error($"Setting CONNECTION_MODE to {DeviceName} timed out after 10 seconds - property update not received");
-                        // Try to set result to unblock, even though callback didn't fire
-                        try
-                        {
-                            modeCompletionSource.TrySetResult(false);
-                        }
-                        catch { }
-                        return;
+                        Logger.Info($"[{DeviceName}] DEVICE_AUTO_SEARCH enabled successfully");
                     }
-                    Logger.Trace($"CONNECTION_MODE successfully set on {DeviceName}");
+                    else
+                    {
+                        Logger.Error($"[{DeviceName}] Failed to enable DEVICE_AUTO_SEARCH");
+                    }
+                    return autoSearchResult;
                 }
-                catch (Exception ex)
+
+                // Disable auto mode
+                await SetSwitchValueAsync("DEVICE_AUTO_SEARCH", "INDI_DISABLED", true, TimeSpan.FromSeconds(10));
+
+                if (_hasDevicePortProperty)
                 {
-                    Logger.Error($"Setting CONNECTION_MODE failed: {ex.Message}");
-                    return;
+                    Logger.Info($"[{DeviceName}] Setting DEVICE_PORT to {_port}");
+                    if(!await SetTextValueAsync("DEVICE_PORT", "PORT", _port, TimeSpan.FromSeconds(10)))
+                    {
+                        Logger.Error($"[{DeviceName}] Failed to set DEVICE_PORT to {_port}");
+                        return false;
+                    }
+                    Logger.Info($"[{DeviceName}] DEVICE_PORT set to {_port}");
+                }
+                if (_hasDeviceBaudRateProperty)
+                {
+                    Logger.Info($"[{DeviceName}] Setting DEVICE_BAUD_RATE to {_baudRate}");
+                    if(!await SetSwitchValueAsync("DEVICE_BAUD_RATE", $"{_baudRate}", true, TimeSpan.FromSeconds(10)))
+                    {
+                        Logger.Error($"[{DeviceName}] Failed to set DEVICE_BAUD_RATE to {_baudRate}");
+                        return false;
+                    }
+                    Logger.Info($"[{DeviceName}] DEVICE_BAUD_RATE set to {_baudRate}");
+                }
+                Logger.Info($"[{DeviceName}] Serial mode configuration complete - DEVICE_PORT={_port}, BAUD_RATE={_baudRate}");
+            }
+            else
+            {
+                Logger.Info($"[{DeviceName}] Configuring TCP mode connection");
+                // Process TCP mode
+                if (HasAddress)
+                {
+                    try
+                    {
+                        Logger.Info($"[{DeviceName}] Setting DEVICE_ADDRESS to {_address}:{_port}");
+                        if(!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10)))
+                        {
+                            Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS address to {_address}");
+                            return false;
+                        }
+                        if(!await SetTextValueAsync("DEVICE_ADDRESS", "PORT", _port, TimeSpan.FromSeconds(10)))
+                        {
+                            Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS port to {_port}");
+                            return false;
+                        }
+                        Logger.Info($"[{DeviceName}] TCP mode configuration complete - ADDRESS={_address}:{_port}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"[{DeviceName}] Exception during TCP configuration: {ex.Message}");
+                        return false;
+                    }
                 }
             }
 
-            // Set device address, if we are using network mode
-            if (_connectionMode == "CONNECTION_TCP" && !string.IsNullOrEmpty(_address)) {
-                try {
-                    SetTextValue("DEVICE_ADDRESS", "ADDRESS", _address);
-                    SetTextValue("DEVICE_ADDRESS", "PORT", _port);
-                    Logger.Info($"Set DEVICE_ADDRESS to {_address}:{_port}");
-                } catch (Exception ex) {
-                    Logger.Info($"Could not set DEVICE_ADDRESS: {ex.Message}");
-                }
-            } else if (_connectionMode == "CONNECTION_SERIAL" && !string.IsNullOrEmpty(_port)) {
-                try {
-                    if (_autoSearch) {
-                    } else {
-                        SetTextValue("DEVICE_PORT", "PORT", _port);
-                        SetSwitchValue("DEVICE_BAUD_RATE", "_baudRate", true);
-                        Logger.Info($"Set DEVICE_PORT to {_port} ({_baudRate})");
-                    }
-                } catch (Exception ex) {
-                    Logger.Info($"Could not set DEVICE_PORT: {ex.Message}");
-                }
-            }
+            Logger.Info($"[{DeviceName}] OnPreConnect completed successfully");
+            return true;
         }
 
         /// <summary>
         /// Check if all required properties have been received
         /// </summary>
-        private bool HasRequiredProperties(string[] requiredProps) {
-            if (requiredProps == null || requiredProps.Length == 0) {
+        private bool HasProperties(string[] props) {
+            if (props == null || props.Length == 0) {
                 return true;
             }
 
             lock (_properties) {
-                foreach (var propName in requiredProps) {
+                foreach (var propName in props) {
                     if (!_properties.ContainsKey(propName)) {
                         return false;
                     }
@@ -570,51 +714,53 @@ namespace NINA.INDI.Devices {
                 Logger.Info($"        {s.Name}, {s.Label}, {s.Value}");
             }
             */
-            // Check for CONNECTION property updates (for device connection flow)
-            if (p.Name == "CONNECTION") {
-                // Check the actual CONNECT switch to determine connection state
-                var connectSwitch = p.Switches.FirstOrDefault(s => s.Name == "CONNECT");
-                var disconnectSwitch = p.Switches.FirstOrDefault(s => s.Name == "DISCONNECT");
-
-                if (connectSwitch != null) {
-                    bool isConnected = connectSwitch.Value;
-
-                    // Complete the operation when:
-                    // - State is Ok (successful connection/disconnection)
-                    // - State is Alert (connection/disconnection failed)
-                    // - State is Idle with the matching switch state (some drivers like LX200 OnStep report Idle after successful operation)
-                    //   For CONNECT: when CONNECT=True (Idle state)
-                    //   For DISCONNECT: when DISCONNECT=True and CONNECT=False (Idle state)
-                    // - Don't complete for Busy (operation in progress)
-                    bool shouldComplete = (p.State == PropertyState.Ok || p.State == PropertyState.Alert);
-
-                    if (!shouldComplete && p.State == PropertyState.Idle && _pendingOperation != null) {
-                        if (_pendingOperation == "CONNECT" && isConnected) {
-                            shouldComplete = true;
-                        } else if (_pendingOperation == "DISCONNECT" && !isConnected && disconnectSwitch?.Value == true) {
-                            shouldComplete = true;
-                        }
-                    }
-
-                    if (shouldComplete) {
-                        lock (_operationLock) {
-                            if (_operationTcs != null && !_operationTcs.Task.IsCompleted) {
-                                Logger.Info($"Completing connection TCS with result: {isConnected} (state: {p.State}, pending: {_pendingOperation})");
-                                _operationTcs.SetResult(isConnected);
-                                _pendingOperation = null; // Clear pending operation
-                            }
-                        }
-                    } else {
-                        Logger.Debug($"CONNECTION property state is {p.State}, CONNECT={isConnected}, DISCONNECT={disconnectSwitch?.Value}, pending={_pendingOperation}, waiting for completion state");
-                    }
-                }
+            // Track CONNECTION failures to prevent spurious DISCONNECT attempts
+            if (p.Name == "CONNECTION" && p.State == PropertyState.Alert) {
+                _connectionAttemptFailed = true;
+                Logger.Warning($"Device '{DeviceName}' connection attempt failed (Alert state)");
             }
 
-            // Check for CONNECTION_MODE property updates
-            if (p.Name == "CONNECTION_MODE") {
-                lock (_operationLock) {
-                    if (_operationTcs != null && !_operationTcs.Task.IsCompleted) {
-                        _operationTcs.SetResult(true);
+            // Check if there are any pending async operations for this property
+            lock (_asyncOperationsLock)
+            {
+                // Find all pending operations for this property
+                var operationsForProperty = _pendingAsyncOperations
+                    .Where(kvp => kvp.Key.StartsWith(p.Name + "_"))
+                    .ToList();
+
+                foreach (var kvp in operationsForProperty)
+                {
+                    var operationId = kvp.Key;
+                    var tcs = kvp.Value;
+
+                    // Resolve based on property state:
+                    // - Busy: server has acknowledged the command and is processing it
+                    // - Ok: operation completed successfully (some drivers skip Busy and go straight to Ok)
+                    // - Alert: server rejected the command
+                    // - Idle: operation still pending, keep waiting
+                    if (p.State == PropertyState.Busy)
+                    {
+                        if (!tcs.Task.IsCompleted)
+                        {
+                            Logger.Debug($"Async operation {operationId} acknowledged by server (state: Busy)");
+                            tcs.TrySetResult(true);
+                        }
+                    }
+                    else if (p.State == PropertyState.Ok)
+                    {
+                        if (!tcs.Task.IsCompleted)
+                        {
+                            Logger.Debug($"Async operation {operationId} completed by server (state: Ok)");
+                            tcs.TrySetResult(true);
+                        }
+                    }
+                    else if (p.State == PropertyState.Alert)
+                    {
+                        if (!tcs.Task.IsCompleted)
+                        {
+                            Logger.Warning($"Async operation {operationId} rejected by server (state: Alert)");
+                            tcs.TrySetResult(false);
+                        }
                     }
                 }
             }
@@ -643,13 +789,22 @@ namespace NINA.INDI.Devices {
 
                     // Resolve based on property state:
                     // - Busy: server has acknowledged the command and is processing it
+                    // - Ok: operation completed successfully (some drivers skip Busy and go straight to Ok)
                     // - Alert: server rejected the command
-                    // - Idle/Ok: ignore (operation completes in background, we don't wait for it)
+                    // - Idle: operation still pending, keep waiting
                     if (p.State == PropertyState.Busy)
                     {
                         if (!tcs.Task.IsCompleted)
                         {
                             Logger.Debug($"Async operation {operationId} acknowledged by server (state: Busy)");
+                            tcs.TrySetResult(true);
+                        }
+                    }
+                    else if (p.State == PropertyState.Ok)
+                    {
+                        if (!tcs.Task.IsCompleted)
+                        {
+                            Logger.Debug($"Async operation {operationId} completed by server (state: Ok)");
                             tcs.TrySetResult(true);
                         }
                     }
@@ -672,6 +827,51 @@ namespace NINA.INDI.Devices {
                 Logger.Info($"        {t.Name}, {t.Label}, {t.Value}");
             }
             */
+
+            // Check if there are any pending async operations for this property
+            lock (_asyncOperationsLock)
+            {
+                // Find all pending operations for this property
+                var operationsForProperty = _pendingAsyncOperations
+                    .Where(kvp => kvp.Key.StartsWith(p.Name + "_"))
+                    .ToList();
+
+                foreach (var kvp in operationsForProperty)
+                {
+                    var operationId = kvp.Key;
+                    var tcs = kvp.Value;
+
+                    // Resolve based on property state:
+                    // - Busy: server has acknowledged the command and is processing it
+                    // - Ok: operation completed successfully (some drivers skip Busy and go straight to Ok)
+                    // - Alert: server rejected the command
+                    // - Idle: operation still pending, keep waiting
+                    if (p.State == PropertyState.Busy)
+                    {
+                        if (!tcs.Task.IsCompleted)
+                        {
+                            Logger.Debug($"Async operation {operationId} acknowledged by server (state: Busy)");
+                            tcs.TrySetResult(true);
+                        }
+                    }
+                    else if (p.State == PropertyState.Ok)
+                    {
+                        if (!tcs.Task.IsCompleted)
+                        {
+                            Logger.Debug($"Async operation {operationId} completed by server (state: Ok)");
+                            tcs.TrySetResult(true);
+                        }
+                    }
+                    else if (p.State == PropertyState.Alert)
+                    {
+                        if (!tcs.Task.IsCompleted)
+                        {
+                            Logger.Warning($"Async operation {operationId} rejected by server (state: Alert)");
+                            tcs.TrySetResult(false);
+                        }
+                    }
+                }
+            }
         }
 
         public virtual void OnBlobPropertyUpdated(INDIBlobProperty p) {
