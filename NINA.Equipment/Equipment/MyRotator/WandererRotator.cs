@@ -86,6 +86,76 @@ namespace NINA.Equipment.Equipment.MyRotator {
             }
         }
 
+        public bool CanOvershoot => true;
+        public bool Overshoot {
+            get {
+                if (!Connected) {
+                    return false;
+                }
+                var err = RotatorGetConfig(_uniqueId, out var config);
+                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                    return config.overshoot != 0;
+                } else {
+                    Logger.Error($"WandererRotator error to get overshoot state {err}");
+                    return false;
+                }
+            }
+            set {
+                WR_ROTATOR_CONFIG config = new() {
+                    mask = (uint)MASK_ROTATOR_OVERSHOOT,
+                    overshoot = value ? 1 : 0
+                };
+                _ = RotatorSetConfig(_uniqueId, config);
+                RaisePropertyChanged();
+            }
+        }
+
+        public float OvershootAngle {
+            get {
+                if (!Connected) {
+                    return float.NaN;
+                }
+                var err = RotatorGetConfig(_uniqueId, out var config);
+                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                    return config.overshootAngle;
+                } else {
+                    Logger.Error($"WandererRotator error to get overshoot angle {err}");
+                    return float.NaN;
+                }
+            }
+            set {
+                WR_ROTATOR_CONFIG config = new() {
+                    mask = (uint)MASK_ROTATOR_OVERSHOOT_ANGLE,
+                    overshootAngle = value
+                };
+                _ = RotatorSetConfig(_uniqueId, config);
+                RaisePropertyChanged();
+            }
+        }
+
+        public bool OvershootDirection {
+            get {
+                if (!Connected) {
+                    return false;
+                }
+                var err = RotatorGetConfig(_uniqueId, out var config);
+                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                    return config.overshootDirection != 0;
+                } else {
+                    Logger.Error($"WandererRotator error to get overshoot direction {err}");
+                    return false;
+                }
+            }
+            set {
+                WR_ROTATOR_CONFIG config = new() {
+                    mask = (uint)MASK_ROTATOR_OVERSHOOT_DIRECTION,
+                    overshootDirection = value ? 1 : 0
+                };
+                _ = RotatorSetConfig(_uniqueId, config);
+                RaisePropertyChanged();
+            }
+        }
+
         private bool synced;
 
         public bool Synced {
@@ -215,7 +285,11 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (RotatorOpen(_uniqueId) == WR_ERROR_TYPE.WR_SUCCESS) {
                     DriverInfo = $"SDK: {DriverVersion}; FW: {GetFwVersionString()}";
 
-                    RotatorGetConfig(_uniqueId, out var config);
+                    // Set overshoot settings from profile
+                    var settings = _profileService.ActiveProfile.RotatorSettings;
+                    Overshoot = settings.Overshoot;
+                    OvershootDirection = settings.OvershootDirection;
+                    OvershootAngle = settings.OvershootAngle;
 
                     Connected = true;
                     return true;
@@ -247,7 +321,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
         }
 
         public async Task<bool> Move(float angle, CancellationToken ct) {
-            if(!Connected) {
+            if (!Connected) {
                 return false;
             }
 

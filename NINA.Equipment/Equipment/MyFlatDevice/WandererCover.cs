@@ -245,6 +245,117 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
             }
         }
 
+        public int HeaterPower {
+            get {
+                if (!Connected) {
+                    return 0;
+                }
+
+                var err = CoverGetConfig(_uniqueId, out var config);
+                if (err == WC_ERROR_TYPE.WC_SUCCESS) {
+                    return config.heaterPower;
+                } else {
+                    if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
+                        Logger.Error($"WandererCover communication error to get heater power {err}");
+                        DisconnectOnRemovedError();
+                    } else {
+                        Logger.Error($"WandererCover error to get heater power {err}");
+                    }
+                    return 0;
+                }
+            }
+            set {
+                WC_COVER_CONFIG config = new() {
+                    mask = MASK_COVER_HEATER_POWER,
+                    heaterPower = Math.Max(0, Math.Min(3, value))
+                };
+                Logger.Info($"Setting heater power to {value}");
+                _ = CoverSetConfig(_uniqueId, config);
+                RaisePropertyChanged(nameof(HeaterPower));
+            }
+        }
+
+        public float OpenPositionAngle {
+            get {
+                if (!Connected) {
+                    return float.NaN;
+                }
+
+                var err = CoverGetConfig(_uniqueId, out var config);
+                if (err == WC_ERROR_TYPE.WC_SUCCESS) {
+                    return config.openPositionAngle;
+                } else {
+                    if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
+                        Logger.Error($"WandererCover communication error to get open position angle {err}");
+                        DisconnectOnRemovedError();
+                    } else {
+                        Logger.Error($"WandererCover error to get open position angle {err}");
+                    }
+                    return float.NaN;
+                }
+            }
+            set {
+                WC_COVER_CONFIG config = new() {
+                    mask = MASK_COVER_OPEN_POSITION,
+                    openPositionAngle = value
+                };
+                Logger.Info($"Setting open position angle to {value}");
+                _ = CoverSetConfig(_uniqueId, config);
+                RaisePropertyChanged(nameof(OpenPositionAngle));
+            }
+        }
+
+        public float ClosePositionAngle {
+            get {
+                if (!Connected) {
+                    return float.NaN;
+                }
+
+                var err = CoverGetConfig(_uniqueId, out var config);
+                if (err == WC_ERROR_TYPE.WC_SUCCESS) {
+                    return config.closePositionAngle;
+                } else {
+                    if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
+                        Logger.Error($"WandererCover communication error to get close position angle {err}");
+                        DisconnectOnRemovedError();
+                    } else {
+                        Logger.Error($"WandererCover error to get close position angle {err}");
+                    }
+                    return float.NaN;
+                }
+            }
+            set {
+                WC_COVER_CONFIG config = new() {
+                    mask = MASK_COVER_CLOSE_POSITION,
+                    closePositionAngle = value
+                };
+                Logger.Info($"Setting close position angle to {value}");
+                _ = CoverSetConfig(_uniqueId, config);
+                RaisePropertyChanged(nameof(ClosePositionAngle));
+            }
+        }
+
+        public float CurrentPositionAngle {
+            get {
+                if (!Connected) {
+                    return float.NaN;
+                }
+
+                var err = CoverGetStatus(_uniqueId, out var status);
+                if (err == WC_ERROR_TYPE.WC_SUCCESS) {
+                    return status.currentPositionAngle;
+                } else {
+                    if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
+                        Logger.Error($"WandererCover communication error to get current position angle {err}");
+                        DisconnectOnRemovedError();
+                    } else {
+                        Logger.Error($"WandererCover error to get current position angle {err}");
+                    }
+                    return float.NaN;
+                }
+            }
+        }
+
         public bool SupportsOpenClose => true;
 
         public bool SupportsOnOff => true;

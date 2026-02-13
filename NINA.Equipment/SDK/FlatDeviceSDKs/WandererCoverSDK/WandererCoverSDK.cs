@@ -83,7 +83,6 @@ namespace Wanderer {
         public struct WC_COVER_STATUS {
             public int coverState;              // Current cover state (0 = close, 1 = open, 2 = intermediate, 3 = moving)
             public float currentPositionAngle; // Current motor position angle
-            public float inputVoltage;          // Input voltage
             public float closePositionAngle;    // Closed position angle
             public float openPositionAngle;	// Open position angle
         }
