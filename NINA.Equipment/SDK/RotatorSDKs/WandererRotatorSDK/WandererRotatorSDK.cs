@@ -72,6 +72,9 @@ namespace Wanderer {
             public uint mask;                   // Bitmask for which fields to set
             public int reverseDirection;        // 0 - Not reverse, others - Reverse
             public float backlash;              // Backlash in degrees
+            public int overshoot;               // Backlash overshoot: 0 - disabled, others - enabled
+            public float overshootAngle;        // Backlash overshoot angle in degrees(move past target, then return)
+            public int overshootDirection;      // Backlash overshoot direction: 0 - normal, others - reverse
         }
 
         /// <summary>

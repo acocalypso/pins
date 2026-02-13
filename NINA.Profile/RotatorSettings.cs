@@ -34,6 +34,9 @@ namespace NINA.Profile {
             reverse2 = false;
             rangeType = RotatorRangeTypeEnum.FULL;
             rangeStartMechanicalPosition = 0.0f;
+            overshoot = false;
+            overshootDirection = false;
+            overshootAngle = 0.0f;
             connectionMode = "SERIAL";
             devicePort = "/dev/ttyUSB0";
             baudRate = 9600;
@@ -109,12 +112,51 @@ namespace NINA.Profile {
             }
         }
 
+        private bool overshoot;
+
+        [DataMember]
+        public bool Overshoot {
+            get => overshoot;
+            set {
+                if (overshoot != value) {
+                    overshoot = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private bool overshootDirection;
+
+        [DataMember]
+        public bool OvershootDirection {
+            get => overshootDirection;
+            set {
+                if (overshootDirection != value) {
+                    overshootDirection = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private float overshootAngle;
+
+        [DataMember]
+        public float OvershootAngle {
+            get => overshootAngle;
+            set {
+                if (overshootAngle != value) {
+                    overshootAngle = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
         private string connectionMode;
         [DataMember]
         public string ConnectionMode {
             get => connectionMode;
             set {
-                if(connectionMode != value) {
+                if (connectionMode != value) {
                     connectionMode = value;
                     RaisePropertyChanged();
                 }
@@ -126,7 +168,7 @@ namespace NINA.Profile {
         public string DevicePort {
             get => devicePort;
             set {
-                if(devicePort != value) {
+                if (devicePort != value) {
                     devicePort = value;
                     RaisePropertyChanged();
                 }
@@ -138,7 +180,7 @@ namespace NINA.Profile {
         public int BaudRate {
             get => baudRate;
             set {
-                if(baudRate != value) {
+                if (baudRate != value) {
                     baudRate = value;
                     RaisePropertyChanged();
                 }
@@ -150,7 +192,7 @@ namespace NINA.Profile {
         public string IndiDriver {
             get => indiDriver;
             set {
-                if(indiDriver != value) {
+                if (indiDriver != value) {
                     indiDriver = value;
                     RaisePropertyChanged();
                 }

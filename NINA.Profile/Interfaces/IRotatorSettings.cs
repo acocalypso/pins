@@ -29,6 +29,10 @@ namespace NINA.Profile.Interfaces {
         RotatorRangeTypeEnum RangeType { get; set; }
         float RangeStartMechanicalPosition { get; set; }
 
+        bool Overshoot { get; set; }
+        bool OvershootDirection { get; set; }
+        float OvershootAngle { get; set; }
+
         string ConnectionMode { get; set; }
         string DevicePort { get; set; }
         int BaudRate { get; set; }
