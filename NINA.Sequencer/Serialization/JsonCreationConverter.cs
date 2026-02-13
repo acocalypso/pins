@@ -1,7 +1,7 @@
 ﻿#region "copyright"
 
 /*
-    Copyright © 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -46,6 +46,9 @@ namespace NINA.Sequencer.Serialization {
 
         protected ISequencerFactory Factory;
 
+        private static string GetSourcePath(JsonSerializer serializer) =>
+            serializer?.Context.Context as string ?? string.Empty;
+
         public static string ExtractPluginName(string typeString) {
             if (string.IsNullOrWhiteSpace(typeString)) {
                 return string.Empty;
@@ -62,7 +65,6 @@ namespace NINA.Sequencer.Serialization {
 
         private class NullUpgrader : ISequenceEntityUpgrader {
             public string Name { get; set; } = string.Empty;
-            public string AssemblyName { get; set; }
             public SequenceUpgradeStage Stages => 0;
             public object Upgrade(SequenceUpgradeContext context, SequenceUpgradeStage stage, object entity) {
                 return entity;
@@ -74,7 +76,8 @@ namespace NINA.Sequencer.Serialization {
         private ISequenceEntityUpgrader GetUpgraderForPlugin(string pluginName) {
             if (Factory != null) {
                 foreach (var upgrader in Factory.Upgraders) {
-                    if (string.Equals(upgrader.AssemblyName, pluginName, StringComparison.OrdinalIgnoreCase)) {
+                    var assemblyName = upgrader.GetType().Assembly.GetName().Name;
+                    if (string.Equals(assemblyName, pluginName, StringComparison.OrdinalIgnoreCase)) {
                         return upgrader;
                     }
                 }
@@ -185,7 +188,8 @@ namespace NINA.Sequencer.Serialization {
 
                 return target;
             } catch (Exception ex) {
-                Logger.Error("Failed to deserialize sequence entity", ex);
+                var sourcePath = GetSourcePath(serializer);
+                Logger.Error($"Deserialize failed. File='{sourcePath}', Error={ex.Message}");
                 var unknownEntityName = "";
                 if (jObject.TryGetValue("$type", out var token)) {
                     unknownEntityName = token?.ToString() ?? "";
