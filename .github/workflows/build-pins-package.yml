@@ -992,7 +992,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          project_path="NINA.Plugins/pins.plugin/pins.plugin/pins.plugin.csproj"
+          project_path="NINA.Plugins/pins.plugin/PI'N'Stars.csproj"
           install_folder="pins.plugin"
           deb_package="pins-plugin-pins"
           plugin_dir=$(dirname "$project_path")
