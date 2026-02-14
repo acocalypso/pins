@@ -33,6 +33,7 @@ namespace NINA.Equipment.Equipment.MyRotator {
     public partial class WandererRotator : BaseINPC, IRotator {
         private readonly IProfileService _profileService;
         private readonly int _uniqueId;
+        private IRotatorSettings _rotatorSettings;
 
         public WandererRotator(int id, string model, IProfileService profileService) {
             Id = $"{id}.{model}";
@@ -40,6 +41,13 @@ namespace NINA.Equipment.Equipment.MyRotator {
             _uniqueId = id;
 
             Name = $"Wanderer.Rotator.{_uniqueId} ({model})";
+
+            // Subscribe to profile/setting changes so toggling the profile entry immediately updates the device
+            _rotatorSettings = _profileService?.ActiveProfile?.RotatorSettings;
+            if (_rotatorSettings != null) {
+                _rotatorSettings.PropertyChanged += RotatorSettingsChanged;
+            }
+            _profileService.ProfileChanged += ProfileChanged;
         }
 
         public bool IsMoving {
@@ -298,6 +306,46 @@ namespace NINA.Equipment.Equipment.MyRotator {
                     return false;
                 }
             }, token);
+        }
+
+        // React to runtime changes of the active profile's rotator settings
+        private void RotatorSettingsChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e) {
+            try {
+                // Apply only when device is connected
+                if (!Connected) return;
+                var settings = _profileService.ActiveProfile.RotatorSettings;
+                switch (e.PropertyName) {
+                    case nameof(IRotatorSettings.Overshoot):
+                        Overshoot = settings.Overshoot;
+                        break;
+                    case nameof(IRotatorSettings.OvershootDirection):
+                        OvershootDirection = settings.OvershootDirection;
+                        break;
+                    case nameof(IRotatorSettings.OvershootAngle):
+                        OvershootAngle = settings.OvershootAngle;
+                        break;
+                }
+            } catch (Exception ex) {
+                Logger.Error(ex);
+            }
+        }
+
+        private void ProfileChanged(object sender, EventArgs e) {
+            try {
+                // Re-hook new profile's settings and apply them if rotator is connected
+                if (_rotatorSettings != null) _rotatorSettings.PropertyChanged -= RotatorSettingsChanged;
+                _rotatorSettings = _profileService.ActiveProfile.RotatorSettings;
+                if (_rotatorSettings != null) _rotatorSettings.PropertyChanged += RotatorSettingsChanged;
+
+                if (Connected && _profileService.ActiveProfile?.RotatorSettings != null) {
+                    var s = _profileService.ActiveProfile.RotatorSettings;
+                    Overshoot = s.Overshoot;
+                    OvershootDirection = s.OvershootDirection;
+                    OvershootAngle = s.OvershootAngle;
+                }
+            } catch (Exception ex) {
+                Logger.Error(ex);
+            }
         }
 
         private string GetFwVersionString() {

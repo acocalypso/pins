@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2024 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -56,6 +56,8 @@ namespace NINA.Profile {
             devicePort = "/dev/ttyUSB0";
             baudRate = 9600;
             indiDriver = "indi_simulator_focus";
+            manualStepSmallMultiplier = 0.5;
+            manualStepLargeMultiplier = 5.0;
         }
 
         private string id;
@@ -418,6 +420,32 @@ namespace NINA.Profile {
             set {
                 if(indiDriver != value) {
                     indiDriver = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private double manualStepSmallMultiplier;
+
+        [DataMember]
+        public double ManualStepSmallMultiplier {
+            get => manualStepSmallMultiplier;
+            set {
+                if (manualStepSmallMultiplier != value) {
+                    manualStepSmallMultiplier = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private double manualStepLargeMultiplier;
+
+        [DataMember]
+        public double ManualStepLargeMultiplier {
+            get => manualStepLargeMultiplier;
+            set {
+                if (manualStepLargeMultiplier != value) {
+                    manualStepLargeMultiplier = value;
                     RaisePropertyChanged();
                 }
             }
