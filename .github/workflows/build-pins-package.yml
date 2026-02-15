@@ -1014,8 +1014,15 @@ jobs:
             cmake ..
             make
             mkdir -p "$plugin_dir/extra-libs"
-            echo "Copying libPowerBoxSDK.so to $plugin_dir/extra-libs/PowerBoxSDK.dll"
-            cp libPowerBoxSDK.so "$plugin_dir/extra-libs/PowerBoxSDK.dll"
+            echo "Listing build directory contents for pins.powerbox.sdk:"
+            ls -l
+            echo "Copying to $plugin_dir/extra-libs/PowerBoxSDK.dll"
+            # Use find to locate the .so file regardless of exact name prefix/suffix
+            find . -name "libPowerBoxSDK.so" -exec cp {} "$plugin_dir/extra-libs/PowerBoxSDK.dll" \;
+            if [ ! -f "$plugin_dir/extra-libs/PowerBoxSDK.dll" ]; then
+                echo "Error: PowerBoxSDK.dll was not created!"
+                exit 1
+            fi
             popd >/dev/null
             rm -rf "$powerbox_sdk_tmp"
 
@@ -1028,8 +1035,15 @@ jobs:
             cmake ..
             make
             mkdir -p "$plugin_dir/extra-libs"
-            echo "Copying libMeteoStationSDK.so to $plugin_dir/extra-libs/MeteoStationSDK.dll"
-            cp libMeteoStationSDK.so "$plugin_dir/extra-libs/MeteoStationSDK.dll"
+            echo "Listing build directory contents for pins.meteostation.sdk:"
+            ls -l
+            echo "Copying to $plugin_dir/extra-libs/MeteoStationSDK.dll"
+             # Use find to locate the .so file regardless of exact name prefix/suffix
+            find . -name "libMeteoStationSDK.so" -exec cp {} "$plugin_dir/extra-libs/MeteoStationSDK.dll" \;
+            if [ ! -f "$plugin_dir/extra-libs/MeteoStationSDK.dll" ]; then
+                echo "Error: MeteoStationSDK.dll was not created!"
+                exit 1
+            fi
             popd >/dev/null
             rm -rf "$meteostation_sdk_tmp"
 
@@ -1082,10 +1096,29 @@ jobs:
             rm -f "$exclude_list"
             find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??-??" -exec rm -rf {} +
             find "$install_root" -mindepth 1 -maxdepth 1 -type d -name "??" -exec rm -rf {} +
+            
+            # --- START Pins Plugin Specific Extra Libs Handling ---
             extra_libs="$plugin_dir/extra-libs"
+            echo "Checking essential SDK libraries in $extra_libs..."
             if [ -d "$extra_libs" ]; then
-              find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
+              ls -l "$extra_libs"
+              
+              if [ ! -f "$extra_libs/PowerBoxSDK.dll" ]; then
+                  echo "CRITICAL: PowerBoxSDK.dll missing in extra-libs!"
+                  exit 1
+              fi
+              if [ ! -f "$extra_libs/MeteoStationSDK.dll" ]; then
+                  echo "CRITICAL: MeteoStationSDK.dll missing in extra-libs!"
+                  exit 1
+              fi
+
+              find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp -v {} "$install_root/" \;
+            else
+               echo "CRITICAL: extra-libs directory not found!"
+               exit 1
             fi
+            # --- END Pins Plugin Specific Extra Libs Handling ---
+
             app_dir="$plugin_dir/app"
             if [ -d "$app_dir" ]; then
               rm -rf "$install_root/app"
