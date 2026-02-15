@@ -1014,8 +1014,8 @@ jobs:
             cmake ..
             make
             mkdir -p "$plugin_dir/extra-libs"
-            echo "Copying libpowerboxsdk.so to $plugin_dir/extra-libs/PowerBoxSDK.dll"
-            cp libpowerboxsdk.so "$plugin_dir/extra-libs/PowerBoxSDK.dll"
+            echo "Copying libPowerBoxSDK.so to $plugin_dir/extra-libs/PowerBoxSDK.dll"
+            cp libPowerBoxSDK.so "$plugin_dir/extra-libs/PowerBoxSDK.dll"
             popd >/dev/null
             rm -rf "$powerbox_sdk_tmp"
 
@@ -1028,8 +1028,8 @@ jobs:
             cmake ..
             make
             mkdir -p "$plugin_dir/extra-libs"
-            echo "Copying libmeteostationsdk.so to $plugin_dir/extra-libs/MeteostationSDK.dll"
-            cp libmeteostationsdk.so "$plugin_dir/extra-libs/MeteostationSDK.dll"
+            echo "Copying libMeteoStationSDK.so to $plugin_dir/extra-libs/MeteoStationSDK.dll"
+            cp libMeteoStationSDK.so "$plugin_dir/extra-libs/MeteoStationSDK.dll"
             popd >/dev/null
             rm -rf "$meteostation_sdk_tmp"
 
