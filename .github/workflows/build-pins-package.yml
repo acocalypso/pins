@@ -1001,6 +1001,9 @@ jobs:
           install_folder="pins.plugin"
           deb_package="pins-plugin-pins"
           plugin_dir=$(dirname "$project_path")
+          # Convert plugin_dir to absolute path to avoid issues inside pushd/popd
+          plugin_dir_abs="$(pwd)/$plugin_dir"
+          
           set +e
           (
             set -euo pipefail
@@ -1013,13 +1016,13 @@ jobs:
             mkdir -p build && cd build
             cmake ..
             make
-            mkdir -p "$plugin_dir/extra-libs"
+            mkdir -p "$plugin_dir_abs/extra-libs"
             echo "Listing build directory contents for pins.powerbox.sdk:"
             ls -l
-            echo "Copying to $plugin_dir/extra-libs/PowerBoxSDK.dll"
+            echo "Copying to $plugin_dir_abs/extra-libs/PowerBoxSDK.dll"
             # Use find to locate the .so file regardless of exact name prefix/suffix
-            find . -name "libPowerBoxSDK.so" -exec cp {} "$plugin_dir/extra-libs/PowerBoxSDK.dll" \;
-            if [ ! -f "$plugin_dir/extra-libs/PowerBoxSDK.dll" ]; then
+            find . -name "libPowerBoxSDK.so" -exec cp {} "$plugin_dir_abs/extra-libs/PowerBoxSDK.dll" \;
+            if [ ! -f "$plugin_dir_abs/extra-libs/PowerBoxSDK.dll" ]; then
                 echo "Error: PowerBoxSDK.dll was not created!"
                 exit 1
             fi
@@ -1034,13 +1037,13 @@ jobs:
             mkdir -p build && cd build
             cmake ..
             make
-            mkdir -p "$plugin_dir/extra-libs"
+            mkdir -p "$plugin_dir_abs/extra-libs"
             echo "Listing build directory contents for pins.meteostation.sdk:"
             ls -l
-            echo "Copying to $plugin_dir/extra-libs/MeteoStationSDK.dll"
+            echo "Copying to $plugin_dir_abs/extra-libs/MeteoStationSDK.dll"
              # Use find to locate the .so file regardless of exact name prefix/suffix
-            find . -name "libMeteoStationSDK.so" -exec cp {} "$plugin_dir/extra-libs/MeteoStationSDK.dll" \;
-            if [ ! -f "$plugin_dir/extra-libs/MeteoStationSDK.dll" ]; then
+            find . -name "libMeteoStationSDK.so" -exec cp {} "$plugin_dir_abs/extra-libs/MeteoStationSDK.dll" \;
+            if [ ! -f "$plugin_dir_abs/extra-libs/MeteoStationSDK.dll" ]; then
                 echo "Error: MeteoStationSDK.dll was not created!"
                 exit 1
             fi
