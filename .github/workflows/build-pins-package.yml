@@ -999,6 +999,35 @@ jobs:
           set +e
           (
             set -euo pipefail
+
+            # Build pins.powerbox.sdk
+            echo "Building pins.powerbox.sdk..."
+            powerbox_sdk_tmp="$(mktemp -d)"
+            git clone --recursive https://github.com/nitr57/pins.powerbox.sdk "$powerbox_sdk_tmp"
+            pushd "$powerbox_sdk_tmp" >/dev/null
+            mkdir -p build && cd build
+            cmake ..
+            make
+            mkdir -p "$plugin_dir/extra-libs"
+            echo "Copying libpowerboxsdk.so to $plugin_dir/extra-libs/PowerBoxSDK.dll"
+            cp libpowerboxsdk.so "$plugin_dir/extra-libs/PowerBoxSDK.dll"
+            popd >/dev/null
+            rm -rf "$powerbox_sdk_tmp"
+
+            # Build pins.meteostation.sdk
+            echo "Building pins.meteostation.sdk..."
+            meteostation_sdk_tmp="$(mktemp -d)"
+            git clone --recursive https://github.com/nitr57/pins.meteostation.sdk "$meteostation_sdk_tmp"
+            pushd "$meteostation_sdk_tmp" >/dev/null
+            mkdir -p build && cd build
+            cmake ..
+            make
+            mkdir -p "$plugin_dir/extra-libs"
+            echo "Copying libmeteostationsdk.so to $plugin_dir/extra-libs/MeteostationSDK.dll"
+            cp libmeteostationsdk.so "$plugin_dir/extra-libs/MeteostationSDK.dll"
+            popd >/dev/null
+            rm -rf "$meteostation_sdk_tmp"
+
             assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
             if [ ! -f "$assembly_info" ]; then
               assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
