@@ -85,7 +85,6 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                 }
 
                 /* QHYCCD */
-/*
                 try {
                     var qhy = new QHYCameras(exposureDataFactory);
                     uint numCameras = qhy.Count;
@@ -103,7 +102,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                 } catch (Exception ex) {
                     Logger.Error(ex);
                 }
-*/
+
                 ///* Player One */
                 //try {
                 //    var provider = new PlayerOneProvider(profileService, exposureDataFactory);
@@ -120,7 +119,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                     Logger.Info($"Found {toupTekCameras?.Length} ToupTek Cameras");
                     foreach (var instance in toupTekCameras) {
                         var info = instance.ToDeviceInfo();
-                        if(((ToupTekAlikeFlag)info.model.flag & ToupTekAlikeFlag.FLAG_FILTERWHEEL) > 0) { continue; }
+                        if (((ToupTekAlikeFlag)info.model.flag & ToupTekAlikeFlag.FLAG_FILTERWHEEL) > 0) { continue; }
                         if (((ToupTekAlikeFlag)info.model.flag & ToupTekAlikeFlag.FLAG_AUTOFOCUSER) > 0) { continue; }
                         var cam = new ToupTekAlikeCamera(info, new ToupTekSDKWrapper(), profileService, exposureDataFactory);
                         devices.Add(cam);
@@ -252,7 +251,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                 try {
                     var gpCameras = GPSDK.GPSDK.Enum();
                     Logger.Info($"Found {gpCameras.Count} libgphoto2 Cameras");
-                    foreach(var cam in gpCameras){
+                    foreach (var cam in gpCameras) {
                         devices.Add(new GPCamera(cam.Key, cam.Value, profileService, exposureDataFactory));
                     }
                 } catch (Exception ex) {
