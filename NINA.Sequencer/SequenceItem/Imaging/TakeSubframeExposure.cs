@@ -376,6 +376,7 @@ namespace NINA.Sequencer.SequenceItem.Imaging {
         public bool Validate() {
             var i = new List<string>();
             CameraInfo = this.cameraMediator.GetInfo();
+            GainExpression.IsValid = OffsetExpression.IsValid = CameraInfo.Connected;
             if (!CameraInfo.Connected) {
                 i.Add(Loc.Instance["LblCameraNotConnected"]);
             } else {
@@ -396,10 +397,16 @@ namespace NINA.Sequencer.SequenceItem.Imaging {
             }
             if (GainExpression.Default != CameraInfo.DefaultGain) {
                 GainExpression.Default = CameraInfo.DefaultGain;
+                if (GainExpression.Definition.Length == 0) {
+                    GainExpression.Definition = "";
+                }
             }
 
             if (OffsetExpression.Default != CameraInfo.DefaultOffset) {
                 OffsetExpression.Default = CameraInfo.DefaultOffset;
+                if (OffsetExpression.Definition.Length == 0) {
+                    OffsetExpression.Definition = "";
+                }
             }
 
             Expression.ValidateExpressions(i, ExposureTimeExpression, GainExpression, OffsetExpression, LeftExpression, TopExpression, WidthExpression, HeightExpression);
