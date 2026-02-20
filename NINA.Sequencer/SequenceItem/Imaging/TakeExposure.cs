@@ -95,7 +95,7 @@ namespace NINA.Sequencer.SequenceItem.Imaging {
         public partial double ExposureTime { get; set; }
 
 
-        [IsExpression(Default = -1, DefaultString = "LblCamera", HasValidator = true)]
+        [IsExpression(AutoValue = -1, DefaultString = "LblCamera", HasValidator = true)]
         public partial int Gain { get; set; }
 
         partial void GainExpressionValidator(Expression expr) {
@@ -104,7 +104,7 @@ namespace NINA.Sequencer.SequenceItem.Imaging {
             }
         }
 
-        [IsExpression(Default = -1, DefaultString = "LblCamera", HasValidator = true)]
+        [IsExpression(AutoValue = -1, DefaultString = "LblCamera", HasValidator = true)]
         public partial int Offset { get; set; }
 
         partial void OffsetExpressionValidator(Expression expr) {
@@ -257,6 +257,7 @@ namespace NINA.Sequencer.SequenceItem.Imaging {
         public bool Validate() {
             var i = new List<string>();
             CameraInfo = this.cameraMediator.GetInfo();
+            GainExpression.IsValid = OffsetExpression.IsValid = CameraInfo.Connected;
             if (!CameraInfo.Connected) {
                 i.Add(Loc.Instance["LblCameraNotConnected"]);
             } else {
@@ -268,6 +269,7 @@ namespace NINA.Sequencer.SequenceItem.Imaging {
                 }
             }
 
+            // Test added to simplify unit test...
             var fileSettings = profileService.ActiveProfile.ImageFileSettings;
 
             if (string.IsNullOrWhiteSpace(fileSettings.FilePath)) {
@@ -278,10 +280,16 @@ namespace NINA.Sequencer.SequenceItem.Imaging {
 
             if (GainExpression.Default != CameraInfo.DefaultGain) {
                 GainExpression.Default = CameraInfo.DefaultGain;
+                if (GainExpression.Definition.Length == 0) {
+                    GainExpression.Definition = "";
+                }
             }
 
             if (OffsetExpression.Default != CameraInfo.DefaultOffset) {
                 OffsetExpression.Default = CameraInfo.DefaultOffset;
+                if (OffsetExpression.Definition.Length == 0) {
+                    OffsetExpression.Definition = "";
+                }
             }
 
             Expression.ValidateExpressions(i, ExposureTimeExpression, GainExpression, OffsetExpression);

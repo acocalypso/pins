@@ -43,6 +43,7 @@ namespace NINA.Sequencer.Logic {
             Symbol = cloneMe.Symbol;
             Range = cloneMe.Range;
             Default = cloneMe.Default;
+            AutoValue = cloneMe.AutoValue;
             DefaultString = cloneMe.DefaultString;
             Validator = validator;
             Context = context;
@@ -72,21 +73,46 @@ namespace NINA.Sequencer.Logic {
             }
         } = double.NaN;
 
+        public double AutoValue {
+            get => field;
+            set {
+                field = value;
+                RaisePropertyChanged();
+            }
+        } = double.NaN;
+
+        public bool IsValid {
+            get;
+            set {
+                field = value;
+                RaisePropertyChanged();
+            }
+        } = false;
+
+
         public string DefaultString {
+            // First things first; this Property is only used if Definition is empty
             get {
-                if (double.IsNaN(Default) && Definition.Length == 0) {
-                    return "";
-                } else if (string.IsNullOrWhiteSpace(field)) {
-                    return Default.ToString(CultureInfo.InvariantCulture);
-                } else if (field.StartsWith("Lbl")) {
-                    return $"{{{Loc.Instance[field]}}}";
+                // If Definition is Empty, use DefaultString field (localized or not)
+                // Otherwise, use the actual Default value
+                try {
+                    if ((Value == AutoValue || !IsValid) && !string.IsNullOrWhiteSpace(field)) {
+                        if (field.StartsWith("Lbl")) {
+                            return $"{Loc.Instance[field]}";
+                        } else {
+                            return "{" + field + "}";
+                        }
+                    } else {
+                        return Default.ToString(CultureInfo.InvariantCulture);
+                    }
+                } finally {
                 }
-                return field;
             }
             set {
                 field = value;
+                RaisePropertyChanged(nameof(DefaultString));
             }
-        } = null;
+        }
 
         [JsonProperty]
         public virtual string Definition {
@@ -113,6 +139,7 @@ namespace NINA.Sequencer.Logic {
                     ForceAnnotated = false;
                     RaisePropertyChanged(nameof(Error));
                     RaisePropertyChanged(nameof(IsAnnotated));
+                    RaisePropertyChanged(nameof(DefaultString));
                     return;
                 }
 
@@ -196,6 +223,7 @@ namespace NINA.Sequencer.Logic {
                 RaisePropertyChanged(nameof(ValueString));
                 RaisePropertyChanged(nameof(StringValue));
                 RaisePropertyChanged(nameof(IsAnnotated));
+                RaisePropertyChanged(nameof(DefaultString));
             }
         } = "";
 
@@ -340,7 +368,7 @@ namespace NINA.Sequencer.Logic {
                     } else
                         return local.ToString(CultureInfo.CurrentCulture);
                 } else {
-                    if (!double.IsNaN(Default) && Value == Default) {
+                    if ((Value == AutoValue) || (!double.IsNaN(Default) && Value == Default)) {
                         return DefaultString;
                     }
 
