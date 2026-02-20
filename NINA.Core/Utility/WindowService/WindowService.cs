@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -33,16 +33,16 @@ namespace NINA.Core.Utility.WindowService {
     public class WindowService : IWindowService {
         protected Dispatcher dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         protected CustomWindow window;
-        
+
         // Track which content objects already have event handlers to prevent duplicates
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<object, bool> _subscribedContent = new();
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<object, PropertyChangedEventHandler> _eventHandlers = new();
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<object, System.Threading.Timer> _debounceTimers = new();
-        
+
         // Track WindowService instances for debugging
         private static int _instanceCounter = 0;
         private readonly int _instanceId;
-        
+
         public WindowService() {
             _instanceId = System.Threading.Interlocked.Increment(ref _instanceCounter);
         }
@@ -86,12 +86,12 @@ namespace NINA.Core.Utility.WindowService {
                 }
                 return;
             }
-            
+
             await dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => {
-                try { 
-                    window?.Close(); 
-                } catch (Exception e) { 
-                    Logger.Error(e); 
+                try {
+                    window?.Close();
+                } catch (Exception e) {
+                    Logger.Error(e);
                 }
             }));
         }
@@ -111,7 +111,7 @@ namespace NINA.Core.Utility.WindowService {
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Content = content
             };
-            
+
             if (closeCommand == null) {
                 window.CloseCommand = new RelayCommand((object o) => window.Close());
             } else {
@@ -134,11 +134,14 @@ namespace NINA.Core.Utility.WindowService {
         public IDispatcherOperationWrapper ShowDialog(object content, string title = "", ResizeMode resizeMode = ResizeMode.NoResize, WindowStyle windowStyle = WindowStyle.None, ICommand closeCommand = null) {
             // Check if running in headless mode
             if (System.Windows.DialogService.IsHeadless()) {
-                ShowViaDialogService(content, title, closeCommand);
-                // Return a completed dispatcher operation for headless mode
-                return new DispatcherOperationWrapper(dispatcher.BeginInvoke(DispatcherPriority.Normal, () => { }));
+                // Return a wrapper whose Task completes when the DialogService dialog is closed
+                var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                // Pass a callback so DialogService will set the TCS when dialog is closed
+                _ = ShowViaDialogService(content, title, closeCommand, (result) => tcs.TrySetResult(result));
+
+                return new HeadlessDispatcherOperationWrapper(dispatcher, tcs.Task);
             }
-            
+
             return new DispatcherOperationWrapper(dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => {
                 try {
                     window = GenerateWindow(content, title, resizeMode, windowStyle, closeCommand);
@@ -159,17 +162,17 @@ namespace NINA.Core.Utility.WindowService {
         public event EventHandler OnDialogResultChanged;
 
         public event EventHandler OnClosed;
-        
+
         /// <summary>
         /// Clean up event handlers for a specific content object
         /// Called by DialogService when dialog closes
         /// </summary>
         public static void CleanupEventHandlersForContent(object content) {
             if (content == null) return;
-            
+
             // Remove from subscription tracking FIRST (this stops pending timer callbacks)
             _subscribedContent.TryRemove(content, out _);
-            
+
             // Stop and dispose the debounce timer if it exists
             if (_debounceTimers.TryRemove(content, out var timer)) {
                 try {
@@ -180,7 +183,7 @@ namespace NINA.Core.Utility.WindowService {
                     // Timer might already be disposed or firing, ignore
                 }
             }
-            
+
             // Unsubscribe the event handler if it exists
             if (_eventHandlers.TryRemove(content, out var handler)) {
                 if (content is INotifyPropertyChanged notifyObj) {
@@ -189,21 +192,27 @@ namespace NINA.Core.Utility.WindowService {
             }
         }
 
-        private void ShowViaDialogService(object content, string title, ICommand closeCommand = null) {
+        private int ShowViaDialogService(object content, string title, ICommand closeCommand = null, Action<bool> resultCallback = null) {
             try {
                 var contentType = content?.GetType().FullName ?? "UnknownWindow";
-                
+
+                // Compose a ResultCallback that invokes both the external callback (if provided)
+                // and the closeCommand (if provided)
+                Action<bool> composedCallback = (result) => {
+                    try { resultCallback?.Invoke(result); } catch { }
+                    try {
+                        if (closeCommand != null && closeCommand.CanExecute(result)) {
+                            closeCommand.Execute(result);
+                        }
+                    } catch { }
+                };
+
                 var dialog = new DialogService.DialogInfo {
                     Title = title ?? "Dialog",
                     Message = ExtractMessage(content),
                     ContentType = contentType,
                     DataContext = content,
-                    ResultCallback = (result) => {
-                        // Execute the close command if provided
-                        if (closeCommand != null && closeCommand.CanExecute(result)) {
-                            closeCommand.Execute(result);
-                        }
-                    }
+                    ResultCallback = composedCallback
                 };
 
                 // Extract content properties
@@ -212,15 +221,15 @@ namespace NINA.Core.Utility.WindowService {
                 }
 
                 int dialogId = DialogService.RegisterDialog(dialog);
-                
+
                 // Subscribe to property changes for real-time updates
                 // Only subscribe once per content object to prevent duplicate broadcasts
                 if (content is INotifyPropertyChanged notifyObj && _subscribedContent.TryAdd(content, true)) {
                     PropertyChangedEventHandler handler = null;
                     handler = (sender, e) => {
-                        
+
                         // Debounce: Reset timer on each property change, only broadcast after 100ms of silence
-                        var timer = _debounceTimers.AddOrUpdate(content, 
+                        var timer = _debounceTimers.AddOrUpdate(content,
                             // Add new timer
                             key => new System.Threading.Timer(_ => {
                                 _ = Task.Run(async () => {
@@ -229,7 +238,7 @@ namespace NINA.Core.Utility.WindowService {
                                         if (!_subscribedContent.ContainsKey(content)) {
                                             return; // Dialog was closed, don't broadcast
                                         }
-                                        
+
                                         var broadcaster = SignalR.DialogBroadcaster.Instance;
                                         if (broadcaster != null) {
                                             var parameters = dialog.Content.ToDictionary(
@@ -243,14 +252,14 @@ namespace NINA.Core.Utility.WindowService {
                                                 Active = true,
                                                 Status = ExtractMessage(content),
                                                 Parameters = parameters,
-                                                AvailableCommands = ["Cancel"]
+                                                AvailableCommands = new List<string> { "Close" }
                                             };
 
                                             // Special handling for PlateSolvingStatusVM
                                             if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.PlateSolvingStatusVM") {
                                                 dialogData.SlewAndCenter = ExtractSlewAndCenterData(content);
                                             }
-                                            
+
                                             // Special handling for MeridianFlipVM
                                             if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.MeridianFlipVM") {
                                                 dialogData.MeridianFlip = ExtractMeridianFlipData(content);
@@ -268,18 +277,18 @@ namespace NINA.Core.Utility.WindowService {
                                 existingTimer.Change(100, System.Threading.Timeout.Infinite); // Reset to 100ms
                                 return existingTimer;
                             });
-                        
+
                         // Start/restart the timer
                         timer.Change(100, System.Threading.Timeout.Infinite);
                     };
-                    
+
                     // Subscribe the handler
                     notifyObj.PropertyChanged += handler;
-                    
+
                     // Store handler for cleanup
                     _eventHandlers[content] = handler;
                 }
-                
+
                 // Subscribe to PlateSolveHistory collection changes for PlateSolvingStatusVM
                 if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.PlateSolvingStatusVM") {
                     var historyProp = content.GetType().GetProperty("PlateSolveHistory");
@@ -293,7 +302,7 @@ namespace NINA.Core.Utility.WindowService {
                                         if (!_subscribedContent.ContainsKey(content)) {
                                             return; // Dialog was closed, don't broadcast
                                         }
-                                        
+
                                         var broadcaster = NINA.Core.SignalR.DialogBroadcaster.Instance;
                                         if (broadcaster != null) {
                                             var parameters = dialog.Content.ToDictionary(
@@ -307,7 +316,7 @@ namespace NINA.Core.Utility.WindowService {
                                                 Active = true,
                                                 Status = ExtractMessage(content),
                                                 Parameters = parameters,
-                                                AvailableCommands = ["Cancel"],
+                                                AvailableCommands = new List<string> { "Close" },
                                                 SlewAndCenter = ExtractSlewAndCenterData(content),
                                                 MeridianFlip = ExtractMeridianFlipData(content)
                                             };
@@ -322,10 +331,10 @@ namespace NINA.Core.Utility.WindowService {
                         }
                     }
                 }
-                
+
                 // Add a Cancel button (all dialogs should be cancellable)
-                DialogService.AddButton(dialogId, "Cancel", "Cancel", isDefault: false, isCancel: true, onClick: null);
-                
+                DialogService.AddButton(dialogId, "Close", "Close", isDefault: false, isCancel: true, onClick: null);
+
                 // Broadcast via SignalR immediately
                 _ = Task.Run(async () => {
                     try {
@@ -333,7 +342,7 @@ namespace NINA.Core.Utility.WindowService {
                         if (!_subscribedContent.ContainsKey(content)) {
                             return; // Dialog was closed before broadcast, don't broadcast
                         }
-                        
+
                         var broadcaster = SignalR.DialogBroadcaster.Instance;
                         if (broadcaster != null) {
                             // Convert object dictionary to string dictionary for Parameters
@@ -348,27 +357,30 @@ namespace NINA.Core.Utility.WindowService {
                                 Active = true,
                                 Status = ExtractMessage(content),
                                 Parameters = parameters,
-                                AvailableCommands = ["Cancel"]
+                                AvailableCommands = new List<string> { "Close" }
                             };
 
                             // Special handling for PlateSolvingStatusVM
                             if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.PlateSolvingStatusVM") {
                                 dialogData.SlewAndCenter = ExtractSlewAndCenterData(content);
                             }
-                            
+
                             // Special handling for MeridianFlipVM
                             if (content?.GetType().FullName == "NINA.WPF.Base.ViewModel.MeridianFlipVM") {
                                 dialogData.MeridianFlip = ExtractMeridianFlipData(content);
                             }
-                            
+
                             await broadcaster.BroadcastDialogAsync(dialogData);
                         }
                     } catch (Exception ex) {
                         Logger.Error($"Failed to broadcast dialog via SignalR: {ex}");
                     }
                 });
+
+                return dialogId;
             } catch (Exception ex) {
                 Logger.Error($"WindowService.ShowViaDialogService() failed: {ex}");
+                return -1;
             }
         }
 
@@ -405,12 +417,12 @@ namespace NINA.Core.Utility.WindowService {
         private Model.SlewAndCenterData ExtractSlewAndCenterData(object content) {
             try {
                 var type = content.GetType();
-                
+
                 // Get Status property (ApplicationStatus object)
                 var statusProp = type.GetProperty("Status");
                 var statusObj = statusProp?.GetValue(content);
                 var statusMessage = "";
-                
+
                 if (statusObj != null) {
                     // ApplicationStatus has a Status property with the actual message
                     var statusType = statusObj.GetType();
@@ -425,7 +437,7 @@ namespace NINA.Core.Utility.WindowService {
                 // Get PlateSolveHistory collection
                 var historyProp = type.GetProperty("PlateSolveHistory");
                 var historyCollection = historyProp?.GetValue(content);
-                
+
                 var measurements = new List<Model.DialogMeasurement>();
                 Model.DialogMeasurement currentMeasurement = null;
 
@@ -436,7 +448,7 @@ namespace NINA.Core.Utility.WindowService {
                         foreach (var item in enumerableType) {
                             itemsList.Add(item);
                         }
-                        
+
                         // Get the last item as current measurement
                         if (itemsList.Count > 0) {
                             var lastItem = itemsList[itemsList.Count - 1];
@@ -459,7 +471,7 @@ namespace NINA.Core.Utility.WindowService {
                     CurrentMeasurement = currentMeasurement,
                     Measurements = measurements
                 };
-                
+
                 return result;
             } catch (Exception ex) {
                 Logger.Error($"Failed to extract SlewAndCenter data: {ex}");
@@ -470,20 +482,20 @@ namespace NINA.Core.Utility.WindowService {
         private Model.DialogMeasurement ConvertToMeasurement(object result) {
             try {
                 var type = result.GetType();
-                
+
                 // Get SolveTime
                 var solveTimeProp = type.GetProperty("SolveTime");
                 var solveTime = solveTimeProp?.GetValue(result) as DateTime?;
-                
+
                 // Get Success
                 var successProp = type.GetProperty("Success");
                 var success = (bool)(successProp?.GetValue(result) ?? false);
-                
+
                 // Get Separation (error distance)
                 var separationProp = type.GetProperty("Separation");
                 var separation = separationProp?.GetValue(result);
                 var errorDistance = separation?.ToString() ?? "--";
-                
+
                 // Get Position Angle (rotation)
                 var posAngleProp = type.GetProperty("PositionAngle");
                 var posAngle = posAngleProp?.GetValue(result);
@@ -504,35 +516,35 @@ namespace NINA.Core.Utility.WindowService {
         private Model.MeridianFlipData ExtractMeridianFlipData(object content) {
             try {
                 var type = content.GetType();
-                
+
                 // Get Steps property (AutomatedWorkflow)
                 var stepsProp = type.GetProperty("Steps");
                 var stepsObj = stepsProp?.GetValue(content);
-                
+
                 // Get ActiveStep property to determine current step
                 var activeStepProp = stepsObj?.GetType().GetProperty("ActiveStep");
                 var activeStep = activeStepProp?.GetValue(stepsObj);
-                
+
                 var steps = new List<Model.MeridianFlipStep>();
-                
+
                 if (stepsObj != null && stepsObj is System.Collections.IEnumerable stepsCollection) {
                     foreach (var step in stepsCollection) {
                         if (step == null) continue;
-                        
+
                         var stepType = step.GetType();
                         var idProp = stepType.GetProperty("Id");
                         var titleProp = stepType.GetProperty("Title");
                         var finishedProp = stepType.GetProperty("Finished");
                         var isCurrentProp = stepType.GetProperty("IsCurrent");
                         var timeRemainingProp = stepType.GetProperty("TimeRemaining");
-                        
+
                         if (idProp != null && titleProp != null && finishedProp != null) {
                             var timeRemainingValue = timeRemainingProp?.GetValue(step);
                             double? timeRemaining = null;
                             if (timeRemainingValue != null && double.TryParse(timeRemainingValue.ToString(), out double timeValue)) {
                                 timeRemaining = timeValue;
                             }
-                            
+
                             steps.Add(new Model.MeridianFlipStep {
                                 Id = idProp.GetValue(step)?.ToString() ?? "",
                                 Title = titleProp.GetValue(step)?.ToString() ?? "",
@@ -543,13 +555,13 @@ namespace NINA.Core.Utility.WindowService {
                         }
                     }
                 }
-                
+
                 var result = new Model.MeridianFlipData {
                     Active = true,
                     StepCount = steps.Count,
                     Steps = steps
                 };
-                
+
                 return result;
             } catch (Exception ex) {
                 Logger.Error($"Failed to extract MeridianFlip data: {ex}");
@@ -640,6 +652,44 @@ namespace NINA.Core.Utility.WindowService {
             add => op.Completed += value;
             remove => op.Completed -= value;
         }
+    }
+
+    /// <summary>
+    /// A lightweight wrapper used for headless mode so ShowDialog() returns a Task
+    /// that completes when the DialogService dialog is closed.
+    /// </summary>
+    public class HeadlessDispatcherOperationWrapper : IDispatcherOperationWrapper {
+        private readonly Dispatcher _dispatcher;
+        private readonly Task _task;
+        private DispatcherPriority _priority = DispatcherPriority.Normal;
+
+        public HeadlessDispatcherOperationWrapper(Dispatcher dispatcher, Task task) {
+            _dispatcher = dispatcher;
+            _task = task ?? Task.CompletedTask;
+            _task.ContinueWith(t => Completed?.Invoke(this, EventArgs.Empty), TaskScheduler.Default);
+        }
+
+        public Dispatcher Dispatcher => _dispatcher;
+        public DispatcherPriority Priority { get => _priority; set => _priority = value; }
+        public DispatcherOperationStatus Status => _task.IsCompleted ? DispatcherOperationStatus.Completed : DispatcherOperationStatus.Pending;
+        public Task Task => _task;
+        public object Result => null;
+        public TaskAwaiter GetAwaiter() => _task.GetAwaiter();
+
+        public DispatcherOperationStatus Wait() {
+            _task.Wait();
+            return DispatcherOperationStatus.Completed;
+        }
+
+        public DispatcherOperationStatus Wait(TimeSpan timeout) {
+            var completed = Task.WaitAny(new Task[] { _task }, timeout) == 0;
+            return completed ? DispatcherOperationStatus.Completed : DispatcherOperationStatus.Pending;
+        }
+
+        public bool Abort() { return false; }
+
+        public event EventHandler Aborted;
+        public event EventHandler Completed;
     }
 
     public class DialogResultEventArgs : EventArgs {
