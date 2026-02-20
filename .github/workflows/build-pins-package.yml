@@ -35,7 +35,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libudev-dev
+          sudo apt-get install -y libudev-dev libjsoncpp-dev libgpiod-dev
 
       - name: Clone plugins
         shell: bash
