@@ -410,6 +410,9 @@ jobs:
             {
               echo "#!/bin/sh"
               echo "set -e"
+              # Ensure parent directories have correct ownership
+              echo "chown pi:pi $(dirname ${{ env.PLUGINS_INSTALL_BASE }}) || true"
+              echo "chown pi:pi ${{ env.PLUGINS_INSTALL_BASE }} || true"
               echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
               echo "exit 0"
             } > "$control_dir/postinst"
@@ -504,6 +507,9 @@ jobs:
             {
               echo "#!/bin/sh"
               echo "set -e"
+              # Ensure parent directories have correct ownership
+              echo "chown pi:pi $(dirname ${{ env.PLUGINS_INSTALL_BASE }}) || true"
+              echo "chown pi:pi ${{ env.PLUGINS_INSTALL_BASE }} || true"
               echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
               echo "exit 0"
             } > "$control_dir/postinst"
@@ -598,6 +604,9 @@ jobs:
             {
               echo "#!/bin/sh"
               echo "set -e"
+              # Ensure parent directories have correct ownership
+              echo "chown pi:pi $(dirname ${{ env.PLUGINS_INSTALL_BASE }}) || true"
+              echo "chown pi:pi ${{ env.PLUGINS_INSTALL_BASE }} || true"
               echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
               echo "exit 0"
             } > "$control_dir/postinst"
@@ -692,6 +701,9 @@ jobs:
             {
               echo "#!/bin/sh"
               echo "set -e"
+              # Ensure parent directories have correct ownership
+              echo "chown pi:pi $(dirname ${{ env.PLUGINS_INSTALL_BASE }}) || true"
+              echo "chown pi:pi ${{ env.PLUGINS_INSTALL_BASE }} || true"
               echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
               echo "exit 0"
             } > "$control_dir/postinst"
@@ -793,6 +805,9 @@ jobs:
             {
               echo "#!/bin/sh"
               echo "set -e"
+              # Ensure parent directories have correct ownership
+              echo "chown pi:pi $(dirname ${{ env.PLUGINS_INSTALL_BASE }}) || true"
+              echo "chown pi:pi ${{ env.PLUGINS_INSTALL_BASE }} || true"
               echo "chown -R pi:pi \"${{ env.PLUGINS_INSTALL_BASE }}/$install_folder\" || true"
               echo "exit 0"
             } > "$control_dir/postinst"
@@ -887,6 +902,9 @@ jobs:
             {
               echo "#!/bin/sh"
               echo "set -e"
+              # Ensure parent directories have correct ownership
+              echo "chown pi:pi $(dirname ${{ env.PLUGINS_INSTALL_BASE }}) || true"
+              echo "chown pi:pi ${{ env.PLUGINS_INSTALL_BASE }} || true"
               echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
               echo "exit 0"
             } > "$control_dir/postinst"
@@ -989,6 +1007,9 @@ jobs:
             {
               echo "#!/bin/sh"
               echo "set -e"
+              # Ensure parent directories have correct ownership
+              echo "chown pi:pi $(dirname ${{ env.PLUGINS_INSTALL_BASE }}) || true"
+              echo "chown pi:pi ${{ env.PLUGINS_INSTALL_BASE }} || true"
               echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
               echo "exit 0"
             } > "$control_dir/postinst"
@@ -1155,6 +1176,9 @@ jobs:
             {
               echo "#!/bin/sh"
               echo "set -e"
+              # Ensure parent directories have correct ownership
+              echo "chown pi:pi $(dirname ${{ env.PLUGINS_INSTALL_BASE }}) || true"
+              echo "chown pi:pi ${{ env.PLUGINS_INSTALL_BASE }} || true"
               echo "chown -R pi:pi ${{ env.PLUGINS_INSTALL_BASE }}/$install_folder || true"
               echo "exit 0"
             } > "$control_dir/postinst"
