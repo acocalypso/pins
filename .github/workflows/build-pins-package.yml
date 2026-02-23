@@ -286,6 +286,7 @@ jobs:
           mkdir -p build/usr/local/bin
           mkdir -p build/etc/systemd/system
           mkdir -p build/etc/sudoers.d
+          mkdir -p build/home/pi/pins-scripts
           mkdir -p build/DEBIAN
           
           # App files
@@ -294,10 +295,15 @@ jobs:
           cp README.md build/opt/pinsdaemon/
           
           # Scripts
+
           cp scripts/system-upgrade.sh build/usr/local/bin/
           cp scripts/manage-samba.sh build/usr/local/bin/
           cp scripts/wifi-connect.sh build/usr/local/bin/
+          cp scripts/wifi-automanage.py build/usr/local/bin/
           cp scripts/wifi-scan.py build/usr/local/bin/
+          
+          # Hotspot hook script
+          cp scripts/hotspot.sh build/home/pi/pins-scripts/
           
           # Systemd
           cp systemd/sysupdate-api.service build/etc/systemd/system/
