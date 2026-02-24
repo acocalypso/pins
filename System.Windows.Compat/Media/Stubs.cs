@@ -41,7 +41,9 @@ namespace System.Windows.Media {
         public static Color GreenYellow => Color.FromRgb(173, 255, 47);
     }
 
-    public abstract class ImageSource { }
+    public abstract class ImageSource : IDisposable {
+        public abstract void Dispose();
+    }
 
     public class GeometryGroup : Geometry {
         public GeometryCollection Children { get; set; } = new GeometryCollection();
@@ -346,7 +348,7 @@ namespace System.Windows.Media {
     /// </summary>
     public class FontFamily {
         private readonly string _familyName;
-        
+
         public FontFamily(string familyName) {
             _familyName = familyName ?? "Arial";
         }

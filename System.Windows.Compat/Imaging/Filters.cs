@@ -37,7 +37,7 @@ namespace Accord.Imaging.Filters {
             // If already grayscale, just clone
             if (sourceMat.Channels() == 1) {
                 sourceMat.CopyTo(result);
-                return result;
+                return new Bitmap(result);
             }
 
             // Convert to grayscale using custom weights
@@ -66,7 +66,7 @@ namespace Accord.Imaging.Filters {
             foreach (var ch in channels) ch.Dispose();
             temp.Dispose();
 
-            return result;
+            return new Bitmap(result);
         }
 
         public void ApplyInPlace(Bitmap image) {
@@ -97,10 +97,14 @@ namespace Accord.Imaging.Filters {
             // Ensure the crop rectangle is within bounds
             cvRect = cvRect.Intersect(new Rect(0, 0, sourceMat.Width, sourceMat.Height));
 
-            // Crop the Mat
-            Mat croppedMat = new Mat(sourceMat, cvRect);
-
-            return croppedMat;
+            // Crop the Mat and clone to avoid dangling reference to parent Mat
+            // Creating Mat(sourceMat, cvRect) creates a ROI view that references sourceMat.
+            // In concurrent scenarios, if sourceMat is disposed while this ROI is in use,
+            // it will point to invalid data. Clone it for thread safety.
+            using (Mat roiMat = new Mat(sourceMat, cvRect)) {
+                Mat clonedMat = roiMat.Clone();
+                return new Bitmap(clonedMat);
+            }
         }
     }
 
@@ -125,7 +129,7 @@ namespace Accord.Imaging.Filters {
             Mat sourceMat = source;
             Mat result = new Mat();
             Cv2.MedianBlur(sourceMat, result, KernelSize);
-            return result;
+            return new Bitmap(result);
         }
     }
 
@@ -160,7 +164,7 @@ namespace Accord.Imaging.Filters {
             Mat sourceMat = source;
             Mat result = new Mat();
             Cv2.Filter2D(sourceMat, result, sourceMat.Depth(), kernel);
-            return result;
+            return new Bitmap(result);
         }
     }
 
@@ -189,7 +193,7 @@ namespace Accord.Imaging.Filters {
                 ThresholdTypes.Binary,
                 11, 2);
 
-            return result;
+            return new Bitmap(result);
         }
     }
 
@@ -210,7 +214,7 @@ namespace Accord.Imaging.Filters {
             Mat kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new OpenCvSharp.Size(3, 3));
             Cv2.Dilate(sourceMat, result, kernel);
             kernel.Dispose();
-            return result;
+            return new Bitmap(result);
         }
     }
 
@@ -234,7 +238,7 @@ namespace Accord.Imaging.Filters {
             if (kernelSize % 2 == 0) kernelSize++; // Ensure odd
 
             Cv2.GaussianBlur(sourceMat, result, new OpenCvSharp.Size(kernelSize, kernelSize), sigma);
-            return result;
+            return new Bitmap(result);
         }
     }
 
@@ -262,13 +266,13 @@ namespace Accord.Imaging.Filters {
         public Bitmap Apply(Bitmap image) {
             // Create output bitmap
             var output = new Bitmap(image.Width, image.Height, image.PixelFormat);
-            
+
             // Lock both bitmaps
             var sourceData = image.LockBits(
                 new Rectangle(0, 0, image.Width, image.Height),
                 System.Drawing.Imaging.ImageLockMode.ReadOnly,
                 image.PixelFormat);
-            
+
             var destData = output.LockBits(
                 new Rectangle(0, 0, output.Width, output.Height),
                 System.Drawing.Imaging.ImageLockMode.WriteOnly,
@@ -287,7 +291,7 @@ namespace Accord.Imaging.Filters {
 
                 // Create unmanaged image wrapper for destination
                 var unmanagedImage = new UnmanagedImage(destData);
-                
+
                 // Process the filter
                 ProcessFilter(unmanagedImage, new Rectangle(0, 0, image.Width, image.Height));
             } finally {
@@ -310,7 +314,7 @@ namespace Accord.Imaging.Filters {
             try {
                 // Create unmanaged image wrapper
                 var unmanagedImage = new UnmanagedImage(bitmapData);
-                
+
                 // Process the filter
                 ProcessFilter(unmanagedImage, new Rectangle(0, 0, image.Width, image.Height));
             } finally {
@@ -368,8 +372,8 @@ namespace Accord.Imaging.Filters {
         public virtual Bitmap Apply(Bitmap source) {
             // Get the target pixel format
             var sourceFormat = source.PixelFormat;
-            var destFormat = FormatTranslations.ContainsKey(sourceFormat) 
-                ? FormatTranslations[sourceFormat] 
+            var destFormat = FormatTranslations.ContainsKey(sourceFormat)
+                ? FormatTranslations[sourceFormat]
                 : sourceFormat;
 
             // Create destination bitmap

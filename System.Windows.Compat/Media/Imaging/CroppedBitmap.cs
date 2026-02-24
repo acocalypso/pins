@@ -33,10 +33,13 @@ namespace System.Windows.Media.Imaging {
             // Ensure the crop rectangle is within bounds
             cvRect = cvRect.Intersect(new OpenCvSharp.Rect(0, 0, sourceMat.Width, sourceMat.Height));
 
-            // Crop the Mat
-            Mat croppedMat = new Mat(sourceMat, cvRect);
-
-            _mat = croppedMat;
+            // Crop the Mat and clone to avoid dangling reference to parent Mat
+            // Creating Mat(sourceMat, cvRect) creates a ROI view that references sourceMat
+            // If sourceMat is disposed, the view becomes invalid. Clone it instead.
+            using (Mat roiMat = new Mat(sourceMat, cvRect)) {
+                _mat = roiMat.Clone();
+            }
+            AddMemoryPressure();
         }
     }
 }
