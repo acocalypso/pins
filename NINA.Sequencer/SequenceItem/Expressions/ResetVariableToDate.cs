@@ -49,6 +49,10 @@ namespace NINA.Sequencer.SequenceItem.Expressions {
         public ResetVariableToDate(ResetVariableToDate copyMe) : this(copyMe.DateTimeProviders, copyMe.SelectedProvider) {
             if (copyMe != null) {
                 CopyMetaData(copyMe);
+                Hours = copyMe.Hours;
+                Minutes = copyMe.Minutes;
+                Seconds = copyMe.Seconds;
+                MinutesOffset = copyMe.MinutesOffset;
             }
         }
 
@@ -259,10 +263,10 @@ namespace NINA.Sequencer.SequenceItem.Expressions {
                 }
             }
             if (HasFixedTimeProvider) {
-                //var referenceDate = NighttimeCalculator.GetReferenceDate(DateTime.Now);
-                //if (lastReferenceDate != referenceDate) {
+                var referenceDate = NighttimeCalculator.GetReferenceDate(DateTime.Now);
+                if (lastReferenceDate != referenceDate) {
                     UpdateTime();
-                //}
+                }
             } else {
                 DateTime today = System.DateTime.Today;
                 today = today.AddHours(Hours);
