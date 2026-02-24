@@ -18,6 +18,9 @@ namespace System.Windows.Media.Imaging {
     // BitmapSource wraps OpenCvSharp.Mat for headless/OpenCV mode
     public class BitmapSource : ImageSource {
         protected Mat _mat;
+        private bool _disposed;
+        // Bytes of unmanaged memory reported to GC so it can schedule collections appropriately
+        private long _memoryPressure;
 
         public bool CanFreeze => true;
 
@@ -27,13 +30,48 @@ namespace System.Windows.Media.Imaging {
 
         public BitmapSource(Mat source) {
             _mat = source;
+            AddMemoryPressure();
         }
 
         // Constructor for cropping: new BitmapSource(mat, rectangle)
         public BitmapSource(Mat source, System.Drawing.Rectangle rect) {
             // Crop the source Mat using the rectangle
             var cvRect = new OpenCvSharp.Rect(rect.X, rect.Y, rect.Width, rect.Height);
-            _mat = new Mat(source, cvRect);
+            // Clone the ROI to avoid dangling reference to parent Mat
+            // Creating Mat(source, cvRect) creates a view that references source.
+            // If source is disposed, this view becomes invalid. Clone it instead.
+            using (Mat roiMat = new Mat(source, cvRect)) {
+                _mat = roiMat.Clone();
+            }
+            AddMemoryPressure();
+        }
+
+        protected void AddMemoryPressure() {
+            if (_mat != null && !_mat.Empty()) {
+                _memoryPressure = (long)(_mat.Total() * _mat.ElemSize());
+                if (_memoryPressure > 0)
+                    GC.AddMemoryPressure(_memoryPressure);
+            }
+        }
+
+        ~BitmapSource() {
+            Dispose(false);
+        }
+
+        public override void Dispose() {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing) {
+            if (_disposed) return;
+            _disposed = true;
+            if (_memoryPressure > 0) {
+                GC.RemoveMemoryPressure(_memoryPressure);
+                _memoryPressure = 0;
+            }
+            _mat?.Dispose();
+            _mat = null;
         }
 
         public int PixelWidth => _mat.Width;
@@ -173,9 +211,13 @@ namespace System.Windows.Media.Imaging {
                     System.Buffer.MemoryCopy(buffer.ToPointer(), mat.Data.ToPointer(), mat.Total() * mat.ElemSize(), copyBytes);
                 }
             } else {
-                // Complex case: stride doesn't match, copy row by row
-                // The row size is the width * bytes per pixel (not the stride which includes padding)
-                int rowBytes = pixelWidth * mat.ElemSize();
+                // Complex case: stride doesn't match, copy row by row.
+                // Use the minimum of the source row bytes (stride) and the destination row bytes
+                // (mat.Step()) so we never read past the end of the source buffer. When the caller
+                // passes a PixelFormat whose bytes-per-pixel is larger than the format the bitmap
+                // was actually locked as, using mat.ElemSize() * pixelWidth would overshoot the
+                // last source row and cause an AccessViolationException.
+                int rowBytes = (int)System.Math.Min((long)stride, mat.Step());
                 for (int y = 0; y < pixelHeight; y++) {
                     IntPtr srcPtr = buffer + (y * stride);
                     IntPtr dstPtr = mat.Data + (y * (int)mat.Step());
@@ -251,6 +293,7 @@ namespace System.Windows.Media.Imaging {
             // Create a new Mat with the specified dimensions and format
             MatType matType = pixelFormat;
             _mat = new Mat(pixelHeight, pixelWidth, matType);
+            AddMemoryPressure();
         }
 
         public WriteableBitmap(BitmapSource source) : base() {
@@ -265,6 +308,7 @@ namespace System.Windows.Media.Imaging {
             } else {
                 _mat = new Mat();
             }
+            AddMemoryPressure();
         }
     }
 
@@ -294,10 +338,16 @@ namespace System.Windows.Media.Imaging {
             if (stream != null && stream.CanSeek) {
                 stream.Position = 0;
                 var bytes = new byte[stream.Length];
-                stream.Read(bytes, 0, bytes.Length);
+                int bytesRead = 0;
+                int offset = 0;
+                while (offset < bytes.Length && (bytesRead = stream.Read(bytes, offset, bytes.Length - offset)) > 0) {
+                    offset += bytesRead;
+                }
                 var mat = OpenCvSharp.Cv2.ImDecode(bytes, OpenCvSharp.ImreadModes.Unchanged);
                 if (mat != null && !mat.Empty()) {
-                    mat.CopyTo(this);
+                    _mat?.Dispose();
+                    _mat = mat;
+                    AddMemoryPressure();
                 }
             }
         }
@@ -326,6 +376,7 @@ namespace System.Windows.Media.Imaging {
             } else {
                 _mat.SetTo(OpenCvSharp.Scalar.All(0)); // Black
             }
+            AddMemoryPressure();
         }
 
         /// <summary>
@@ -380,8 +431,9 @@ namespace System.Windows.Media.Imaging {
 
                     // Copy to the target ROI
                     var roi = new OpenCvSharp.Rect(x, y, width, height);
-                    var targetRoi = new Mat(_mat, roi);
-                    convertedSource.CopyTo(targetRoi);
+                    using (var targetRoi = new Mat(_mat, roi)) {
+                        convertedSource.CopyTo(targetRoi);
+                    }
 
                     // Cleanup
                     if (convertedSource != resizedSource) {

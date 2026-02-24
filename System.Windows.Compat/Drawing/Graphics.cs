@@ -71,12 +71,12 @@ namespace System.Drawing {
         /// Smoothing mode for rendering (for compatibility)
         /// </summary>
         public SmoothingMode SmoothingMode { get; set; }
-        
+
         /// <summary>
         /// Interpolation mode for image scaling (for compatibility)
         /// </summary>
         public InterpolationMode InterpolationMode { get; set; }
-        
+
         /// <summary>
         /// Pixel offset mode for rendering (for compatibility)
         /// </summary>
@@ -112,7 +112,7 @@ namespace System.Drawing {
 
         public void DrawImage(Image image, int x, int y, int width, int height) {
             if (image == null) return;
-            
+
             // Convert Image to Bitmap if needed
             Bitmap bitmap = image as Bitmap;
             if (bitmap == null) return;
@@ -128,7 +128,7 @@ namespace System.Drawing {
                 // Resize source to fit the specified dimensions
                 using (Mat resized = new Mat()) {
                     Cv2.Resize(srcMat, resized, new OpenCvSharp.Size(roi.Width, roi.Height));
-                    
+
                     // Handle channel conversion if needed
                     if (_canvas.Channels() == resized.Channels()) {
                         resized.CopyTo(_canvas[roi]);
@@ -360,13 +360,19 @@ namespace System.Drawing {
             translation.Set(1, 1, 1.0);
             translation.Set(1, 2, (double)dy);
 
-            if (!_hasTransform) {
-                _transform = translation.Clone();
-            } else {
-                // Combine transformations (multiply matrices)
-                _transform = MultiplyTransforms(_transform, translation);
+            try {
+                if (!_hasTransform) {
+                    _transform = translation.Clone();
+                } else {
+                    // Combine transformations (multiply matrices)
+                    var newTransform = MultiplyTransforms(_transform, translation);
+                    _transform?.Dispose();
+                    _transform = newTransform;
+                }
+                _hasTransform = true;
+            } finally {
+                translation.Dispose();
             }
-            _hasTransform = true;
         }
 
         /// <summary>
@@ -385,12 +391,18 @@ namespace System.Drawing {
             rotation.Set(1, 1, cos);
             rotation.Set(1, 2, 0.0);
 
-            if (!_hasTransform) {
-                _transform = rotation.Clone();
-            } else {
-                _transform = MultiplyTransforms(_transform, rotation);
+            try {
+                if (!_hasTransform) {
+                    _transform = rotation.Clone();
+                } else {
+                    var newTransform = MultiplyTransforms(_transform, rotation);
+                    _transform?.Dispose();
+                    _transform = newTransform;
+                }
+                _hasTransform = true;
+            } finally {
+                rotation.Dispose();
             }
-            _hasTransform = true;
         }
 
         /// <summary>
@@ -419,6 +431,7 @@ namespace System.Drawing {
 
                 // Extract the source region
                 Mat croppedSrc;
+                bool croppedSrcCreated = false;
                 if (srcRect.X == 0 && srcRect.Y == 0 && srcRect.Width == srcMat.Width && srcRect.Height == srcMat.Height) {
                     croppedSrc = srcMat;
                 } else {
@@ -428,14 +441,20 @@ namespace System.Drawing {
                     srcRoi.Y = Math.Max(0, Math.Min(srcRoi.Y, srcMat.Height - 1));
                     srcRoi.Width = Math.Min(srcRoi.Width, srcMat.Width - srcRoi.X);
                     srcRoi.Height = Math.Min(srcRoi.Height, srcMat.Height - srcRoi.Y);
-                    croppedSrc = new Mat(srcMat, srcRoi);
+                    // Clone the ROI to avoid dangling reference to parent Mat
+                    using (Mat roiMat = new Mat(srcMat, srcRoi)) {
+                        croppedSrc = roiMat.Clone();
+                    }
+                    croppedSrcCreated = true;
                 }
 
                 // Resize to destination size if needed
                 Mat resizedSrc = croppedSrc;
+                bool resizedSrcCreated = false;
                 if ((int)destRect.Width != croppedSrc.Width || (int)destRect.Height != croppedSrc.Height) {
                     resizedSrc = new Mat();
                     Cv2.Resize(croppedSrc, resizedSrc, new OpenCvSharp.Size((int)destRect.Width, (int)destRect.Height));
+                    resizedSrcCreated = true;
                 }
 
                 // Ensure source has alpha channel if canvas does
@@ -457,7 +476,7 @@ namespace System.Drawing {
                             new Point2f(srcWithAlpha.Width, 0),
                             new Point2f(0, srcWithAlpha.Height)
                         };
-                        
+
                         // Transform the dest rect corners using the current transform matrix
                         Point2f[] dstPoints = new Point2f[3];
                         for (int i = 0; i < 3; i++) {
@@ -466,30 +485,30 @@ namespace System.Drawing {
                             dstPoints[i].X = (float)(_transform.At<double>(0, 0) * x + _transform.At<double>(0, 1) * y + _transform.At<double>(0, 2));
                             dstPoints[i].Y = (float)(_transform.At<double>(1, 0) * x + _transform.At<double>(1, 1) * y + _transform.At<double>(1, 2));
                         }
-                        
-                        // Get the affine transform from source to transformed destination
-                        Mat affineTransform = Cv2.GetAffineTransform(srcPoints, dstPoints);
-                        
-                        // Apply transformation directly to canvas
-                        using (var transformed = new Mat(_canvas.Size(), _canvas.Type(), Scalar.All(0))) {
-                            Cv2.WarpAffine(srcWithAlpha, transformed, affineTransform, _canvas.Size(), InterpolationFlags.Cubic, BorderTypes.Transparent);
 
-                            // Blend transformed image with canvas using proper alpha compositing
-                            if (transformed.Channels() == 4 && _canvas.Channels() == 4) {
-                                AlphaBlend(transformed, _canvas);
-                            } else {
-                                // For non-alpha channels, just copy non-zero pixels
-                                for (int y = 0; y < _canvas.Height; y++) {
-                                    for (int x = 0; x < _canvas.Width; x++) {
-                                        if (_canvas.Channels() == 4) {
-                                            var pixel = transformed.At<Vec4b>(y, x);
-                                            if (pixel[3] > 0) { // Check alpha
-                                                _canvas.Set(y, x, pixel);
-                                            }
-                                        } else if (_canvas.Channels() == 3) {
-                                            var pixel = transformed.At<Vec3b>(y, x);
-                                            if (pixel[0] > 0 || pixel[1] > 0 || pixel[2] > 0) {
-                                                _canvas.Set(y, x, pixel);
+                        // Get the affine transform from source to transformed destination
+                        using (Mat affineTransform = Cv2.GetAffineTransform(srcPoints, dstPoints)) {
+                            // Apply transformation directly to canvas
+                            using (var transformed = new Mat(_canvas.Size(), _canvas.Type(), Scalar.All(0))) {
+                                Cv2.WarpAffine(srcWithAlpha, transformed, affineTransform, _canvas.Size(), InterpolationFlags.Cubic, BorderTypes.Transparent);
+
+                                // Blend transformed image with canvas using proper alpha compositing
+                                if (transformed.Channels() == 4 && _canvas.Channels() == 4) {
+                                    AlphaBlend(transformed, _canvas);
+                                } else {
+                                    // For non-alpha channels, just copy non-zero pixels
+                                    for (int y = 0; y < _canvas.Height; y++) {
+                                        for (int x = 0; x < _canvas.Width; x++) {
+                                            if (_canvas.Channels() == 4) {
+                                                var pixel = transformed.At<Vec4b>(y, x);
+                                                if (pixel[3] > 0) { // Check alpha
+                                                    _canvas.Set(y, x, pixel);
+                                                }
+                                            } else if (_canvas.Channels() == 3) {
+                                                var pixel = transformed.At<Vec3b>(y, x);
+                                                if (pixel[0] > 0 || pixel[1] > 0 || pixel[2] > 0) {
+                                                    _canvas.Set(y, x, pixel);
+                                                }
                                             }
                                         }
                                     }
@@ -521,14 +540,11 @@ namespace System.Drawing {
                     if (needsAlphaCleanup) {
                         srcWithAlpha?.Dispose();
                     }
-                    if (resizedSrc != croppedSrc) {
+                    if (resizedSrcCreated) {
                         resizedSrc?.Dispose();
                     }
-                    if (resizedSrc != croppedSrc) {
-                        resizedSrc.Dispose();
-                    }
-                    if (croppedSrc != srcMat) {
-                        croppedSrc.Dispose();
+                    if (croppedSrcCreated) {
+                        croppedSrc?.Dispose();
                     }
                 }
             }
@@ -558,20 +574,20 @@ namespace System.Drawing {
             // Alpha blending for BGRA images using pointer-based approach
             if (src.Channels() != 4 || dst.Channels() != 4) return;
             if (src.Width != dst.Width || src.Height != dst.Height) return;
-            
+
             unsafe {
                 byte* srcPtr = (byte*)src.DataPointer;
                 byte* dstPtr = (byte*)dst.DataPointer;
                 int totalPixels = src.Width * src.Height;
-                
+
                 for (int i = 0; i < totalPixels; i++) {
                     int idx = i * 4;
                     byte alpha = srcPtr[idx + 3];
-                    
+
                     if (alpha > 0) {
                         float a = alpha / 255.0f;
                         float invA = 1.0f - a;
-                        
+
                         dstPtr[idx + 0] = (byte)(srcPtr[idx + 0] * a + dstPtr[idx + 0] * invA);
                         dstPtr[idx + 1] = (byte)(srcPtr[idx + 1] * a + dstPtr[idx + 1] * invA);
                         dstPtr[idx + 2] = (byte)(srcPtr[idx + 2] * a + dstPtr[idx + 2] * invA);
@@ -583,7 +599,9 @@ namespace System.Drawing {
 
         public void Dispose() {
             if (!_disposed) {
-                // Don't dispose the canvas Mat as it's owned by the Bitmap
+                // Dispose the transform matrix
+                _transform?.Dispose();
+                _transform = null;
                 _disposed = true;
             }
         }
