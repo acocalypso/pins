@@ -164,6 +164,30 @@ namespace NINA.Equipment.Equipment.MyRotator {
             }
         }
 
+        public bool CanBacklash => true;
+        public float Backlash {
+            get {
+                if (!Connected) {
+                    return float.NaN;
+                }
+                var err = RotatorGetConfig(_uniqueId, out var config);
+                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                    return config.backlash;
+                } else {
+                    Logger.Error($"WandererRotator error to get backlash {err}");
+                    return float.NaN;
+                }
+            }
+            set {
+                WR_ROTATOR_CONFIG config = new() {
+                    mask = (uint)MASK_ROTATOR_BACKLASH,
+                    backlash = value
+                };
+                _ = RotatorSetConfig(_uniqueId, config);
+                RaisePropertyChanged();
+            }
+        }
+
         private bool synced;
 
         public bool Synced {

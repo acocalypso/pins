@@ -281,9 +281,9 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                     return float.NaN;
                 }
 
-                var err = CoverGetConfig(_uniqueId, out var config);
+                var err = CoverGetStatus(_uniqueId, out var status);
                 if (err == WC_ERROR_TYPE.WC_SUCCESS) {
-                    return config.openPositionAngle;
+                    return status.openPositionAngle;
                 } else {
                     if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
                         Logger.Error($"WandererCover communication error to get open position angle {err}");
@@ -311,9 +311,9 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                     return float.NaN;
                 }
 
-                var err = CoverGetConfig(_uniqueId, out var config);
+                var err = CoverGetStatus(_uniqueId, out var status);
                 if (err == WC_ERROR_TYPE.WC_SUCCESS) {
-                    return config.closePositionAngle;
+                    return status.closePositionAngle;
                 } else {
                     if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
                         Logger.Error($"WandererCover communication error to get close position angle {err}");
