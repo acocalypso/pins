@@ -30,6 +30,7 @@ namespace NINA.Profile {
 
         protected override void SetDefaultValues() {
             id = "No_Device";
+            indiDriver = "None";
             lastDeviceName = string.Empty;
         }
 
@@ -64,7 +65,7 @@ namespace NINA.Profile {
         public string IndiDriver {
             get => indiDriver;
             set {
-                if(indiDriver != value) {
+                if (indiDriver != value) {
                     indiDriver = value;
                     RaisePropertyChanged();
                 }

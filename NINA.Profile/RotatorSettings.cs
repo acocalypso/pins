@@ -40,7 +40,7 @@ namespace NINA.Profile {
             connectionMode = "SERIAL";
             devicePort = "/dev/ttyUSB0";
             baudRate = 9600;
-            indiDriver = "indi_simulator_rotator";
+            indiDriver = "None";
         }
 
         private string id;
