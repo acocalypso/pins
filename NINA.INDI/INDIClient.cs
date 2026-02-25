@@ -155,9 +155,11 @@ namespace NINA.INDI {
         }
 
         private async Task<bool> LoadDriver(string driverName, DeviceInterface deviceInterface, TimeSpan? loadTimeout = null, CancellationToken ct = default) {
+            // Unload the currently loaded driver for the selected interface
+            UnloadDriver(deviceInterface);
+
             // We explicitly allow empty string to NOT load any driver
-            if (driverName == string.Empty)
-            {
+            if (string.IsNullOrEmpty(driverName) || driverName.Equals("None")) {
                 return true;
             }
 
@@ -209,9 +211,40 @@ namespace NINA.INDI {
             }
         }
 
+        private void UnloadDriver(DeviceInterface deviceInterface) {
+            Logger.Info($"Trying to unload {deviceInterface}");
+            lock (_driverLock) {
+                foreach (var driver in _loadedDrivers) {
+                    if (driver.Value == deviceInterface) {
+                        try {
+                            var driverName = driver.Key;
+                            Logger.Debug($"Removing driver '{driverName}'");
+
+                            using var fs = new FileStream(_fifoPath, FileMode.Open, FileAccess.Write);
+                            using var writer = new StreamWriter(fs);
+                            writer.WriteLine($"stop {driverName}");
+                            writer.Flush();
+
+                            _loadedDrivers.Remove(driverName);
+
+                            // Remove devices associated with this driver
+                            var devicesToRemove = _discoveredDevices.Where(d => d.Value.Driver == driverName).Select(d => d.Key).ToList();
+                            foreach (var deviceKey in devicesToRemove) {
+                                _discoveredDevices.Remove(deviceKey);
+                                Logger.Debug($"Removed device '{deviceKey}' (driver: {driverName})");
+                            }
+                            Logger.Info($"Unloaded driver '{driverName}'");
+                        } catch (Exception ex) {
+                            Logger.Error(ex.Message);
+                        }
+                    }
+                }
+            }
+        }
+
         private void UnloadDriver(string driverName) {
             // We explicitly allow empty string to NOT load/unload any driver
-            if (driverName == string.Empty) {
+            if (string.IsNullOrEmpty(driverName) || driverName.Equals("None")) {
                 return;
             }
 
