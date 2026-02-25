@@ -55,7 +55,7 @@ namespace NINA.Profile {
             connectionMode = "SERIAL";
             devicePort = "/dev/ttyUSB0";
             baudRate = 9600;
-            indiDriver = "indi_simulator_focus";
+            indiDriver = "None";
             manualStepSmallMultiplier = 0.5;
             manualStepLargeMultiplier = 5.0;
         }
@@ -202,8 +202,8 @@ namespace NINA.Profile {
                 return autoFocusTotalNumberOfAttempts;
             }
             set {
-                if(value < 1) { value = 1; }
-                if(value > 5) { value = 5; }
+                if (value < 1) { value = 1; }
+                if (value > 5) { value = 5; }
                 if (autoFocusTotalNumberOfAttempts != value) {
                     autoFocusTotalNumberOfAttempts = value;
                     RaisePropertyChanged();
@@ -382,7 +382,7 @@ namespace NINA.Profile {
         public string ConnectionMode {
             get => connectionMode;
             set {
-                if(connectionMode != value) {
+                if (connectionMode != value) {
                     connectionMode = value;
                     RaisePropertyChanged();
                 }
@@ -394,7 +394,7 @@ namespace NINA.Profile {
         public string DevicePort {
             get => devicePort;
             set {
-                if(devicePort != value) {
+                if (devicePort != value) {
                     devicePort = value;
                     RaisePropertyChanged();
                 }
@@ -406,7 +406,7 @@ namespace NINA.Profile {
         public int BaudRate {
             get => baudRate;
             set {
-                if(baudRate != value) {
+                if (baudRate != value) {
                     baudRate = value;
                     RaisePropertyChanged();
                 }
@@ -418,7 +418,7 @@ namespace NINA.Profile {
         public string IndiDriver {
             get => indiDriver;
             set {
-                if(indiDriver != value) {
+                if (indiDriver != value) {
                     indiDriver = value;
                     RaisePropertyChanged();
                 }

@@ -46,7 +46,7 @@ namespace NINA.Profile {
             indiAddress = "localhost";
             indiPort = "/dev/ttyUSB0";
             indiBaudRate = 9600;
-            indiDriver = "indi_simulator_telescope";
+            indiDriver = "None";
         }
 
         private string id;
@@ -210,10 +210,10 @@ namespace NINA.Profile {
         public TelescopeLocationSyncDirection TelescopeLocationSyncDirection {
             get => telescopeLocationSyncDirection;
             set {
-                if(telescopeLocationSyncDirection != value) {
+                if (telescopeLocationSyncDirection != value) {
                     telescopeLocationSyncDirection = value;
                     RaisePropertyChanged();
-                }                
+                }
             }
         }
 
@@ -222,7 +222,7 @@ namespace NINA.Profile {
         public bool TimeSync {
             get => timeSync;
             set {
-                if(timeSync != value) {
+                if (timeSync != value) {
                     timeSync = value;
                     RaisePropertyChanged();
                 }
@@ -240,7 +240,7 @@ namespace NINA.Profile {
                 }
             }
         }
-        
+
         private bool indiAutoSearch;
         [DataMember]
         public bool IndiAutoSearch {
@@ -252,13 +252,13 @@ namespace NINA.Profile {
                 }
             }
         }
-        
+
         private string indiAddress;
         [DataMember]
         public string IndiAddress {
             get => indiAddress;
             set {
-                if(indiAddress != value) {
+                if (indiAddress != value) {
                     indiAddress = value;
                     RaisePropertyChanged();
                 }
@@ -270,7 +270,7 @@ namespace NINA.Profile {
         public string IndiPort {
             get => indiPort;
             set {
-                if(indiPort != value) {
+                if (indiPort != value) {
                     indiPort = value;
                     RaisePropertyChanged();
                 }
@@ -282,7 +282,7 @@ namespace NINA.Profile {
         public int IndiBaudRate {
             get => indiBaudRate;
             set {
-                if(indiBaudRate != value) {
+                if (indiBaudRate != value) {
                     indiBaudRate = value;
                     RaisePropertyChanged();
                 }
@@ -294,7 +294,7 @@ namespace NINA.Profile {
         public string IndiDriver {
             get => indiDriver;
             set {
-                if(indiDriver != value) {
+                if (indiDriver != value) {
                     indiDriver = value;
                     RaisePropertyChanged();
                 }
