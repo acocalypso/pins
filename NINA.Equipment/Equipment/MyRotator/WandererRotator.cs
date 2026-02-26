@@ -55,16 +55,22 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return false;
                 }
-                var err = RotatorGetStatus(_uniqueId, out var status);
-                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
-                    return status.moving == 1;
-                } else {
-                    if (err == WR_ERROR_TYPE.WR_ERROR_COMMUNICATION) {
-                        Logger.Error($"WandererRotator communication error to get moving state {err}");
-                        DisconnectOnRemovedError();
+                try {
+                    var err = RotatorGetStatus(_uniqueId, out var status);
+                    if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                        return status.moving == 1;
                     } else {
-                        Logger.Error($"WandererRotator error to get moving state {err}");
+                        if (err == WR_ERROR_TYPE.WR_ERROR_COMMUNICATION) {
+                            Logger.Error($"WandererRotator communication error to get moving state {err}");
+                            DisconnectOnRemovedError();
+                        } else {
+                            Logger.Error($"WandererRotator error to get moving state {err}");
+                        }
+                        return false;
                     }
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator IsMoving crashed: {ex}");
+                    DisconnectOnRemovedError();
                     return false;
                 }
             }
@@ -76,21 +82,32 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return false;
                 }
-                var err = RotatorGetConfig(_uniqueId, out var config);
-                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
-                    return config.reverseDirection != 0;
-                } else {
-                    Logger.Error($"WandererRotator error to get reverse direction state {err}");
+                try {
+                    var err = RotatorGetConfig(_uniqueId, out var config);
+                    if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                        return config.reverseDirection != 0;
+                    } else {
+                        Logger.Error($"WandererRotator error to get reverse direction state {err}");
+                        return false;
+                    }
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator Reverse getter crashed: {ex}");
+                    DisconnectOnRemovedError();
                     return false;
                 }
             }
             set {
-                WR_ROTATOR_CONFIG config = new() {
-                    mask = (uint)MASK_ROTATOR_REVERSE_DIRECTION,
-                    reverseDirection = value ? 1 : 0
-                };
-                _ = RotatorSetConfig(_uniqueId, config);
-                RaisePropertyChanged(nameof(Reverse));
+                try {
+                    WR_ROTATOR_CONFIG config = new() {
+                        mask = (uint)MASK_ROTATOR_REVERSE_DIRECTION,
+                        reverseDirection = value ? 1 : 0
+                    };
+                    _ = RotatorSetConfig(_uniqueId, config);
+                    RaisePropertyChanged(nameof(Reverse));
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator Reverse setter crashed: {ex}");
+                    DisconnectOnRemovedError();
+                }
             }
         }
 
@@ -100,21 +117,32 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return false;
                 }
-                var err = RotatorGetConfig(_uniqueId, out var config);
-                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
-                    return config.overshoot != 0;
-                } else {
-                    Logger.Error($"WandererRotator error to get overshoot state {err}");
+                try {
+                    var err = RotatorGetConfig(_uniqueId, out var config);
+                    if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                        return config.overshoot != 0;
+                    } else {
+                        Logger.Error($"WandererRotator error to get overshoot state {err}");
+                        return false;
+                    }
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator Overshoot getter crashed: {ex}");
+                    DisconnectOnRemovedError();
                     return false;
                 }
             }
             set {
-                WR_ROTATOR_CONFIG config = new() {
-                    mask = (uint)MASK_ROTATOR_OVERSHOOT,
-                    overshoot = value ? 1 : 0
-                };
-                _ = RotatorSetConfig(_uniqueId, config);
-                RaisePropertyChanged();
+                try {
+                    WR_ROTATOR_CONFIG config = new() {
+                        mask = (uint)MASK_ROTATOR_OVERSHOOT,
+                        overshoot = value ? 1 : 0
+                    };
+                    _ = RotatorSetConfig(_uniqueId, config);
+                    RaisePropertyChanged();
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator Overshoot setter crashed: {ex}");
+                    DisconnectOnRemovedError();
+                }
             }
         }
 
@@ -123,21 +151,32 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return float.NaN;
                 }
-                var err = RotatorGetConfig(_uniqueId, out var config);
-                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
-                    return config.overshootAngle;
-                } else {
-                    Logger.Error($"WandererRotator error to get overshoot angle {err}");
+                try {
+                    var err = RotatorGetConfig(_uniqueId, out var config);
+                    if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                        return config.overshootAngle;
+                    } else {
+                        Logger.Error($"WandererRotator error to get overshoot angle {err}");
+                        return float.NaN;
+                    }
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator OvershootAngle getter crashed: {ex}");
+                    DisconnectOnRemovedError();
                     return float.NaN;
                 }
             }
             set {
-                WR_ROTATOR_CONFIG config = new() {
-                    mask = (uint)MASK_ROTATOR_OVERSHOOT_ANGLE,
-                    overshootAngle = value
-                };
-                _ = RotatorSetConfig(_uniqueId, config);
-                RaisePropertyChanged();
+                try {
+                    WR_ROTATOR_CONFIG config = new() {
+                        mask = (uint)MASK_ROTATOR_OVERSHOOT_ANGLE,
+                        overshootAngle = value
+                    };
+                    _ = RotatorSetConfig(_uniqueId, config);
+                    RaisePropertyChanged();
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator OvershootAngle setter crashed: {ex}");
+                    DisconnectOnRemovedError();
+                }
             }
         }
 
@@ -146,21 +185,32 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return false;
                 }
-                var err = RotatorGetConfig(_uniqueId, out var config);
-                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
-                    return config.overshootDirection != 0;
-                } else {
-                    Logger.Error($"WandererRotator error to get overshoot direction {err}");
+                try {
+                    var err = RotatorGetConfig(_uniqueId, out var config);
+                    if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                        return config.overshootDirection != 0;
+                    } else {
+                        Logger.Error($"WandererRotator error to get overshoot direction {err}");
+                        return false;
+                    }
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator OvershootDirection getter crashed: {ex}");
+                    DisconnectOnRemovedError();
                     return false;
                 }
             }
             set {
-                WR_ROTATOR_CONFIG config = new() {
-                    mask = (uint)MASK_ROTATOR_OVERSHOOT_DIRECTION,
-                    overshootDirection = value ? 1 : 0
-                };
-                _ = RotatorSetConfig(_uniqueId, config);
-                RaisePropertyChanged();
+                try {
+                    WR_ROTATOR_CONFIG config = new() {
+                        mask = (uint)MASK_ROTATOR_OVERSHOOT_DIRECTION,
+                        overshootDirection = value ? 1 : 0
+                    };
+                    _ = RotatorSetConfig(_uniqueId, config);
+                    RaisePropertyChanged();
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator OvershootDirection setter crashed: {ex}");
+                    DisconnectOnRemovedError();
+                }
             }
         }
 
@@ -170,21 +220,32 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return float.NaN;
                 }
-                var err = RotatorGetConfig(_uniqueId, out var config);
-                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
-                    return config.backlash;
-                } else {
-                    Logger.Error($"WandererRotator error to get backlash {err}");
+                try {
+                    var err = RotatorGetConfig(_uniqueId, out var config);
+                    if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                        return config.backlash;
+                    } else {
+                        Logger.Error($"WandererRotator error to get backlash {err}");
+                        return float.NaN;
+                    }
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator Backlash getter crashed: {ex}");
+                    DisconnectOnRemovedError();
                     return float.NaN;
                 }
             }
             set {
-                WR_ROTATOR_CONFIG config = new() {
-                    mask = (uint)MASK_ROTATOR_BACKLASH,
-                    backlash = value
-                };
-                _ = RotatorSetConfig(_uniqueId, config);
-                RaisePropertyChanged();
+                try {
+                    WR_ROTATOR_CONFIG config = new() {
+                        mask = (uint)MASK_ROTATOR_BACKLASH,
+                        backlash = value
+                    };
+                    _ = RotatorSetConfig(_uniqueId, config);
+                    RaisePropertyChanged();
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator Backlash setter crashed: {ex}");
+                    DisconnectOnRemovedError();
+                }
             }
         }
 
@@ -207,16 +268,22 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return -1;
                 }
-                var err = RotatorGetStatus(_uniqueId, out var status);
-                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
-                    return status.position;
-                } else {
-                    if (err == WR_ERROR_TYPE.WR_ERROR_COMMUNICATION) {
-                        Logger.Error($"WandererRotator communication error to get Position state {err}");
-                        DisconnectOnRemovedError();
+                try {
+                    var err = RotatorGetStatus(_uniqueId, out var status);
+                    if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                        return status.position;
                     } else {
-                        Logger.Error($"WandererRotator error to get Position {err}");
+                        if (err == WR_ERROR_TYPE.WR_ERROR_COMMUNICATION) {
+                            Logger.Error($"WandererRotator communication error to get Position state {err}");
+                            DisconnectOnRemovedError();
+                        } else {
+                            Logger.Error($"WandererRotator error to get Position {err}");
+                        }
+                        return -1;
                     }
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator MechanicalPosition crashed: {ex}");
+                    DisconnectOnRemovedError();
                     return -1;
                 }
             }
@@ -244,16 +311,22 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 if (!Connected) {
                     return float.NaN;
                 }
-                var err = RotatorGetStatus(_uniqueId, out var status);
-                if (err == WR_ERROR_TYPE.WR_SUCCESS) {
-                    return status.stepSize;
-                } else {
-                    if (err == WR_ERROR_TYPE.WR_ERROR_COMMUNICATION) {
-                        Logger.Error($"WandererRotator communication error to get step size state {err}");
-                        DisconnectOnRemovedError();
+                try {
+                    var err = RotatorGetStatus(_uniqueId, out var status);
+                    if (err == WR_ERROR_TYPE.WR_SUCCESS) {
+                        return status.stepSize;
                     } else {
-                        Logger.Error($"WandererRotator error to get Position {err}");
+                        if (err == WR_ERROR_TYPE.WR_ERROR_COMMUNICATION) {
+                            Logger.Error($"WandererRotator communication error to get step size state {err}");
+                            DisconnectOnRemovedError();
+                        } else {
+                            Logger.Error($"WandererRotator error to get Position {err}");
+                        }
+                        return -1;
                     }
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator StepSize crashed: {ex}");
+                    DisconnectOnRemovedError();
                     return -1;
                 }
             }
@@ -269,11 +342,16 @@ namespace NINA.Equipment.Equipment.MyRotator {
 
         [RelayCommand]
         public void ResetPosition() {
-            if (MyMessageBox.Show(Loc.Instance["LblZwoResetZeroPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
-                if (Position > 0) {
-                    RotatorSyncPosition(_uniqueId, 0);
-                    RaisePropertyChanged(nameof(Position));
+            try {
+                if (MyMessageBox.Show(Loc.Instance["LblZwoResetZeroPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
+                    if (Position > 0) {
+                        RotatorSyncPosition(_uniqueId, 0);
+                        RaisePropertyChanged(nameof(Position));
+                    }
                 }
+            } catch (Exception ex) {
+                Logger.Error($"WandererRotator ResetPosition crashed: {ex}");
+                DisconnectOnRemovedError();
             }
         }
 
@@ -290,11 +368,16 @@ namespace NINA.Equipment.Equipment.MyRotator {
 
         [RelayCommand]
         public void SyncToPosition() {
-            if (MyMessageBox.Show(Loc.Instance["LblWandererRotatorSyncPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
-                if (Position != SyncPosition) {
-                    RotatorSyncPosition(_uniqueId, SyncPosition);
-                    RaisePropertyChanged(nameof(Position));
+            try {
+                if (MyMessageBox.Show(Loc.Instance["LblWandererRotatorSyncPositionPrompt"], "", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes) {
+                    if (Position != SyncPosition) {
+                        RotatorSyncPosition(_uniqueId, SyncPosition);
+                        RaisePropertyChanged(nameof(Position));
+                    }
                 }
+            } catch (Exception ex) {
+                Logger.Error($"WandererRotator SyncToPosition crashed: {ex}");
+                DisconnectOnRemovedError();
             }
         }
 
@@ -306,27 +389,39 @@ namespace NINA.Equipment.Equipment.MyRotator {
 
         public Task<bool> Connect(CancellationToken token) {
             return Task.Run(() => {
-                // Verify, the Rotator _uniqueId actually exists
-                int[] ids = new int[WR_MAX_NUM];
-                RotatorScan(out var count, ids);
-                if (!ids.Take(count).Contains(_uniqueId)) {
-                    Notification.ShowError(Loc.Instance["LblWandererRotatorNotAvailableError"]);
-                    Logger.Error("Selected WandererRotator Rotator not available (disconnected?)");
-                    return false;
-                }
-                if (RotatorOpen(_uniqueId) == WR_ERROR_TYPE.WR_SUCCESS) {
-                    DriverInfo = $"SDK: {DriverVersion}; FW: {GetFwVersionString()}";
+                try {
+                    // Verify, the Rotator _uniqueId actually exists
+                    int[] ids = new int[WR_MAX_NUM];
+                    var scanErr = RotatorScan(out var count, ids);
+                    if (scanErr != WR_ERROR_TYPE.WR_SUCCESS) {
+                        Notification.ShowError(Loc.Instance["LblWandererRotatorNotAvailableError"]);
+                        Logger.Error($"WandererRotator scan failed: {scanErr}");
+                        return false;
+                    }
+                    if (!ids.Take(count).Contains(_uniqueId)) {
+                        Notification.ShowError(Loc.Instance["LblWandererRotatorNotAvailableError"]);
+                        Logger.Error("Selected WandererRotator Rotator not available (disconnected?)");
+                        return false;
+                    }
+                    var openErr = RotatorOpen(_uniqueId);
+                    if (openErr == WR_ERROR_TYPE.WR_SUCCESS) {
+                        DriverInfo = $"SDK: {DriverVersion}; FW: {GetFwVersionString()}";
 
-                    // Set overshoot settings from profile
-                    var settings = _profileService.ActiveProfile.RotatorSettings;
-                    Overshoot = settings.Overshoot;
-                    OvershootDirection = settings.OvershootDirection;
-                    OvershootAngle = settings.OvershootAngle;
+                        // Set overshoot settings from profile
+                        var settings = _profileService.ActiveProfile.RotatorSettings;
+                        Overshoot = settings.Overshoot;
+                        OvershootDirection = settings.OvershootDirection;
+                        OvershootAngle = settings.OvershootAngle;
 
-                    Connected = true;
-                    return true;
-                } else {
-                    Logger.Error("Failed to connect to WandererRotator Rotator");
+                        Connected = true;
+                        return true;
+                    } else {
+                        Logger.Error($"Failed to connect to WandererRotator Rotator: {openErr}");
+                        return false;
+                    }
+                } catch (Exception ex) {
+                    Logger.Error($"WandererRotator Connect crashed: {ex}");
+                    Notification.ShowError($"WandererRotator connection error: {ex.Message}");
                     return false;
                 }
             }, token);
@@ -373,23 +468,38 @@ namespace NINA.Equipment.Equipment.MyRotator {
         }
 
         private string GetFwVersionString() {
-            WR_VERSION version = new();
-            _ = RotatorGetVersion(_uniqueId, out version);
+            try {
+                WR_VERSION version = new();
+                _ = RotatorGetVersion(_uniqueId, out version);
 
-            uint major = (version.firmware >> 24) & 0xFF;
-            uint minor = (version.firmware >> 16) & 0xFF;
-            uint patch = (version.firmware >> 8) & 0xFF;
+                uint major = (version.firmware >> 24) & 0xFF;
+                uint minor = (version.firmware >> 16) & 0xFF;
+                uint patch = (version.firmware >> 8) & 0xFF;
 
-            return $"{major}.{minor}.{patch}";
+                return $"{major}.{minor}.{patch}";
+            } catch (Exception ex) {
+                Logger.Error($"WandererRotator GetFwVersionString crashed: {ex}");
+                return "Unknown";
+            }
         }
 
         public void Disconnect() {
-            _ = RotatorClose(_uniqueId);
-            Connected = false;
+            try {
+                _ = RotatorClose(_uniqueId);
+            } catch (Exception ex) {
+                Logger.Error($"WandererRotator Disconnect crashed: {ex}");
+            } finally {
+                Connected = false;
+            }
         }
 
         public void Halt() {
-            RotatorStopMove(_uniqueId);
+            try {
+                RotatorStopMove(_uniqueId);
+            } catch (Exception ex) {
+                Logger.Error($"WandererRotator Halt crashed: {ex}");
+                DisconnectOnRemovedError();
+            }
         }
 
         public async Task<bool> Move(float angle, CancellationToken ct) {
@@ -397,40 +507,46 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 return false;
             }
 
-            if (angle >= 360) {
-                angle = AstroUtil.EuclidianModulus(angle, 360);
-            }
-            if (angle <= -360) {
-                angle = AstroUtil.EuclidianModulus(angle, -360);
-            }
+            try {
+                if (angle >= 360) {
+                    angle = AstroUtil.EuclidianModulus(angle, 360);
+                }
+                if (angle <= -360) {
+                    angle = AstroUtil.EuclidianModulus(angle, -360);
+                }
 
-            Logger.Debug($"Move relative by {angle}° - Mechanical Position reported by rotator {MechanicalPosition}° and offset {offset}");
+                Logger.Debug($"Move relative by {angle}° - Mechanical Position reported by rotator {MechanicalPosition}° and offset {offset}");
 
-            var err = RotatorMove(_uniqueId, angle);
-            if (err != WR_ERROR_TYPE.WR_SUCCESS) {
-                Logger.Error($"WandererRotator failed to issue move command {err}");
-                throw new Exception($"Failed to move Rotator {err}");
-            }
-
-            await CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
-            WR_ROTATOR_STATUS status;
-            do {
-                err = RotatorGetStatus(_uniqueId, out status);
-
+                var err = RotatorMove(_uniqueId, angle);
                 if (err != WR_ERROR_TYPE.WR_SUCCESS) {
-                    if (err == WR_ERROR_TYPE.WR_ERROR_COMMUNICATION) {
-                        DisconnectOnRemovedError();
-                    } else {
-                        Logger.Error($"WandererRotator error to get moving state {err}");
-                    }
-
-                    throw new Exception($"Rotator error {err}");
+                    Logger.Error($"WandererRotator failed to issue move command {err}");
+                    throw new Exception($"Failed to move Rotator {err}");
                 }
 
                 await CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
-            } while (status.moving == 1 && !ct.IsCancellationRequested);
+                WR_ROTATOR_STATUS status;
+                do {
+                    err = RotatorGetStatus(_uniqueId, out status);
 
-            return true;
+                    if (err != WR_ERROR_TYPE.WR_SUCCESS) {
+                        if (err == WR_ERROR_TYPE.WR_ERROR_COMMUNICATION) {
+                            DisconnectOnRemovedError();
+                        } else {
+                            Logger.Error($"WandererRotator error to get moving state {err}");
+                        }
+
+                        throw new Exception($"Rotator error {err}");
+                    }
+
+                    await CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
+                } while (status.moving == 1 && !ct.IsCancellationRequested);
+
+                return true;
+            } catch (Exception ex) {
+                Logger.Error($"WandererRotator Move crashed: {ex}");
+                DisconnectOnRemovedError();
+                return false;
+            }
         }
 
         public async Task<bool> MoveAbsoluteMechanical(float targetPosition, CancellationToken ct) {

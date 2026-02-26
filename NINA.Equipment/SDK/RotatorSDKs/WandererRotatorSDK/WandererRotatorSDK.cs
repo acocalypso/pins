@@ -60,8 +60,8 @@ namespace Wanderer {
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         public struct WR_VERSION {
             public uint firmware;               // Rotator firmware version
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 8)]
-            public string model;                // Model type (e.g., "Lite", "Mini")
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+            public byte[] model;                // Model type (e.g., "Lite", "Mini")
         }
 
         /// <summary>
@@ -89,43 +89,43 @@ namespace Wanderer {
         }
 
         // P/Invoke declarations
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorScan(out int number, [Out] int[] ids);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorOpen(int id);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorClose(int id);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorGetConfig(int id, out WR_ROTATOR_CONFIG config);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorSetConfig(int id, ref WR_ROTATOR_CONFIG config);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorGetStatus(int id, out WR_ROTATOR_STATUS status);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorGetVersion(int id, out WR_VERSION version);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorFindHome(int id);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorSyncPosition(int id, float angle);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorMove(int id, float angle);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorMoveTo(int id, float angle);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WR_ERROR_TYPE WRRotatorStopMove(int id);
 
-        [DllImport(DLLNAME, SetLastError = true, CharSet = CharSet.Ansi)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         private static extern WR_ERROR_TYPE WRGetSDKVersion(StringBuilder version);
 
         // Wrapper methods for easier use
