@@ -252,7 +252,7 @@ namespace NINA.Core.Utility.WindowService {
                                                 Active = true,
                                                 Status = ExtractMessage(content),
                                                 Parameters = parameters,
-                                                AvailableCommands = new List<string> { "Close" }
+                                                AvailableCommands = new List<string> { "Cancel" }
                                             };
 
                                             // Special handling for PlateSolvingStatusVM
@@ -316,7 +316,7 @@ namespace NINA.Core.Utility.WindowService {
                                                 Active = true,
                                                 Status = ExtractMessage(content),
                                                 Parameters = parameters,
-                                                AvailableCommands = new List<string> { "Close" },
+                                                AvailableCommands = new List<string> { "Cancel" },
                                                 SlewAndCenter = ExtractSlewAndCenterData(content),
                                                 MeridianFlip = ExtractMeridianFlipData(content)
                                             };
@@ -333,7 +333,7 @@ namespace NINA.Core.Utility.WindowService {
                 }
 
                 // Add a Cancel button (all dialogs should be cancellable)
-                DialogService.AddButton(dialogId, "Close", "Close", isDefault: false, isCancel: true, onClick: null);
+                DialogService.AddButton(dialogId, "Cancel", "Cancel", isDefault: false, isCancel: true, onClick: null);
 
                 // Broadcast via SignalR immediately
                 _ = Task.Run(async () => {
@@ -357,7 +357,7 @@ namespace NINA.Core.Utility.WindowService {
                                 Active = true,
                                 Status = ExtractMessage(content),
                                 Parameters = parameters,
-                                AvailableCommands = new List<string> { "Close" }
+                                AvailableCommands = new List<string> { "Cancel" }
                             };
 
                             // Special handling for PlateSolvingStatusVM
