@@ -42,7 +42,14 @@ jobs:
             gnupg \
             wget \
             build-essential \
-            git-lfs
+            git-lfs \
+            unzip \
+            autoconf \
+            autoconf-archive \
+            libtool \
+            pkg-config \
+            libudev-dev \
+            libjsoncpp-dev
 
       - name: Checkout repository
         uses: actions/checkout@v4
