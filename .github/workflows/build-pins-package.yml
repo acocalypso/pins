@@ -41,7 +41,8 @@ jobs:
             git \
             gnupg \
             wget \
-            build-essential
+            build-essential \
+            git-lfs
 
       - name: Checkout repository
         uses: actions/checkout@v4
