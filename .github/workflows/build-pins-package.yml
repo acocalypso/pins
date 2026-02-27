@@ -51,6 +51,7 @@ jobs:
             pkg-config \
             libudev-dev \
             libjsoncpp-dev \
+            libssl-dev \
             libicu-dev \
             rsync
 
