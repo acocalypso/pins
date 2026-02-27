@@ -24,8 +24,25 @@ jobs:
   build-linux-arm64:
     name: Build Raspberry Pi package and plugin debs
     runs-on: ubuntu-24.04-arm
+    container:
+      image: debian:trixie
+    permissions:
+      contents: write
 
     steps:
+      - name: Bootstrap container tooling
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            git \
+            gnupg \
+            wget \
+            build-essential
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -34,8 +51,8 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev libjsoncpp-dev autoconf autoconf-archive libtool pkg-config
+          apt-get update
+          apt-get install -y libudev-dev libjsoncpp-dev autoconf autoconf-archive libtool pkg-config
 
       - name: Build and install libgpiod 2.2
         shell: bash
@@ -46,8 +63,8 @@ jobs:
           cd libgpiod-2.2
           ./configure --prefix=/usr --enable-tools=yes --enable-bindings-cxx
           make
-          sudo make install
-          sudo ldconfig
+          make install
+          ldconfig
 
       - name: Clone plugins
         shell: bash
