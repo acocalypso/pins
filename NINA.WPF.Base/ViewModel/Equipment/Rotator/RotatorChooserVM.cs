@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -60,13 +60,22 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Rotator {
                 try {
                     Logger.Trace("Adding Wanderer Rotators");
                     int[] ids = new int[WandererRotatorSDK.WR_MAX_NUM];
-                    WandererRotatorSDK.RotatorScan(out var rotators, ids);
-                    for (int i = 0; i < rotators; i++) {
-                        if (WandererRotatorSDK.RotatorGetVersion(ids[i], out var version) == WandererRotatorSDK.WR_ERROR_TYPE.WR_SUCCESS) {
-                            var rotator = new WandererRotator(ids[i], version.model, profileService);
-                            Logger.Info($"Adding Wanderer Rotator: {rotator.Name}");
-                            devices.Add(rotator);
+                    try {
+                        WandererRotatorSDK.RotatorScan(out var rotators, ids);
+                        for (int i = 0; i < rotators; i++) {
+                            try {
+                                if (WandererRotatorSDK.RotatorGetVersion(ids[i], out var version) == WandererRotatorSDK.WR_ERROR_TYPE.WR_SUCCESS) {
+                                    var modelString = version.model != null ? System.Text.Encoding.ASCII.GetString(version.model).TrimEnd('\0') : "Unknown";
+                                    var rotator = new WandererRotator(ids[i], modelString, profileService);
+                                    Logger.Info($"Adding Wanderer Rotator: {rotator.Name}");
+                                    devices.Add(rotator);
+                                }
+                            } catch (Exception versionEx) {
+                                Logger.Error($"Failed to get version for WandererRotator {ids[i]}: {versionEx}");
+                            }
                         }
+                    } catch (Exception scanEx) {
+                        Logger.Error($"Failed to scan for WandererRotators: {scanEx}");
                     }
                 } catch (Exception ex) {
                     Logger.Error(ex);

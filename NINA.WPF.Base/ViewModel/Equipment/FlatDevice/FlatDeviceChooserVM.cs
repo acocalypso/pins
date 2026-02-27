@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -42,13 +42,22 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FlatDevice {
                 try {
                     Logger.Trace("Adding Wanderer Covers");
                     int[] ids = new int[WandererCoverSDK.WC_MAX_NUM];
-                    WandererCoverSDK.CoverScan(out var covers, ids);
-                    for (int i = 0; i < covers; i++) {
-                        if (WandererCoverSDK.CoverGetVersion(ids[i], out var version) == WandererCoverSDK.WC_ERROR_TYPE.WC_SUCCESS) {
-                            var cover = new WandererCover(ids[i], version.model, profileService);
-                            Logger.Info($"Adding Wanderer Cover: {cover.Name}");
-                            devices.Add(cover);
+                    try {
+                        WandererCoverSDK.CoverScan(out var covers, ids);
+                        for (int i = 0; i < covers; i++) {
+                            try {
+                                if (WandererCoverSDK.CoverGetVersion(ids[i], out var version) == WandererCoverSDK.WC_ERROR_TYPE.WC_SUCCESS) {
+                                    var modelString = version.model != null ? System.Text.Encoding.ASCII.GetString(version.model).TrimEnd('\0') : "Unknown";
+                                    var cover = new WandererCover(ids[i], modelString, profileService);
+                                    Logger.Info($"Adding Wanderer Cover: {cover.Name}");
+                                    devices.Add(cover);
+                                }
+                            } catch (Exception versionEx) {
+                                Logger.Error($"Failed to get version for WandererCover {ids[i]}: {versionEx}");
+                            }
                         }
+                    } catch (Exception scanEx) {
+                        Logger.Error($"Failed to scan for WandererCovers: {scanEx}");
                     }
                 } catch (Exception ex) {
                     Logger.Error(ex);

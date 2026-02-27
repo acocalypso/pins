@@ -59,8 +59,8 @@ namespace Wanderer {
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         public struct WC_VERSION {
             public uint firmware;               // Cover firmware version
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 8)]
-            public string model;                // Model type (e.g., "Lite", "Mini")
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+            public byte[] model;                // Model type (e.g., "Lite", "Mini")
         }
 
         /// <summary>
@@ -88,34 +88,34 @@ namespace Wanderer {
         }
 
         // P/Invoke declarations
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WC_ERROR_TYPE WCCoverScan(out int number, [Out] int[] ids);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WC_ERROR_TYPE WCCoverOpen(int id);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WC_ERROR_TYPE WCCoverClose(int id);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WC_ERROR_TYPE WCCoverGetConfig(int id, out WC_COVER_CONFIG config);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WC_ERROR_TYPE WCCoverSetConfig(int id, ref WC_COVER_CONFIG config);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WC_ERROR_TYPE WCCoverGetStatus(int id, out WC_COVER_STATUS status);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WC_ERROR_TYPE WCCoverGetVersion(int id, out WC_VERSION version);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WC_ERROR_TYPE WCCoverOpenCover(int id);
 
-        [DllImport(DLLNAME, SetLastError = true)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl)]
         private static extern WC_ERROR_TYPE WCCoverCloseCover(int id);
 
-        [DllImport(DLLNAME, SetLastError = true, CharSet = CharSet.Ansi)]
+        [DllImport(DLLNAME, SetLastError = true, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         private static extern WC_ERROR_TYPE WCGetSDKVersion(StringBuilder version);
 
         // Wrapper methods for easier use
