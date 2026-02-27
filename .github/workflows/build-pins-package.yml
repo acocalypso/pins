@@ -50,6 +50,7 @@ jobs:
             pkg-config \
             libudev-dev \
             libjsoncpp-dev \
+            libicu-dev \
             rsync
 
       - name: Checkout repository
