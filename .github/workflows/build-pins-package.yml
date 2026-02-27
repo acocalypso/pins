@@ -42,6 +42,7 @@ jobs:
             gnupg \
             wget \
             build-essential \
+            cmake \
             git-lfs \
             unzip \
             autoconf \
