@@ -52,8 +52,9 @@ namespace NINA.Sequencer.SequenceItem.FilterWheel {
             MatchFilter();
             if (Filter != null) {
                 ComboBoxText = Filter.Name;
-            } else {
-                ComboBoxText = "(Current)";
+            } else if (string.IsNullOrWhiteSpace(ComboBoxText)) {
+                // Only set to (Current) if we have nothing there
+                ComboBoxText = NullFilter.Instance.Name;
             }
         }
 
@@ -77,16 +78,18 @@ namespace NINA.Sequencer.SequenceItem.FilterWheel {
 
         private void MatchFilter() {
             try {
-                var idx = this.Filter?.Position ?? -1;
-                var filterName = this.Filter?.Name;
-                this.filter = this.profileService.ActiveProfile.FilterWheelSettings.FilterWheelFilters?.FirstOrDefault(x => x.Name == filterName);
-                if (this.Filter == null && idx >= 0) {
-                    this.filter = this.profileService.ActiveProfile.FilterWheelSettings.FilterWheelFilters?.FirstOrDefault(x => x.Position == idx);
+                var idx = Filter?.Position ?? -1;
+                var filterName = Filter?.Name;
+                // Look up by name
+                filter = profileService.ActiveProfile.FilterWheelSettings.FilterWheelFilters?.FirstOrDefault(x => x.Name == filterName);
+                // If not, look up by position
+                if (Filter == null && idx >= 0) {
+                    filter = profileService.ActiveProfile.FilterWheelSettings.FilterWheelFilters?.FirstOrDefault(x => x.Position == idx);
                 }
 
                 // Update ComboBoxText and raise property changed notifications
-                if (this.Filter != null) {
-                    comboBoxText = this.Filter.Name;
+                if (Filter != null) {
+                    comboBoxText = Filter.Name;
                     RaisePropertyChanged(nameof(ComboBoxText));
                 }
                 RaisePropertyChanged(nameof(Filter));
@@ -131,6 +134,11 @@ namespace NINA.Sequencer.SequenceItem.FilterWheel {
             get => filter;
             set {
                 filter = value;
+                // Upgrades from 3.2 come here...
+                // This ensures that ComboBoxText is set properly
+                if (filter != null) {
+                    MatchFilter();
+                }
                 RaisePropertyChanged();
             }
         }
@@ -169,7 +177,7 @@ namespace NINA.Sequencer.SequenceItem.FilterWheel {
             set {
                 comboBoxText = value;
 
-                if (comboBoxText == "(Current)") {
+                if (comboBoxText == NullFilter.Instance.Name) {
                     FilterWheelInfo info = filterWheelMediator.GetInfo();
                     if (info.Connected) {
                         Filter = info.SelectedFilter;
@@ -221,12 +229,23 @@ namespace NINA.Sequencer.SequenceItem.FilterWheel {
             return Issues.Count == 0;
         }
 
-        public override void AfterParentChanged() {            
+        public override void AfterParentChanged() {
             Validate();
         }
 
         public override string ToString() {
             return $"Category: {Category}, Item: {nameof(SwitchFilter)}, Filter: {Filter?.Name}";
+        }
+
+        // We don't want any of these serialized; only ComboBoxTest
+        public bool ShouldSerializeXfilterExpression() {
+            return false;
+        }
+        public bool ShouldSerializeXfilter() {
+            return false;
+        }
+        public bool ShouldSerializeXfilterDefinition() {
+            return false;
         }
     }
 }

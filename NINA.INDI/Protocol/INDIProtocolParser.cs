@@ -14,6 +14,7 @@
 
 using NINA.INDI.Enums;
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Xml.Linq;
 
@@ -63,10 +64,10 @@ namespace NINA.INDI.Protocol {
                     Name = defNum.Attribute("name")?.Value ?? string.Empty,
                     Label = defNum.Attribute("label")?.Value ?? string.Empty,
                     Format = defNum.Attribute("format")?.Value ?? "%g",
-                    Min = double.Parse(defNum.Attribute("min")?.Value ?? "0"),
-                    Max = double.Parse(defNum.Attribute("max")?.Value ?? "0"),
-                    Step = double.Parse(defNum.Attribute("step")?.Value ?? "0"),
-                    Value = double.Parse(defNum.Value)
+                    Min = double.Parse(defNum.Attribute("min")?.Value ?? "0", CultureInfo.InvariantCulture),
+                    Max = double.Parse(defNum.Attribute("max")?.Value ?? "0", CultureInfo.InvariantCulture),
+                    Step = double.Parse(defNum.Attribute("step")?.Value ?? "0", CultureInfo.InvariantCulture),
+                    Value = double.Parse(defNum.Value, CultureInfo.InvariantCulture)
                 });
             }
 
@@ -150,7 +151,7 @@ namespace NINA.INDI.Protocol {
                 var name = oneNum.Attribute("name")?.Value ?? string.Empty;
                 var number = prop.Numbers.FirstOrDefault(n => n.Name == name);
                 if (number != null) {
-                    number.Value = double.Parse(oneNum.Value);
+                    number.Value = double.Parse(oneNum.Value, CultureInfo.InvariantCulture);
                 }
             }
         }
@@ -189,7 +190,7 @@ namespace NINA.INDI.Protocol {
             foreach (var oneBlob in element.Elements("oneBLOB")) {
                 var name = oneBlob.Attribute("name")?.Value ?? string.Empty;
                 var format = oneBlob.Attribute("format")?.Value ?? string.Empty;
-                var size = int.Parse(oneBlob.Attribute("size")?.Value ?? "0");
+                var size = int.Parse(oneBlob.Attribute("size")?.Value ?? "0", CultureInfo.InvariantCulture);
 
                 var blob = prop.Blobs.FirstOrDefault(b => b.Name == name);
                 if (blob == null) {
