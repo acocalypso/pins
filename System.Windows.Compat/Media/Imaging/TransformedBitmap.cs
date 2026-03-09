@@ -29,6 +29,8 @@ namespace System.Windows.Media.Imaging {
         public TransformedBitmap(BitmapSource source, Transform transform) : base() {
             _source = source;
             _transform = transform;
+            _mat?.Dispose(); // dispose the empty Mat created by base()
+            _mat = null;
             ApplyTransform();
         }
 

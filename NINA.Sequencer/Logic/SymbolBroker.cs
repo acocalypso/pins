@@ -110,6 +110,8 @@ namespace NINA.Sequencer.Logic {
         private IRotatorMediator _rotatorMediator;
         public static readonly char DELIMITER = '_';
 
+        public static SymbolBroker Instance { get; set; }
+
         public SymbolBroker(IProfileService profileService, ISwitchMediator switchMediator, IWeatherDataMediator weatherDataMediator, ICameraMediator cameraMediator, IDomeMediator domeMediator,
                                                                                             IFlatDeviceMediator flatMediator, IFilterWheelMediator filterWheelMediator, IRotatorMediator rotatorMediator, ISafetyMonitorMediator safetyMonitorMediator,
             IFocuserMediator focuserMediator, ITelescopeMediator telescopeMediator, IGuiderMediator guiderMediator, IImagingMediator imagingMediator) : base(profileService) {
@@ -127,6 +129,13 @@ namespace NINA.Sequencer.Logic {
             _imagingMediator = imagingMediator;
             _guiderMediator = guiderMediator;
 
+            // Register the default Providers
+            foreach (string provider in _symbolProviders) {
+                RegisterSymbolProvider(provider);
+            }
+            // Register the core functions
+            RegisterCoreFunctions();
+
             _imagingMediator.ImagePrepared += SetImageSymbols;
 
             _telescopeMediator.RegisterConsumer(this);
@@ -141,16 +150,12 @@ namespace NINA.Sequencer.Logic {
             _rotatorMediator.RegisterConsumer(this);
             _guiderMediator.RegisterConsumer(this);
 
-            // Register the default Providers
-            foreach (string provider in _symbolProviders) {
-                RegisterSymbolProvider(provider);
-            }
-            // Register the core functions
-            RegisterCoreFunctions();
-
             UpdateNINASymbols();
             _conditionWatchdog = new ConditionWatchdog(UpdateNINASymbols, TimeSpan.FromSeconds(3));
             _conditionWatchdog.Start();
+
+            // This is a singleton, created once in CompositionRoot
+            Instance = this;
         }
 
         private void AddHiddenSymbol(string source, Symbol sym) {
