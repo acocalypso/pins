@@ -55,6 +55,7 @@ namespace System.Windows.Media.Imaging {
         }
 
         private void Initialize() {
+            _mat?.Dispose(); // dispose any existing Mat before replacing
             if (_source == null) {
                 _mat = new Mat();
                 return;

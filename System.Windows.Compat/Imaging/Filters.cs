@@ -46,11 +46,12 @@ namespace Accord.Imaging.Filters {
 
             // Create weighted sum: gray = cr*R + cg*G + cb*B
             // Note: OpenCV uses BGR order, so channels[0]=B, [1]=G, [2]=R
-            result = new Mat();
-            Cv2.AddWeighted(channels[2], redCoefficient, channels[1], greenCoefficient, 0.0, result);
+            Mat weighted = new Mat();
+            Cv2.AddWeighted(channels[2], redCoefficient, channels[1], greenCoefficient, 0.0, weighted);
 
             Mat temp = new Mat();
-            Cv2.AddWeighted(result, 1.0, channels[0], blueCoefficient, 0.0, temp);
+            Cv2.AddWeighted(weighted, 1.0, channels[0], blueCoefficient, 0.0, temp);
+            weighted.Dispose();
 
             // Convert to 8-bit if needed with proper scaling
             result = new Mat();
@@ -136,7 +137,7 @@ namespace Accord.Imaging.Filters {
     /// <summary>
     /// Convolution filter - applies custom convolution kernel using OpenCV
     /// </summary>
-    public class Convolution {
+    public class Convolution : System.IDisposable {
         private Mat kernel;
 
         public Convolution(int[,] customKernel) {
@@ -150,6 +151,11 @@ namespace Accord.Imaging.Filters {
                     kernel.Set(i, j, (float)customKernel[i, j]);
                 }
             }
+        }
+
+        public void Dispose() {
+            kernel?.Dispose();
+            kernel = null;
         }
 
         public void ApplyInPlace(Bitmap image) {

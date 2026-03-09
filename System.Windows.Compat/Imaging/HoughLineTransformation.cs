@@ -43,8 +43,9 @@ namespace Accord.Imaging.Filters {
             Mat mat = image;
             
             // Ensure image is grayscale
-            Mat gray = new Mat();
+            Mat gray;
             if (mat.Channels() == 3) {
+                gray = new Mat();
                 Cv2.CvtColor(mat, gray, ColorConversionCodes.BGR2GRAY);
             } else {
                 gray = mat.Clone();

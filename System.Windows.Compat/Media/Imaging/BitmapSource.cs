@@ -141,12 +141,11 @@ namespace System.Windows.Media.Imaging {
                 throw new ArgumentException($"Destination array too small. Need {dataSize} elements, got {pixels.Length}");
             }
 
-            // For 16-bit images, copy as ushort
-            unsafe {
-                fixed (ushort* destPtr = pixels) {
-                    System.Runtime.InteropServices.Marshal.Copy(_mat.Data, (short[])(object)pixels, offset, dataSize);
-                }
-            }
+            // Copy as raw bytes then reinterpret — Marshal.Copy does not accept ushort[]
+            int byteCount = dataSize * sizeof(ushort);
+            byte[] bytes = new byte[byteCount];
+            System.Runtime.InteropServices.Marshal.Copy(_mat.Data, bytes, 0, byteCount);
+            System.Buffer.BlockCopy(bytes, 0, pixels, offset * sizeof(ushort), byteCount);
         }
 
         public void CopyPixels(Array pixels, int stride, int offset) {
@@ -254,8 +253,9 @@ namespace System.Windows.Media.Imaging {
                 var handle = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
                 try {
                     IntPtr ptr = handle.AddrOfPinnedObject();
-                    Mat tempMat = Mat.FromPixelData(pixelHeight, pixelWidth, matType, ptr, stride);
-                    tempMat.CopyTo(mat);
+                    using (Mat tempMat = Mat.FromPixelData(pixelHeight, pixelWidth, matType, ptr, stride)) {
+                        tempMat.CopyTo(mat);
+                    }
                 } finally {
                     handle.Free();
                 }
