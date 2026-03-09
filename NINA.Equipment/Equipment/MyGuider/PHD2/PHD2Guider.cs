@@ -265,13 +265,16 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
 
                     string selectedCamera = await GetSelectedCamera() ?? "None";
                     string selectedCameraId = await GetSelectedCameraId();
-                    int selectedCameraDepth = await GetSelectedCameraBitDepth();
 
                     // Set camera if it differs
                     if (!await ValidateCameraMatch(phd2Camera, phd2CameraId, selectedCamera, selectedCameraId)) {
                         Logger.Warning($"Failed to synchronize cameras: NINA camera is '{phd2CameraId} ({phd2Camera})' but PHD2 has '{selectedCameraId} ({selectedCamera})' selected");
                         Notification.ShowWarning(Loc.Instance["LblPhd2CameraMismatch"] ?? $"Failed to synchronize PHD2 camera with NINA. NINA: '{phd2CameraId}', PHD2: '{selectedCameraId}'");
                     }
+
+                    // Fetch bit depth after camera selection may have been changed by ValidateCameraMatch,
+                    // so the reading reflects the camera that will actually be used.
+                    int selectedCameraDepth = await GetSelectedCameraBitDepth();
 
                     // Set camera bit depth
                     int bitDepth = profileService.ActiveProfile.GuiderSettings.PHD2CameraDepth;
@@ -1496,6 +1499,15 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
 
                 if (setCameraBitDepthResult.error != null)
                 {
+                    // PHD2 returns "Camera does not support bitdepth setting" for cameras where the
+                    // depth cannot be changed via config (e.g. INDI cameras).  That is not a real
+                    // failure — the camera simply manages its own bit depth.  Log as info and report
+                    // success so the caller does not surface a spurious warning to the user.
+                    if (setCameraBitDepthResult.error.message?.Contains("does not support bitdepth") == true)
+                    {
+                        Logger.Info($"PHD2 camera does not support bitdepth configuration; skipping sync.");
+                        return true;
+                    }
                     Logger.Error($"Failed to set PHD2 camera bit depth to '{ninaBitDepth}': {setCameraBitDepthResult.error.message}");
                     return false;
                 }
