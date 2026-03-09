@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -1366,7 +1366,25 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
 
                 if (isINDIMount)
                 {
-                    // Set INDI mount with format "INDI Mount [$deviceId]"
+                    // PHD2's set_selected_mount validates against Scope::MountList(), which builds the
+                    // INDI entry by reading the "/indi/INDImount" profile config key via INDIMountName().
+                    // If that key is not yet set to ninaDeviceId, the list only contains "INDI Mount"
+                    // (without the driver suffix), so "INDI Mount [<driver>]" won't be found and the
+                    // call fails.  We must therefore set the INDI driver first so that PHD2 reloads
+                    // its mount list before we call set_selected_mount.
+                    Logger.Info($"Setting PHD2 INDI mount driver to: {ninaDeviceId}");
+
+                    var setDriverMsg = new Phd2SetSelectedINDIMountDriver();
+                    setDriverMsg.Parameters = new JObject { ["driver"] = ninaDeviceId };
+                    var setDriverResult = await SendMessage(setDriverMsg);
+
+                    if (setDriverResult.error != null)
+                    {
+                        Logger.Error($"Failed to set PHD2 INDI mount driver to '{ninaDeviceId}': {setDriverResult.error.message}");
+                        return false;
+                    }
+
+                    // Now set_selected_mount will find "INDI Mount [<driver>]" in the refreshed list.
                     string phd2MountId = $"INDI Mount [{ninaDeviceId}]";
                     Logger.Info($"Setting PHD2 mount to INDI format: {phd2MountId}");
 
