@@ -3,6 +3,10 @@ name: Build Linux ARM64 Package
 on:
   workflow_dispatch:
 
+concurrency:
+  group: build-pins-package-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   BUILD_CONFIGURATION: Release
   TARGET_RUNTIME: linux-arm64
@@ -153,6 +157,14 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-${{ runner.arch }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/global.json', '**/nuget.config') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-nuget-
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -316,6 +328,7 @@ jobs:
           mkdir -p build/etc/systemd/system
           mkdir -p build/etc/sudoers.d
           mkdir -p build/home/pi/pins-scripts
+          mkdir -p build/lib/udev/rules.d
           mkdir -p build/DEBIAN
           
           # App files
@@ -336,7 +349,10 @@ jobs:
           
           # Systemd
           cp systemd/sysupdate-api.service build/etc/systemd/system/
-          
+
+          # Udev rules
+          cp packaging/99-asi.rules build/lib/udev/rules.d/99-asi.rules
+                  
           # Sudoers
           cp packaging/sudoers build/etc/sudoers.d/sysupdate-api
           
