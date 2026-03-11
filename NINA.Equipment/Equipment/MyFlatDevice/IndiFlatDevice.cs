@@ -19,6 +19,7 @@ using NINA.Core.Locale;
 using NINA.Core.Utility;
 using NINA.Equipment.Exceptions;
 using NINA.Equipment.Interfaces;
+using NINA.Profile.Interfaces;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,8 +28,11 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
     public class IndiFlatDevice : IndiDevice<IINDIFlatDevice>, IFlatDevice, IDisposable {
 
-        public IndiFlatDevice(INDIDeviceInfo info) : base(info) {
+        public IndiFlatDevice(INDIDeviceInfo info, IProfileService profileService = null) : base(info) {
+            this.profileService = profileService;
         }
+
+        private IProfileService profileService;
 
         private int lastBrightness = 0;
 
@@ -165,6 +169,19 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
         protected override Task PreConnect() {
             lastBrightness = 0;
+
+            if (profileService != null) {
+                var settings = profileService.ActiveProfile.FlatDeviceSettings;
+                var instance = GetInstance();
+                instance.ConfigureConnectionProperties(
+                    settings.IndiConnectionMode,
+                    settings.IndiAutoSearch,
+                    settings.IndiAddress,
+                    settings.IndiPort,
+                    settings.IndiBaudRate
+                );
+            }
+
             return base.PreConnect();
         }
 

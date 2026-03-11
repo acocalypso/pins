@@ -52,9 +52,11 @@ namespace NINA.Profile {
             autoFocusTimeoutSeconds = 600;
             rSquaredThreshold = 0.7;
             reverse = false;
-            connectionMode = "SERIAL";
-            devicePort = "/dev/ttyUSB0";
-            baudRate = 9600;
+            indiConnectionMode = "CONNECTION_SERIAL";
+            indiPort = "/dev/ttyUSB0";
+            indiBaudRate = 9600;
+            indiAutoSearch = true;
+            indiAddress = "localhost";
             indiDriver = "None";
             manualStepSmallMultiplier = 0.5;
             manualStepLargeMultiplier = 5.0;
@@ -377,37 +379,37 @@ namespace NINA.Profile {
             }
         }
 
-        private string connectionMode;
+        private string indiConnectionMode;
         [DataMember]
-        public string ConnectionMode {
-            get => connectionMode;
+        public string IndiConnectionMode {
+            get => indiConnectionMode;
             set {
-                if (connectionMode != value) {
-                    connectionMode = value;
+                if (indiConnectionMode != value) {
+                    indiConnectionMode = value;
                     RaisePropertyChanged();
                 }
             }
         }
 
-        private string devicePort;
+        private string indiPort;
         [DataMember]
-        public string DevicePort {
-            get => devicePort;
+        public string IndiPort {
+            get => indiPort;
             set {
-                if (devicePort != value) {
-                    devicePort = value;
+                if (indiPort != value) {
+                    indiPort = value;
                     RaisePropertyChanged();
                 }
             }
         }
 
-        private int baudRate;
+        private int indiBaudRate;
         [DataMember]
-        public int BaudRate {
-            get => baudRate;
+        public int IndiBaudRate {
+            get => indiBaudRate;
             set {
-                if (baudRate != value) {
-                    baudRate = value;
+                if (indiBaudRate != value) {
+                    indiBaudRate = value;
                     RaisePropertyChanged();
                 }
             }
@@ -420,6 +422,30 @@ namespace NINA.Profile {
             set {
                 if (indiDriver != value) {
                     indiDriver = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private bool indiAutoSearch;
+        [DataMember]
+        public bool IndiAutoSearch {
+            get => indiAutoSearch;
+            set {
+                if (indiAutoSearch != value) {
+                    indiAutoSearch = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private string indiAddress;
+        [DataMember]
+        public string IndiAddress {
+            get => indiAddress;
+            set {
+                if (indiAddress != value) {
+                    indiAddress = value;
                     RaisePropertyChanged();
                 }
             }

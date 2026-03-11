@@ -51,7 +51,7 @@ namespace NINA.Equipment.Utility {
 
             // Query devices for this driver
             foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.FOCUSER_INTERFACE, driver)) {
-                IndiFocuser focuser = new(device);
+                IndiFocuser focuser = new(device, profileService);
                 l.Add(focuser);
             }
             return l;
@@ -126,7 +126,7 @@ namespace NINA.Equipment.Utility {
             // Query devices for this driver
             foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.LIGHTBOX_INTERFACE, driver))
             {
-                IndiFlatDevice flatDevice = new(device);
+                IndiFlatDevice flatDevice = new(device, profileService);
                 l.Add(flatDevice);
             }
             return l;
@@ -147,7 +147,7 @@ namespace NINA.Equipment.Utility {
             // Query devices for this driver
             foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.WEATHER_INTERFACE, driver))
             {
-                IndiWeatherData weatherData = new(device);
+                IndiWeatherData weatherData = new(device, profileService);
                 l.Add(weatherData);
             }
             return l;

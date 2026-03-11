@@ -122,6 +122,18 @@ namespace NINA.Equipment.Equipment.MyRotator {
             offset = 0;
             Synced = false;
 
+            if (profileService != null) {
+                var settings = profileService.ActiveProfile.RotatorSettings;
+                var instance = GetInstance();
+                instance.ConfigureConnectionProperties(
+                    settings.IndiConnectionMode,
+                    settings.IndiAutoSearch,
+                    settings.IndiAddress,
+                    settings.IndiPort,
+                    settings.IndiBaudRate
+                );
+            }
+
             return Task.CompletedTask;
         }
 

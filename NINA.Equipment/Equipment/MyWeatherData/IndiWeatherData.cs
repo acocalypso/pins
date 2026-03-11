@@ -17,14 +17,19 @@ using NINA.Equipment.Interfaces;
 using NINA.INDI;
 using NINA.INDI.Devices;
 using NINA.INDI.Interfaces;
+using NINA.Profile.Interfaces;
 using System;
+using System.Threading.Tasks;
 
 namespace NINA.Equipment.Equipment.MyWeatherData {
 
     internal class IndiWeatherData : IndiDevice<IINDIWeatherData>, IWeatherData, IDisposable {
 
-        public IndiWeatherData(INDIDeviceInfo info) : base(info) {
+        public IndiWeatherData(INDIDeviceInfo info, IProfileService profileService = null) : base(info) {
+            this.profileService = profileService;
         }
+
+        private IProfileService profileService;
 
         public double AveragePeriod => GetProperty(nameof(IINDIWeatherData.AveragePeriod), double.NaN);
 
@@ -55,6 +60,21 @@ namespace NINA.Equipment.Equipment.MyWeatherData {
         public double WindSpeed => GetProperty(nameof(IINDIWeatherData.WindSpeed), double.NaN);
 
         protected override string ConnectionLostMessage => Loc.Instance["LblWeatherConnectionLost"];
+
+        protected override Task PreConnect() {
+            if (profileService != null) {
+                var settings = profileService.ActiveProfile.WeatherDataSettings;
+                var instance = GetInstance();
+                instance.ConfigureConnectionProperties(
+                    settings.IndiConnectionMode,
+                    settings.IndiAutoSearch,
+                    settings.IndiAddress,
+                    settings.IndiPort,
+                    settings.IndiBaudRate
+                );
+            }
+            return Task.CompletedTask;
+        }
 
         protected override IINDIWeatherData GetInstance() {
             return device ??= new INDIWeatherData(_device);

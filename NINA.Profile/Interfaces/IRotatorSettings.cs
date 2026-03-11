@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -33,9 +33,11 @@ namespace NINA.Profile.Interfaces {
         bool OvershootDirection { get; set; }
         float OvershootAngle { get; set; }
 
-        string ConnectionMode { get; set; }
-        string DevicePort { get; set; }
-        int BaudRate { get; set; }
+        string IndiConnectionMode { get; set; }
+        string IndiPort { get; set; }
+        int IndiBaudRate { get; set; }
+        bool IndiAutoSearch { get; set; }
+        string IndiAddress { get; set; }
         string IndiDriver { get; set; }
     }
 }
