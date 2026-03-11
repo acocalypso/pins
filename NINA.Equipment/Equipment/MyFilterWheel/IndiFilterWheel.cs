@@ -64,6 +64,21 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
 
         protected override string ConnectionLostMessage => Loc.Instance["LblFilterwheelConnectionLost"];
 
+        protected override Task PreConnect() {
+            if (profileService != null) {
+                var settings = profileService.ActiveProfile.FilterWheelSettings;
+                var instance = GetInstance();
+                instance.ConfigureConnectionProperties(
+                    settings.IndiConnectionMode,
+                    settings.IndiAutoSearch,
+                    settings.IndiAddress,
+                    settings.IndiPort,
+                    settings.IndiBaudRate
+                );
+            }
+            return Task.CompletedTask;
+        }
+
         protected override Task PostConnect() {
             var filtersList = profileService.ActiveProfile.FilterWheelSettings.FilterWheelFilters;
 

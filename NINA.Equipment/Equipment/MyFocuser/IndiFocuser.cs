@@ -19,6 +19,7 @@ using NINA.Equipment.Interfaces;
 using NINA.INDI;
 using NINA.INDI.Devices;
 using NINA.INDI.Interfaces;
+using NINA.Profile.Interfaces;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,8 +28,11 @@ namespace NINA.Equipment.Equipment.MyFocuser {
 
     public partial class IndiFocuser : IndiDevice<IINDIFocuser>, IFocuser, IDisposable {
 
-        public IndiFocuser(INDIDeviceInfo info) : base(info) {
+        public IndiFocuser(INDIDeviceInfo info, IProfileService profileService = null) : base(info) {
+            this.profileService = profileService;
         }
+
+        private IProfileService profileService;
 
         public bool IsMoving => GetProperty(nameof(IINDIFocuser.IsMoving), false);
 
@@ -210,6 +214,21 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 Logger.Info("The focuser is a relative focuser. Simulating absolute focuser behavior");
             }
             _canHalt = true;
+        }
+
+        protected override Task PreConnect() {
+            if (profileService != null) {
+                var settings = profileService.ActiveProfile.FocuserSettings;
+                var instance = GetInstance();
+                instance.ConfigureConnectionProperties(
+                    settings.IndiConnectionMode,
+                    settings.IndiAutoSearch,
+                    settings.IndiAddress,
+                    settings.IndiPort,
+                    settings.IndiBaudRate
+                );
+            }
+            return Task.CompletedTask;
         }
 
         protected override Task PostConnect() {
