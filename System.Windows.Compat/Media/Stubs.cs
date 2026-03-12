@@ -32,6 +32,7 @@ namespace System.Windows.Media {
         public static Color Blue => Color.FromRgb(0, 0, 255);
         public static Color Yellow => Color.FromRgb(255, 255, 0);
         public static Color Cyan => Color.FromRgb(0, 255, 255);
+        public static Color DarkCyan => Color.FromRgb(0, 139, 139);
         public static Color Magenta => Color.FromRgb(255, 0, 255);
         public static Color Gray => Color.FromRgb(128, 128, 128);
         public static Color Orange => Color.FromRgb(255, 165, 0);
