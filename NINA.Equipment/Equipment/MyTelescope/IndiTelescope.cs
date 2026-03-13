@@ -497,7 +497,8 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                                         if (actualRate < 0) { sign = -1; }
                                         actualRate = GetAdjustedMovingRate(Math.Abs(rate), Math.Abs(rate), axis) * sign;
                                     }
-                                    Logger.Info($"Moving {axis} Telescope Axis using rate {actualRate}.");
+                                    var switchDesc = (device as NINA.INDI.Devices.INDITelescope)?.GetSwitchDescription(Math.Abs(actualRate));
+                                    Logger.Info($"Moving {axis} Telescope Axis using rate {actualRate}{(string.IsNullOrEmpty(switchDesc) ? "" : $" ({switchDesc})")}." );
                                     device.MoveAxis(axis, actualRate);
                                     InvalidatePropertyCache();
                                 }
@@ -1044,6 +1045,7 @@ namespace NINA.Equipment.Equipment.MyTelescope {
             var settings = profileService.ActiveProfile.TelescopeSettings;
             var instance = GetInstance();
             instance.ConfigureConnectionProperties(settings.IndiConnectionMode, settings.IndiAutoSearch, settings.IndiAddress, settings.IndiPort, settings.IndiBaudRate);
+            INDITelescope.ActualMaxSlewRateDps = settings.IndiMaxSlewRateDps;
             return base.PreConnect();
         }
 
