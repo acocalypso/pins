@@ -47,6 +47,7 @@ namespace NINA.Profile {
             indiPort = "/dev/ttyUSB0";
             indiBaudRate = 9600;
             indiDriver = "None";
+            indiMaxSlewRateDps = 4.0;
         }
 
         private string id;
@@ -296,6 +297,19 @@ namespace NINA.Profile {
             set {
                 if (indiDriver != value) {
                     indiDriver = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private double indiMaxSlewRateDps;
+        [DataMember]
+        public double IndiMaxSlewRateDps {
+            get => indiMaxSlewRateDps;
+            set {
+                if (value <= 0) return;
+                if (indiMaxSlewRateDps != value) {
+                    indiMaxSlewRateDps = value;
                     RaisePropertyChanged();
                 }
             }
