@@ -542,6 +542,10 @@ namespace NINA.Equipment.Equipment.MyRotator {
                 } while (status.moving == 1 && !ct.IsCancellationRequested);
 
                 return true;
+            } catch (OperationCanceledException) {
+                Logger.Info("WandererRotator Move cancelled by user");
+                Halt();
+                return false;
             } catch (Exception ex) {
                 Logger.Error($"WandererRotator Move crashed: {ex}");
                 DisconnectOnRemovedError();

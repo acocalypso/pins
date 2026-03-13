@@ -202,27 +202,18 @@ namespace System.Windows.Media.Imaging {
             // Mat.FromPixelData creates a view that references the buffer, which may become invalid
             Mat mat = new Mat(pixelHeight, pixelWidth, matType);
 
-            // Copy the data from the buffer to the Mat
-            if (stride == mat.Step()) {
-                // Simple case: stride matches, direct copy
-                int copyBytes = (int)System.Math.Min((long)bufferSize, mat.Total() * mat.ElemSize());
+            // Always copy row by row to properly handle stride mismatches and buffer bounds.
+            // When a bitmap is locked with one format but converted to another, stride calculations
+            // can mismatch, causing buffer overruns. This approach is safe against all variants.
+            int rowBytes = (int)System.Math.Min((long)stride, mat.Step());
+            int maxRowsToCopy = bufferSize / (stride > 0 ? stride : 1);
+            int rowsToCopy = System.Math.Min(pixelHeight, maxRowsToCopy);
+            
+            for (int y = 0; y < rowsToCopy; y++) {
+                IntPtr srcPtr = buffer + (y * stride);
+                IntPtr dstPtr = mat.Data + (y * (int)mat.Step());
                 unsafe {
-                    System.Buffer.MemoryCopy(buffer.ToPointer(), mat.Data.ToPointer(), mat.Total() * mat.ElemSize(), copyBytes);
-                }
-            } else {
-                // Complex case: stride doesn't match, copy row by row.
-                // Use the minimum of the source row bytes (stride) and the destination row bytes
-                // (mat.Step()) so we never read past the end of the source buffer. When the caller
-                // passes a PixelFormat whose bytes-per-pixel is larger than the format the bitmap
-                // was actually locked as, using mat.ElemSize() * pixelWidth would overshoot the
-                // last source row and cause an AccessViolationException.
-                int rowBytes = (int)System.Math.Min((long)stride, mat.Step());
-                for (int y = 0; y < pixelHeight; y++) {
-                    IntPtr srcPtr = buffer + (y * stride);
-                    IntPtr dstPtr = mat.Data + (y * (int)mat.Step());
-                    unsafe {
-                        System.Buffer.MemoryCopy(srcPtr.ToPointer(), dstPtr.ToPointer(), mat.Step(), rowBytes);
-                    }
+                    System.Buffer.MemoryCopy(srcPtr.ToPointer(), dstPtr.ToPointer(), mat.Step(), rowBytes);
                 }
             }
 
