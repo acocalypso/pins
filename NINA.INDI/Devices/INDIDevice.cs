@@ -58,12 +58,14 @@ namespace NINA.INDI.Devices {
             _hasDevicePortProperty = HasProperties(["DEVICE_PORT"]);
             _hasDeviceBaudRateProperty = HasProperties(["DEVICE_BAUD_RATE"]);
             _hasAutoSearchProperty = HasProperties(["DEVICE_AUTO_SEARCH"]);
+            _hasDeviceAddressProperty = HasProperties(["DEVICE_ADDRESS"]);
         }
 
         private readonly bool _hasConnectionModeProperty;
         private readonly bool _hasDevicePortProperty;
         private readonly bool _hasDeviceBaudRateProperty;
         private readonly bool _hasAutoSearchProperty;
+        private readonly bool _hasDeviceAddressProperty;
 
         private bool _connected;
         private bool _connectionAttemptFailed;  // Track if the last connection attempt failed
@@ -661,25 +663,32 @@ namespace NINA.INDI.Devices {
                 // Process TCP mode
                 if (HasAddress)
                 {
-                    try
+                    if (!_hasDeviceAddressProperty && DeviceName.Contains("Simulator", StringComparison.OrdinalIgnoreCase))
                     {
-                        Logger.Info($"[{DeviceName}] Setting DEVICE_ADDRESS to {_address}:{_port}");
-                        if(!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10)))
-                        {
-                            Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS address to {_address}");
-                            return false;
-                        }
-                        if(!await SetTextValueAsync("DEVICE_ADDRESS", "PORT", _port, TimeSpan.FromSeconds(10)))
-                        {
-                            Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS port to {_port}");
-                            return false;
-                        }
-                        Logger.Info($"[{DeviceName}] TCP mode configuration complete - ADDRESS={_address}:{_port}");
+                        Logger.Info($"[{DeviceName}] Simulator device has no DEVICE_ADDRESS property - skipping TCP address configuration");
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        Logger.Error($"[{DeviceName}] Exception during TCP configuration: {ex.Message}");
-                        return false;
+                        try
+                        {
+                            Logger.Info($"[{DeviceName}] Setting DEVICE_ADDRESS to {_address}:{_port}");
+                            if(!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10)))
+                            {
+                                Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS address to {_address}");
+                                return false;
+                            }
+                            if(!await SetTextValueAsync("DEVICE_ADDRESS", "PORT", _port, TimeSpan.FromSeconds(10)))
+                            {
+                                Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS port to {_port}");
+                                return false;
+                            }
+                            Logger.Info($"[{DeviceName}] TCP mode configuration complete - ADDRESS={_address}:{_port}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"[{DeviceName}] Exception during TCP configuration: {ex.Message}");
+                            return false;
+                        }
                     }
                 }
             }
