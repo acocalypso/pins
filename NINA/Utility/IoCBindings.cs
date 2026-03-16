@@ -99,7 +99,7 @@ namespace NINA.Utility {
                 services.AddSingleton(f => _commandLineArguments);
 
                 services.AddSingleton<IMessageBroker, MessageBroker>();
-                
+
                 services.AddSingleton<ISymbolBroker, SymbolBroker>();
 
                 services.AddTransient<IUsbDeviceWatcher, UsbDeviceWatcher>();
@@ -150,6 +150,7 @@ namespace NINA.Utility {
                 services.AddSingleton<ICameraVM, CameraVM>(f =>
                     new CameraVM(f.GetService<IProfileService>(),
                                  f.GetService<ICameraMediator>(),
+                                 f.GetService<IFilterWheelMediator>(),
                                  f.GetService<IApplicationStatusMediator>(),
                                  f.GetService<CameraChooserVM>()));
 
