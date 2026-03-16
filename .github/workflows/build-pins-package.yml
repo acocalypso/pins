@@ -48,6 +48,7 @@ jobs:
             build-essential \
             cmake \
             git-lfs \
+            zip \
             unzip \
             autoconf \
             autoconf-archive \
@@ -1256,6 +1257,37 @@ jobs:
           fi
           echo "All plugin packages built successfully."
 
+      - name: Create firmware bundle zip
+        id: firmware_bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_date="${{ steps.release_tag.outputs.date }}"
+          release_time="$(date +%H%M%S)"
+          bundle_name="firmware_${release_date}_${release_time}.zip"
+          bundle_path="artifacts/$bundle_name"
+
+          shopt -s nullglob
+          files=(
+            "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
+            "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb.sha256"
+            artifacts/pinsdaemon_*.deb
+            artifacts/plugins/*.deb
+            artifacts/plugins/*.deb.sha256
+          )
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No package artifacts found to include in firmware bundle." >&2
+            exit 1
+          fi
+
+          rm -f "$bundle_path"
+          zip -j "$bundle_path" "${files[@]}"
+
+          echo "Created firmware bundle: $bundle_path"
+          echo "path=$bundle_path" >> "$GITHUB_OUTPUT"
+
       - name: Publish deb-only GitHub release
         uses: softprops/action-gh-release@v2
         if: success()
@@ -1268,6 +1300,7 @@ jobs:
             artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb
             artifacts/pinsdaemon_*.deb
             artifacts/plugins/*.deb
+            ${{ steps.firmware_bundle.outputs.path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
