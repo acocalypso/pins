@@ -174,6 +174,9 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                         return false;
                     }
                     return false;
+                } catch (OperationCanceledException) {
+                    Logger.Info("WandererCover Open cancelled by user");
+                    return false;
                 } catch (Exception ex) {
                     Logger.Error($"WandererCover Open crashed: {ex}");
                     DisconnectOnRemovedError();
@@ -209,6 +212,9 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                         }
                         return false;
                     }
+                    return false;
+                } catch (OperationCanceledException) {
+                    Logger.Info("WandererCover Close cancelled by user");
                     return false;
                 } catch (Exception ex) {
                     Logger.Error($"WandererCover Close crashed: {ex}");
