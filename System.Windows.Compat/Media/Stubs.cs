@@ -40,6 +40,9 @@ namespace System.Windows.Media {
         public static Color Pink => Color.FromRgb(255, 192, 203);
         public static Color Brown => Color.FromRgb(165, 42, 42);
         public static Color GreenYellow => Color.FromRgb(173, 255, 47);
+        public static Color LightGreen => Color.FromRgb(144, 238, 144);
+        public static Color YellowGreen => Color.FromRgb(154, 205, 50);
+        public static Color LightBlue => Color.FromRgb(173, 216, 230);
     }
 
     public abstract class ImageSource : IDisposable {
