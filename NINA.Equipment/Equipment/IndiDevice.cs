@@ -427,15 +427,15 @@ namespace NINA.Equipment.Equipment {
             throw new System.NotImplementedException();
         }
         public void SendCommandBlind(string command, bool raw = true) {
-            throw new System.NotImplementedException();
+            device.CommandBlind(command, raw);
         }
 
         public bool SendCommandBool(string command, bool raw = true) {
-            throw new System.NotImplementedException();
+            return device.CommandBool(command, raw);
         }
 
         public string SendCommandString(string command, bool raw = true) {
-            throw new System.NotImplementedException();
+            return device.CommandString(command, raw);
         }
     }
 }
