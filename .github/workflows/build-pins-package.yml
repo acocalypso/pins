@@ -318,7 +318,7 @@ jobs:
       - name: Checkout pinsdaemon
         uses: actions/checkout@v4
         with:
-          repository: acocalypso/pinsdaemon
+          repository: Touch-N-Stars/pinsdaemon
           path: pinsdaemon
 
       - name: Build PinsDaemon Package
