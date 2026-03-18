@@ -11,6 +11,7 @@ env:
   BUILD_CONFIGURATION: Release
   TARGET_RUNTIME: linux-arm64
   PLUGIN_TARGET_FRAMEWORK: net10.0
+  JAVA_HOME: /usr/lib/jvm/default-java
   INSTALL_DIRECTORY: /home/pi/pins
   PUBLISH_DIRECTORY: artifacts/publish
   PACKAGE_ROOT: artifacts/package
@@ -397,6 +398,17 @@ jobs:
           mkdir -p "$(dirname "${{ env.PLUGIN_FAILURES_FILE }}")"
           rm -f "${{ env.PLUGIN_FAILURES_FILE }}"
 
+      - name: Verify Java for Antlr plugin builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x "${JAVA_HOME}/bin/java" ]; then
+            echo "JAVA_HOME points to missing java binary: ${JAVA_HOME}/bin/java" >&2
+            exit 1
+          fi
+          export PATH="${JAVA_HOME}/bin:${PATH}"
+          java -version
+
       - name: Build HocusFocus plugin deb
         shell: bash
         run: |
@@ -498,6 +510,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PATH="${JAVA_HOME}/bin:${PATH}"
+          java_bin="$(command -v java || true)"
+          if [ -z "$java_bin" ]; then
+            echo "java executable is not available on PATH for TenMicron build" >&2
+            exit 1
+          fi
+          echo "Using java executable: $java_bin"
           project_path="NINA.Plugins/NINA.Joko.Plugin.TenMicron/NINA.Joko.Plugin.TenMicron/NINA.Joko.Plugin.TenMicron.csproj"
           install_folder="NINA.Joko.Plugin.TenMicron"
           deb_package="pins-plugin-tenmicron"
