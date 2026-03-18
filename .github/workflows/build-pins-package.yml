@@ -61,6 +61,17 @@ jobs:
             libicu-dev \
             rsync
 
+          java_bin="$(command -v java || true)"
+          if [ -z "$java_bin" ]; then
+            echo "Java runtime is not available on PATH after package install" >&2
+            exit 1
+          fi
+          java_bin="$(readlink -f "$java_bin")"
+          java_home="$(dirname "$(dirname "$java_bin")")"
+          echo "JAVA_HOME=$java_home" >> "$GITHUB_ENV"
+          echo "$java_home/bin" >> "$GITHUB_PATH"
+          java -version
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -415,7 +426,7 @@ jobs:
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
             dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }}
-            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }} -p:JavaExecutable="${JAVA_HOME}/bin/java" -p:Antlr4JavaExecutable="${JAVA_HOME}/bin/java"
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
               echo "Expected RID output folder not found at: $tfm_dir" >&2
