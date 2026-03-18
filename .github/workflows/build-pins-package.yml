@@ -521,6 +521,20 @@ jobs:
           install_folder="NINA.Joko.Plugin.TenMicron"
           deb_package="pins-plugin-tenmicron"
           plugin_dir=$(dirname "$project_path")
+
+          # Antlr4BuildTasks 12.1.0 reads Java settings from Antlr4 item metadata.
+          # Force PATH-based java resolution and allow the C# generator fallback.
+          cat > "$plugin_dir/Directory.Build.props" << 'EOF'
+          <Project>
+            <ItemDefinitionGroup>
+              <Antlr4>
+                <AllowAntlr4cs>true</AllowAntlr4cs>
+                <JavaExec>PATH</JavaExec>
+              </Antlr4>
+            </ItemDefinitionGroup>
+          </Project>
+          EOF
+
           set +e
           (
             set -euo pipefail
