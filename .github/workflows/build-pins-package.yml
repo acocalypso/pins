@@ -45,6 +45,7 @@ jobs:
             git \
             gnupg \
             wget \
+            default-jre-headless \
             build-essential \
             cmake \
             git-lfs \
