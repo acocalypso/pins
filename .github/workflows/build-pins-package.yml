@@ -11,7 +11,6 @@ env:
   BUILD_CONFIGURATION: Release
   TARGET_RUNTIME: linux-arm64
   PLUGIN_TARGET_FRAMEWORK: net10.0
-  JAVA_HOME: /usr/lib/jvm/default-java
   INSTALL_DIRECTORY: /home/pi/pins
   PUBLISH_DIRECTORY: artifacts/publish
   PACKAGE_ROOT: artifacts/package
@@ -61,17 +60,6 @@ jobs:
             libssl-dev \
             libicu-dev \
             rsync
-
-          java_bin="$(command -v java || true)"
-          if [ -z "$java_bin" ]; then
-            echo "Java runtime is not available on PATH after package install" >&2
-            exit 1
-          fi
-          java_bin="$(readlink -f "$java_bin")"
-          java_home="$(dirname "$(dirname "$java_bin")")"
-          echo "JAVA_HOME=$java_home" >> "$GITHUB_ENV"
-          echo "$java_home/bin" >> "$GITHUB_PATH"
-          java -version
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -398,17 +386,6 @@ jobs:
           mkdir -p "$(dirname "${{ env.PLUGIN_FAILURES_FILE }}")"
           rm -f "${{ env.PLUGIN_FAILURES_FILE }}"
 
-      - name: Verify Java for Antlr plugin builds
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ ! -x "${JAVA_HOME}/bin/java" ]; then
-            echo "JAVA_HOME points to missing java binary: ${JAVA_HOME}/bin/java" >&2
-            exit 1
-          fi
-          export PATH="${JAVA_HOME}/bin:${PATH}"
-          java -version
-
       - name: Build HocusFocus plugin deb
         shell: bash
         run: |
@@ -438,7 +415,7 @@ jobs:
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
             dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }}
-            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }} -p:JavaExecutable="${JAVA_HOME}/bin/java" -p:Antlr4JavaExecutable="${JAVA_HOME}/bin/java"
+            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
               echo "Expected RID output folder not found at: $tfm_dir" >&2
@@ -510,30 +487,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PATH="${JAVA_HOME}/bin:${PATH}"
-          java_bin="$(command -v java || true)"
-          if [ -z "$java_bin" ]; then
-            echo "java executable is not available on PATH for TenMicron build" >&2
-            exit 1
-          fi
-          echo "Using java executable: $java_bin"
           project_path="NINA.Plugins/NINA.Joko.Plugin.TenMicron/NINA.Joko.Plugin.TenMicron/NINA.Joko.Plugin.TenMicron.csproj"
           install_folder="NINA.Joko.Plugin.TenMicron"
           deb_package="pins-plugin-tenmicron"
           plugin_dir=$(dirname "$project_path")
-
-          # Antlr4BuildTasks 12.1.0 reads Java settings from Antlr4 item metadata.
-          # Force PATH-based java resolution and allow the C# generator fallback.
-          cat > "$plugin_dir/Directory.Build.props" << 'EOF'
-          <Project>
-            <ItemDefinitionGroup>
-              <Antlr4>
-                <AllowAntlr4cs>true</AllowAntlr4cs>
-                <JavaExec>PATH</JavaExec>
-              </Antlr4>
-            </ItemDefinitionGroup>
-          </Project>
-          EOF
 
           set +e
           (
@@ -559,7 +516,7 @@ jobs:
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
             dotnet restore "$project_path" -r ${{ env.TARGET_RUNTIME }}
-            dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
+            JavaPath=$(which java) dotnet build "$project_path" -c ${{ env.BUILD_CONFIGURATION }} -f ${{ env.PLUGIN_TARGET_FRAMEWORK }} -r ${{ env.TARGET_RUNTIME }} --no-restore ${{ env.PLUGIN_MSBUILD_ARGS }}
             tfm_dir="$plugin_dir/bin/${{ env.BUILD_CONFIGURATION }}/${{ env.PLUGIN_TARGET_FRAMEWORK }}/${{ env.TARGET_RUNTIME }}"
             if [ ! -d "$tfm_dir" ]; then
               echo "Expected RID output folder not found at: $tfm_dir" >&2
