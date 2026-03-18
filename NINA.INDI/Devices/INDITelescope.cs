@@ -1001,31 +1001,5 @@ namespace NINA.INDI.Devices
             // Return unknown/current pier side as best guess
             return SideOfPier;
         }
-
-        #region Unsupported
-
-        public IList<string> SupportedActions { get; }
-
-        public string Action(string actionName, string actionParameters)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void CommandBlind(string command, bool raw = false)
-        {
-            throw new NotImplementedException();
-        }
-
-        public bool CommandBool(string command, bool raw = false)
-        {
-            throw new NotImplementedException();
-        }
-
-        public string CommandString(string command, bool raw = false)
-        {
-            throw new NotImplementedException();
-        }
-
-        #endregion
     }
 }

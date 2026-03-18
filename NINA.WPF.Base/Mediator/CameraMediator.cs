@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -96,6 +96,8 @@ namespace NINA.WPF.Base.Mediator {
         public bool AtTargetTemp => handler.AtTargetTemp;
 
         public double TargetTemp => handler.TargetTemp;
+
+        public bool TempChangeRunning => handler.TempChangeRunning;
 
         public void SetDewHeater(bool onOff) {
             handler.SetDewHeater(onOff);
