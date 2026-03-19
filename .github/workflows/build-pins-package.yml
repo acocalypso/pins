@@ -1161,7 +1161,7 @@ jobs:
             # Ensure every CI build produces a unique, increasing Debian version.
             plugin_version="${plugin_version}+${GITHUB_RUN_NUMBER}"
             rm -rf "$tmp_dir" "$plugin_dir/app"
-            git clone --branch pins --single-branch https://github.com/Touch-N-Stars/Touch-N-Stars.git "$tmp_dir"
+            git clone --branch develop --single-branch https://github.com/Touch-N-Stars/Touch-N-Stars.git "$tmp_dir"
             pushd "$tmp_dir" >/dev/null
             npm install
             npm run build
