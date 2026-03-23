@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -165,6 +165,11 @@ namespace NINA.Image.ImageAnalysis {
                 bitmapData.Scan0, bitmapData.Stride * bitmapData.Height, bitmapData.Stride);
 
             bitmap.UnlockBits(bitmapData);
+            // Prevent the GC from collecting bitmap (and its underlying OpenCV Mat) during
+            // BitmapSource.Create's MemoryCopy. The JIT may consider bitmap dead after LockBits
+            // since UnlockBits is a no-op that gets inlined away, leaving Scan0 as a dangling
+            // pointer into freed native memory if a GC occurs mid-copy.
+            GC.KeepAlive(bitmap);
             return bitmapSource;
         }
 
