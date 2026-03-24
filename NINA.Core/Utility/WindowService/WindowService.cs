@@ -15,6 +15,7 @@
 using NINA.Core.Utility.Extensions;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -499,7 +500,9 @@ namespace NINA.Core.Utility.WindowService {
                 // Get Position Angle (rotation)
                 var posAngleProp = type.GetProperty("PositionAngle");
                 var posAngle = posAngleProp?.GetValue(result);
-                var rotation = posAngle?.ToString() ?? "--";
+                var rotation = posAngle is double d
+                    ? (double.IsNaN(d) ? "--" : d.ToString("F2", CultureInfo.InvariantCulture))
+                    : posAngle?.ToString() ?? "--";
 
                 return new Model.DialogMeasurement {
                     Time = solveTime?.ToString("HH:mm:ss") ?? "",
