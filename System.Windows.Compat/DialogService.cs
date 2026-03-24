@@ -145,6 +145,7 @@ namespace System.Windows {
         public static bool CloseDialog(int dialogId, bool result = true) {
             string contentType = null;
             object dataContext = null;
+            bool hasOtherActiveDialogs = false;
             lock (_lock) {
                 if (_activeDialogs.TryGetValue(dialogId, out var dialog)) {
                     contentType = dialog.ContentType;
@@ -154,6 +155,13 @@ namespace System.Windows {
                     dialog.ResultCallback?.Invoke(result);
 
                     _activeDialogs.Remove(dialogId);
+
+                    // Check if another dialog of the same ContentType is still active.
+                    // This happens when a second operation of the same type was started before
+                    // the first one finished (e.g. a new slew+center cancels the previous one).
+                    // In that case, do NOT broadcast ClearDialog – the second operation's dialog
+                    // is still alive and should remain visible in the frontend.
+                    hasOtherActiveDialogs = _activeDialogs.Values.Any(d => d.ContentType == contentType);
                 }
             }
             
@@ -162,8 +170,16 @@ namespace System.Windows {
                 CleanupEventHandlers(dataContext);
             }
             
-            // Broadcast close event via SignalR (outside lock to avoid deadlock)
-            if (contentType != null) {
+            if (contentType == null) {
+                return false;
+            }
+
+            // Broadcast close event via SignalR (outside lock to avoid deadlock),
+            // but only when no other dialog of the same ContentType is still active.
+            // If another dialog of the same type is running (e.g. a new slew+center was
+            // started before the first one finished), skip the ClearDialog broadcast so
+            // the frontend dialog stays open for the new operation.
+            if (!hasOtherActiveDialogs) {
                 _ = System.Threading.Tasks.Task.Run(async () => {
                     try {
                         // Try to use the DialogBroadcaster directly
@@ -185,10 +201,9 @@ namespace System.Windows {
                         // Silently fail - logging already handled by broadcaster
                     }
                 });
-                return true;
             }
-            
-            return false;
+
+            return true;
         }
 
         /// <summary>
