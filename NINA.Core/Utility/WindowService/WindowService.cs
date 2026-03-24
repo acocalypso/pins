@@ -44,6 +44,9 @@ namespace NINA.Core.Utility.WindowService {
         private static int _instanceCounter = 0;
         private readonly int _instanceId;
 
+        // Track the specific dialog ID registered by this instance (headless mode only)
+        private int _currentDialogId = -1;
+
         public WindowService() {
             _instanceId = System.Threading.Interlocked.Increment(ref _instanceCounter);
         }
@@ -79,11 +82,11 @@ namespace NINA.Core.Utility.WindowService {
         public async Task Close() {
             // In headless mode, we need to close via DialogService
             if (System.Windows.DialogService.IsHeadless()) {
-                // Find and close any dialogs associated with this WindowService instance
-                var allDialogs = System.Windows.DialogService.GetAllDialogs();
-                foreach (var dialog in allDialogs) {
-                    // Close each dialog - this will trigger ClearDialogAsync
-                    System.Windows.DialogService.CloseDialog(dialog.DialogId, result: true);
+                // Close only the specific dialog owned by this WindowService instance
+                var ownDialogId = _currentDialogId;
+                if (ownDialogId >= 0) {
+                    _currentDialogId = -1;
+                    System.Windows.DialogService.CloseDialog(ownDialogId, result: true);
                 }
                 return;
             }
@@ -223,6 +226,9 @@ namespace NINA.Core.Utility.WindowService {
 
                 int dialogId = DialogService.RegisterDialog(dialog);
 
+                // Track this dialog so Close() only closes this specific one
+                _currentDialogId = dialogId;
+
                 // Subscribe to property changes for real-time updates
                 // Only subscribe once per content object to prevent duplicate broadcasts
                 if (content is INotifyPropertyChanged notifyObj && _subscribedContent.TryAdd(content, true)) {
@@ -333,14 +339,29 @@ namespace NINA.Core.Utility.WindowService {
                     }
                 }
 
-                // Add a Cancel button (all dialogs should be cancellable)
-                DialogService.AddButton(dialogId, "Cancel", "Cancel", isDefault: false, isCancel: true, onClick: null);
+                // Add buttons: use ICommand properties from the content when available,
+                // otherwise fall back to a generic Cancel button.
+                var commandButtons = ExtractCommandButtons(content);
+                var availableCommandNames = new List<string>();
+                if (commandButtons.Count > 0) {
+                    foreach (var (name, cmd, isDefault, isCancel) in commandButtons) {
+                        var capturedCmd = cmd;
+                        DialogService.AddButton(dialogId, name, name, isDefault: isDefault, isCancel: isCancel,
+                            onClick: () => { try { if (capturedCmd.CanExecute(null)) capturedCmd.Execute(null); } catch { } });
+                        availableCommandNames.Add(name);
+                    }
+                } else {
+                    DialogService.AddButton(dialogId, "Cancel", "Cancel", isDefault: false, isCancel: true, onClick: null);
+                    availableCommandNames.Add("Cancel");
+                }
 
                 // Broadcast via SignalR immediately
                 _ = Task.Run(async () => {
                     try {
-                        // Check if this content is still subscribed (dialog not closed immediately)
-                        if (!_subscribedContent.ContainsKey(content)) {
+                        // Check if this content is still subscribed (dialog not closed immediately).
+                        // Only applies to INotifyPropertyChanged content — other content types were
+                        // never added to _subscribedContent, so skipping the check for them is correct.
+                        if (content is INotifyPropertyChanged && !_subscribedContent.ContainsKey(content)) {
                             return; // Dialog was closed before broadcast, don't broadcast
                         }
 
@@ -358,7 +379,7 @@ namespace NINA.Core.Utility.WindowService {
                                 Active = true,
                                 Status = ExtractMessage(content),
                                 Parameters = parameters,
-                                AvailableCommands = new List<string> { "Cancel" }
+                                AvailableCommands = availableCommandNames
                             };
 
                             // Special handling for PlateSolvingStatusVM
@@ -383,6 +404,38 @@ namespace NINA.Core.Utility.WindowService {
                 Logger.Error($"WindowService.ShowViaDialogService() failed: {ex}");
                 return -1;
             }
+        }
+
+        /// <summary>
+        /// Scans well-known ICommand properties on the content object and returns button descriptors.
+        /// Only a whitelisted set of command names is considered to avoid adding unintended buttons.
+        /// </summary>
+        private static List<(string Name, ICommand Command, bool IsDefault, bool IsCancel)> ExtractCommandButtons(object content) {
+            var result = new List<(string, ICommand, bool, bool)>();
+            if (content == null) return result;
+
+            // Map property name → (displayName, isDefault, isCancel)
+            var knownCommands = new (string PropName, string DisplayName, bool IsDefault, bool IsCancel)[] {
+                ("ContinueCommand",  "Continue", true,  false),
+                ("OKCommand",        "OK",        true,  false),
+                ("YesCommand",       "Yes",       true,  false),
+                ("ConfirmCommand",   "Confirm",   true,  false),
+                ("CancelCommand",    "Cancel",    false, true),
+                ("NoCommand",        "No",        false, false),
+                ("AbortCommand",     "Abort",     false, true),
+            };
+
+            foreach (var entry in knownCommands) {
+                var prop = content.GetType().GetProperty(entry.PropName);
+                if (prop != null && typeof(ICommand).IsAssignableFrom(prop.PropertyType)) {
+                    try {
+                        if (prop.GetValue(content) is ICommand cmd) {
+                            result.Add((entry.DisplayName, cmd, entry.IsDefault, entry.IsCancel));
+                        }
+                    } catch { }
+                }
+            }
+            return result;
         }
 
         private string ExtractMessage(object obj) {

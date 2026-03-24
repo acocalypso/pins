@@ -18,6 +18,7 @@ using NINA.Core.Utility;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NINA.Core.SignalR {
@@ -28,6 +29,12 @@ namespace NINA.Core.SignalR {
         private readonly IHubContext<DialogHub> _hubContext;
         private static IDialogBroadcaster _instance;
         private static readonly ConcurrentDictionary<string, DialogData> _activeDialogs = new();
+
+        // Sequence-based ordering: prevents a stale ReceiveDialog from arriving at clients
+        // after a ClearDialog for the same contentType was already sent.
+        private static readonly SemaphoreSlim _broadcastLock = new SemaphoreSlim(1, 1);
+        private static readonly ConcurrentDictionary<string, long> _clearSequences = new();
+        private static long _globalSequence = 0;
 
         public DialogBroadcaster(IHubContext<DialogHub> hubContext) {
             _hubContext = hubContext;
@@ -49,12 +56,26 @@ namespace NINA.Core.SignalR {
         public async Task BroadcastDialogAsync(DialogData data) {
             try {
                 if (data != null && _hubContext != null) {
-                    // Track active dialog
-                    if (data.Active) {
-                        _activeDialogs[data.ContentType] = data;
+                    // Capture a sequence number before entering the lock.
+                    // ClearDialogAsync also increments this counter before its lock acquisition,
+                    // so if clearSeq > broadcastSeq the dialog was already closed and we must
+                    // suppress this stale broadcast to prevent the dialog re-appearing on the client.
+                    long broadcastSeq = Interlocked.Increment(ref _globalSequence);
+
+                    await _broadcastLock.WaitAsync();
+                    try {
+                        if (data.Active) {
+                            if (_clearSequences.TryGetValue(data.ContentType, out var clearSeq) && clearSeq > broadcastSeq) {
+                                Logger.Debug($"[DialogBroadcaster] Suppressing stale ReceiveDialog for {data.ContentType} (broadcastSeq={broadcastSeq}, clearSeq={clearSeq})");
+                                return;
+                            }
+                            _activeDialogs[data.ContentType] = data;
+                        }
+
+                        await _hubContext.Clients.All.SendAsync("ReceiveDialog", data);
+                    } finally {
+                        _broadcastLock.Release();
                     }
-                    
-                    await _hubContext.Clients.All.SendAsync("ReceiveDialog", data);
                 } else {
                     Logger.Warning($"Cannot broadcast dialog: data={data != null}, hubContext={_hubContext != null}");
                 }
@@ -86,10 +107,20 @@ namespace NINA.Core.SignalR {
         public async Task ClearDialogAsync(string contentType) {
             try {
                 if (_hubContext != null) {
-                    // Remove from active dialogs
-                    _activeDialogs.TryRemove(contentType, out _);
-                    
-                    await _hubContext.Clients.All.SendAsync("ClearDialog", contentType);
+                    // Record the clear intent with a sequence number BEFORE acquiring the lock.
+                    // BroadcastDialogAsync compares its own sequence against this value inside the
+                    // lock and suppresses the send if the clear sequence is higher (i.e. occurred
+                    // after the broadcast was initiated but before it could acquire the lock).
+                    long clearSeq = Interlocked.Increment(ref _globalSequence);
+                    _clearSequences[contentType] = clearSeq;
+
+                    await _broadcastLock.WaitAsync();
+                    try {
+                        _activeDialogs.TryRemove(contentType, out _);
+                        await _hubContext.Clients.All.SendAsync("ClearDialog", contentType);
+                    } finally {
+                        _broadcastLock.Release();
+                    }
                 }
             } catch (Exception ex) {
                 Logger.Error($"Failed to clear dialog via SignalR: {ex.Message}");
