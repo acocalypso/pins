@@ -32,6 +32,12 @@ namespace NINA.Core.SignalR {
         public override async Task OnConnectedAsync() {
             Logger.Info($"Client connected to MyMessageBoxHub: {Context.ConnectionId}");
             await base.OnConnectedAsync();
+
+            // Send all currently pending message boxes to the newly connected client
+            var activeMessageBoxes = MyMessageBoxBroadcaster.GetActiveMessageBoxes();
+            foreach (var messageBox in activeMessageBoxes) {
+                await Clients.Caller.SendAsync("ReceiveMessageBox", messageBox);
+            }
         }
 
         public override async Task OnDisconnectedAsync(Exception exception) {

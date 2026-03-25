@@ -22,6 +22,12 @@ namespace NINA.Core.SignalR {
     public class ProgressHub : Hub {
         public override async Task OnConnectedAsync() {
             await base.OnConnectedAsync();
+
+            // Send all currently active progress items to the newly connected client
+            var activeProgresses = SignalRProgressBroadcaster.GetActiveProgresses();
+            foreach (var progress in activeProgresses) {
+                await Clients.Caller.SendAsync("ReceiveProgress", progress);
+            }
         }
 
         public override async Task OnDisconnectedAsync(System.Exception exception) {
