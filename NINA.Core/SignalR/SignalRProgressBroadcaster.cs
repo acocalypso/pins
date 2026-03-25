@@ -14,6 +14,8 @@
 
 using Microsoft.AspNetCore.SignalR;
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace NINA.Core.SignalR {
@@ -22,14 +24,29 @@ namespace NINA.Core.SignalR {
     /// </summary>
     public class SignalRProgressBroadcaster {
         private readonly IHubContext<ProgressHub> _hubContext;
+        private static SignalRProgressBroadcaster _instance;
+        private static readonly ConcurrentDictionary<string, ProgressMessage> _activeProgresses = new();
 
         public SignalRProgressBroadcaster(IHubContext<ProgressHub> hubContext) {
             _hubContext = hubContext;
+            _instance = this;
+        }
+
+        /// <summary>
+        /// Get all currently active progress items (for sending to newly connected clients)
+        /// </summary>
+        public static IList<ProgressMessage> GetActiveProgresses() {
+            return new List<ProgressMessage>(_activeProgresses.Values);
         }
 
         public async Task BroadcastProgressAsync(ProgressMessage message) {
             try {
                 if (message != null && _hubContext != null) {
+                    if (message.State == "create" || message.State == "update") {
+                        _activeProgresses[message.Source] = message;
+                    } else if (message.State == "delete") {
+                        _activeProgresses.TryRemove(message.Source, out _);
+                    }
                     await _hubContext.Clients.All.SendAsync("ReceiveProgress", message);
                 }
             } catch (Exception ex) {

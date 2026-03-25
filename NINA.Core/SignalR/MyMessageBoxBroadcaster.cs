@@ -17,6 +17,7 @@ using NINA.Core.MyMessageBox;
 using NINA.Core.Utility;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -29,6 +30,7 @@ namespace NINA.Core.SignalR {
         private readonly IHubContext<MyMessageBoxHub> _hubContext;
         private static IMyMessageBoxBroadcaster _instance;
         private readonly ConcurrentDictionary<string, TaskCompletionSource<MessageBoxResult>> _pendingRequests;
+        private static readonly ConcurrentDictionary<string, MyMessageBox.MyMessageBoxMessage> _activeMessageBoxes = new();
 
         public MyMessageBoxBroadcaster(IHubContext<MyMessageBoxHub> hubContext) {
             _hubContext = hubContext;
@@ -40,6 +42,13 @@ namespace NINA.Core.SignalR {
         /// Get the singleton instance (for use by plugins that don't have DI access)
         /// </summary>
         public static IMyMessageBoxBroadcaster Instance => _instance;
+
+        /// <summary>
+        /// Get all currently pending message boxes (for sending to newly connected clients)
+        /// </summary>
+        public static IList<MyMessageBox.MyMessageBoxMessage> GetActiveMessageBoxes() {
+            return new List<MyMessageBox.MyMessageBoxMessage>(_activeMessageBoxes.Values);
+        }
 
         public async Task<MessageBoxResult> ShowMessageBoxAsync(string messageBoxText, string caption, MessageBoxButton button, MessageBoxResult defaultResult, TimeSpan timeout = default) {
             if (timeout == default) {
@@ -59,6 +68,7 @@ namespace NINA.Core.SignalR {
             try {
                 if (_hubContext != null) {
                     Logger.Info($"Broadcasting message box {message.Id}: '{messageBoxText}' with button type {button}");
+                    _activeMessageBoxes[message.Id] = message;
                     await _hubContext.Clients.All.SendAsync("ReceiveMessageBox", message);
                     Logger.Info($"Message box {message.Id} sent to clients");
                 } else {
@@ -83,6 +93,7 @@ namespace NINA.Core.SignalR {
                 return defaultResult;
             } finally {
                 _pendingRequests.TryRemove(message.Id, out _);
+                _activeMessageBoxes.TryRemove(message.Id, out _);
             }
         }
 
