@@ -406,7 +406,7 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
                 if (Connected) {
                     var currentPostion = Position;
                     var err = FilterWheelCalibrate(id, 0);
-                    if(err == AOReturn.AO_ERROR_COMMUNICATION) {
+                    if (err == AOReturn.AO_ERROR_COMMUNICATION) {
                         Logger.Error($"Oasis communication error to start calibration {err}");
                         DisconnectOnRemovedError();
                         return false;
@@ -519,6 +519,10 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
             uint patch = (version.firmware >> 8) & 0xFF;
 
             return $"{major}.{minor}.{patch}";
+        }
+
+        public void Calibrate() {
+            _ = CalibrateOfw(null);
         }
 
         public void Disconnect() {

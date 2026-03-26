@@ -260,6 +260,10 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
             return $"{major}.{minor}.{patch}";
         }
 
+        public void Calibrate() {
+            CalibrateEfwCommand.Execute(null);
+        }
+
         public void Disconnect() {
             _ = EFWdll.Close(id);
             this.Connected = false;
