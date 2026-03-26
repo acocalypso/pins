@@ -222,6 +222,10 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
             });
         }
 
+        public void Calibrate() {
+            CalibrateAfwCommand.Execute(null);
+        }
+
         public void Disconnect() {
             this.Connected = false;
             sdk.Close();
