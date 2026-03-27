@@ -934,8 +934,17 @@ namespace NINA.Equipment.Equipment.MyCamera {
             try {
                 if (useBulb) {
                     Logger.Debug("libgphoto2: Initiating BULB mode exposure - pressing shutter via eosremoterelease");
-                    // "Press Full MF" holds the shutter down without triggering autofocus.
-                    if (CheckError(SetProperty("eosremoterelease", "Press Full MF"), "eosremoterelease-pressfull")) {
+                    // Try "Immediate", then "Press Full", then "Press Full MF" as fallbacks.
+                    GP_ERROR_CODE pressResult = SetProperty("eosremoterelease", "Immediate");
+                    if (pressResult != GP_ERROR_CODE.GP_OK) {
+                        Logger.Warning($"eosremoterelease 'Immediate' failed ({pressResult}), trying 'Press Full'");
+                        pressResult = SetProperty("eosremoterelease", "Press Full");
+                    }
+                    if (pressResult != GP_ERROR_CODE.GP_OK) {
+                        Logger.Warning($"eosremoterelease 'Press Full' failed ({pressResult}), trying 'Press Full MF'");
+                        pressResult = SetProperty("eosremoterelease", "Press Full MF");
+                    }
+                    if (CheckError(pressResult, "eosremoterelease-pressfull")) {
                         Logger.Error("Failed to initiate bulb exposure via eosremoterelease");
                         return false;
                     }
