@@ -32,12 +32,6 @@ namespace NINA.Image.RawConverter {
 
         public LibRawConverter(IImageDataFactory imageDataFactory) {
             this.imageDataFactory = imageDataFactory;
-            try {
-                DllLoader.LoadDll(Path.Combine("LibRaw", "libraw.so"));
-            } catch (Exception ex) {
-                Logger.Error($"Failed to load LibRaw: {ex.Message}");
-                throw;
-            }
         }
 
         public Task<IImageData> Convert(
@@ -115,7 +109,7 @@ namespace NINA.Image.RawConverter {
                         // Convert RGBG data directly from unmanaged memory to single-channel Bayer image
                         // No intermediate buffer - read directly from the pointer
                         ushort[] bayerImageSingleChannel = new ushort[totalPixels];
-                        
+
                         unsafe {
                             ushort* pImage = (ushort*)imagePtr;
                             for (int i = 0; i < totalPixels; i++) {
