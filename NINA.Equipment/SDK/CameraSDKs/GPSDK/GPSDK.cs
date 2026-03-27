@@ -80,6 +80,11 @@ namespace GPSDK {
                 return devices;
             }
 
+            // Load abilities list once (contains all camera models gphoto2 knows about)
+            IntPtr abilitiesList = IntPtr.Zero;
+            GpAbilitiesListNew(ref abilitiesList);
+            GpAbilitiesListLoad(abilitiesList, ctx);
+
             // Fetch number of items
             for (int i = 0; i < count; i++) {
                 // Fetch name and value
@@ -88,19 +93,16 @@ namespace GPSDK {
                 GpListGetName(list, i, out name);
                 GpListGetValue(list, i, out path);
 
-                // Fetch abilities list
-                IntPtr abilitiesList = IntPtr.Zero;
-                GpAbilitiesListNew(ref abilitiesList);
-                GpAbilitiesListLoad(abilitiesList, ctx);
+                // Look up this specific camera model in the abilities list by name
+                int abilityIdx = GpAbilitiesListLookupModel(abilitiesList, name);
+                if (abilityIdx >= 0) {
+                    CameraAbilities abilities = new();
+                    GpAbilitiesListGetAbilities(abilitiesList, abilityIdx, out abilities);
 
-                // Get camera abilities
-                CameraAbilities abilities = new();
-                GpAbilitiesListGetAbilities(abilitiesList, i, abilities);
-                GpAbilitiesListFree(abilitiesList);
-
-                // Skip non camera devices
-                if (abilities.device_type != GphotoDeviceType.GP_DEVICE_STILL_CAMERA) {
-                    continue;
+                    // Skip non-still-camera devices (e.g. audio players)
+                    if (abilities.device_type != GphotoDeviceType.GP_DEVICE_STILL_CAMERA) {
+                        continue;
+                    }
                 }
 
                 // Add camera to list
@@ -108,6 +110,7 @@ namespace GPSDK {
             }
 
             // Clean up
+            GpAbilitiesListFree(abilitiesList);
             GpListFree(list);
             GpContextUnref(ctx);
 
@@ -460,7 +463,7 @@ namespace GPSDK {
             name = string.Empty;
             var ret = (GP_ERROR_CODE)gp_list_get_name(list, index, ref namePtr);
             if (ret == GP_ERROR_CODE.GP_OK) {
-                name = Marshal.PtrToStringAnsi(namePtr);
+                name = Marshal.PtrToStringAnsi(namePtr) ?? string.Empty;
             }
             return ret;
         }
@@ -471,7 +474,7 @@ namespace GPSDK {
             value = string.Empty;
             var ret = (GP_ERROR_CODE)gp_list_get_value(list, index, ref valuePtr);
             if (ret == GP_ERROR_CODE.GP_OK) {
-                value = Marshal.PtrToStringAnsi(valuePtr);
+                value = Marshal.PtrToStringAnsi(valuePtr) ?? string.Empty;
             }
             return ret;
         }
@@ -499,8 +502,20 @@ namespace GPSDK {
         }
 
         [SecurityCritical]
-        public static GP_ERROR_CODE GpAbilitiesListGetAbilities(IntPtr list, int index, CameraAbilities abilities) {
-            return (GP_ERROR_CODE)gp_abilities_list_load(list, index, abilities);
+        public static GP_ERROR_CODE GpAbilitiesListGetAbilities(IntPtr list, int index, out CameraAbilities abilities) {
+            return (GP_ERROR_CODE)gp_abilities_list_get_abilities(list, index, out abilities);
+        }
+
+        [SecurityCritical]
+        public static int GpAbilitiesListLookupModel(IntPtr list, string model) {
+            return gp_abilities_list_lookup_model(list, model);
+        }
+
+        [SecurityCritical]
+        public static void GpFree(IntPtr ptr) {
+            if (ptr != IntPtr.Zero) {
+                free(ptr);
+            }
         }
 
 
@@ -526,12 +541,7 @@ namespace GPSDK {
         [SecurityCritical]
         public static int GpPortInfoListLookupPath(IntPtr list, string path) {
             byte[] pathArray = Encoding.ASCII.GetBytes(path);
-            var ret = gp_port_info_list_lookup_path(list, Array.ConvertAll(pathArray, x => Convert.ToByte(x)));
-            if (ret < 0) {
-                path = string.Empty;
-                return ret;
-            }
-            return ret;
+            return gp_port_info_list_lookup_path(list, Array.ConvertAll(pathArray, x => Convert.ToByte(x)));
         }
 
         [SecurityCritical]
@@ -563,7 +573,7 @@ namespace GPSDK {
         public static GP_ERROR_CODE GpWidgetGetValue(IntPtr widget, out string value) {
             IntPtr valuePtr = IntPtr.Zero;
             var ret = (GP_ERROR_CODE)gp_widget_get_value(widget, out valuePtr);
-            value = Marshal.PtrToStringAnsi(valuePtr);
+            value = Marshal.PtrToStringAnsi(valuePtr) ?? string.Empty;
             return ret;
         }
 
@@ -684,8 +694,14 @@ namespace GPSDK {
         [DllImport(GPHOTO2, EntryPoint = "gp_abilities_list_load", CallingConvention = CallingConvention.Cdecl)]
         private static extern int gp_abilities_list_load(IntPtr list, IntPtr context);
 
-        [DllImport(GPHOTO2, EntryPoint = "gp_abilities_list_load", CallingConvention = CallingConvention.Cdecl)]
-        private static extern int gp_abilities_list_load(IntPtr list, int index, CameraAbilities abilities);
+        [DllImport(GPHOTO2, EntryPoint = "gp_abilities_list_get_abilities", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int gp_abilities_list_get_abilities(IntPtr list, int index, out CameraAbilities abilities);
+
+        [DllImport(GPHOTO2, EntryPoint = "gp_abilities_list_lookup_model", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int gp_abilities_list_lookup_model(IntPtr list, [MarshalAs(UnmanagedType.LPStr)] string model);
+
+        [DllImport("libc", EntryPoint = "free", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void free(IntPtr ptr);
 
         /* Port info list */
         [DllImport(GPHOTO2PORT, EntryPoint = "gp_port_info_list_new", CallingConvention = CallingConvention.Cdecl)]

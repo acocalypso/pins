@@ -46,7 +46,10 @@ namespace NINA.Equipment.Equipment.MyCamera {
         private readonly string _name;
         private readonly string _path;
         private bool _disposed;
+        private bool _cameraExited;
         private System.Timers.Timer _batteryPolling;
+        // gphoto2 is not thread-safe; all camera I/O must be serialised through this lock.
+        private readonly object _gpLock = new object();
 
         public GPCamera(string name, string path, IProfileService profileService, IExposureDataFactory exposureDataFactory) {
             _disposed = false;
@@ -226,7 +229,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         public int CameraYSize => _cameraResolution.height;
 
-        public double ExposureMin => this.ShutterSpeeds.Min(v => (double?)v.Value).GetValueOrDefault(0);
+        public double ExposureMin => ShutterSpeeds.Count > 0 ? ShutterSpeeds.Min(v => (double?)v.Value).GetValueOrDefault(0) : 0;
 
         public double ExposureMax => double.PositiveInfinity;
 
@@ -272,9 +275,9 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         public bool CanSetGain => true;
 
-        public int GainMax => ISOSpeeds.Aggregate((l, r) => l.Value > r.Value ? l : r).Value;
+        public int GainMax => ISOSpeeds.Count > 0 ? ISOSpeeds.Aggregate((l, r) => l.Value > r.Value ? l : r).Value : 0;
 
-        public int GainMin => ISOSpeeds.Aggregate((l, r) => l.Value < r.Value ? l : r).Value;
+        public int GainMin => ISOSpeeds.Count > 0 ? ISOSpeeds.Aggregate((l, r) => l.Value < r.Value ? l : r).Value : 0;
 
         public int Gain {
             get {
@@ -287,7 +290,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
             set {
                 ValidateMode();
                 string iso = ISOSpeeds.Where((x) => x.Value == value).FirstOrDefault().Key;
-                if (CheckError(SetProperty("iso", iso))) {
+                if (CheckError(SetProperty("iso", iso), $"iso-{iso}")) {
                     Notification.ShowExternalError(Loc.Instance["LblUnableToSetISO"], Loc.Instance["LblCanonDriverError"]);
                 }
                 RaisePropertyChanged();
@@ -367,7 +370,6 @@ namespace NINA.Equipment.Equipment.MyCamera {
         }
 
         private bool Initialize() {
-            usesCameraCommandBulb = true;
             ValidateMode();
             GetISOSpeeds();
             GetShutterSpeeds();
@@ -383,13 +385,27 @@ namespace NINA.Equipment.Equipment.MyCamera {
         }
 
         private bool SetRawFormat() {
-            if (SetProperty("imageformat", "RAW") == GP_ERROR_CODE.GP_OK) {
-                return true;
-            } else if (SetProperty("imageformat", "CR3") == GP_ERROR_CODE.GP_OK) {
-                return true;
-            } else if (SetProperty("imageformat", "CR2") == GP_ERROR_CODE.GP_OK) {
-                return true;
+            // Try well-known RAW format names (Canon, Nikon, Sony, Fuji, Olympus, Panasonic, Pentax)
+            var knownRawFormats = new[] { "RAW", "CR3", "CR2", "NEF", "ARW", "RAF", "ORF", "RW2", "PEF", "NRW", "SRF", "SR2" };
+            foreach (var fmt in knownRawFormats) {
+                if (SetProperty("imageformat", fmt) == GP_ERROR_CODE.GP_OK) {
+                    return true;
+                }
             }
+
+            // Dynamic fallback: query the available choices and pick one that looks like a RAW format
+            if (GetPropertyList("imageformat", out var formats) == GP_ERROR_CODE.GP_OK) {
+                var rawLike = formats.FirstOrDefault(f =>
+                    f.IndexOf("raw", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    f.Equals("NEF", StringComparison.OrdinalIgnoreCase) ||
+                    f.Equals("ARW", StringComparison.OrdinalIgnoreCase) ||
+                    f.Equals("RAF", StringComparison.OrdinalIgnoreCase));
+                if (rawLike != null && SetProperty("imageformat", rawLike) == GP_ERROR_CODE.GP_OK) {
+                    Logger.Info($"libgphoto2: RAW format set dynamically to '{rawLike}'");
+                    return true;
+                }
+            }
+
             return false;
         }
 
@@ -451,15 +467,10 @@ namespace NINA.Equipment.Equipment.MyCamera {
             }
 
             // Check if camera is in Manual mode with bulb shutter speed
-            if (!CheckError(GetProperty("shutterspeed", out var shutterspeed))) {
+            if (!CheckError(GetProperty("shutterspeed", out var shutterspeed), "shutterspeed-get")) {
                 if (shutterspeed.Equals("bulb", StringComparison.OrdinalIgnoreCase)) {
                     return true;
                 }
-            }
-
-            // If bulb mode is not set, try to set it
-            if (!CheckError(SetProperty("shutterspeed", "bulb"))) {
-                return true;
             }
 
             return false;
@@ -490,17 +501,13 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         private void GetBatteryLevel() {
             try {
-                if (!CheckError(GetProperty("batterylevel", out string prop))) {
+                if (!CheckError(GetProperty("batterylevel", out string prop), "batterylevel-get")) {
                     // Parse battery level (typically a percentage like "90%")
-                    try {
-                        // Remove % symbol if present
-                        prop = prop.Replace("%", "").Trim();
-                        if (int.TryParse(prop, out var level)) {
-                            BatteryLevel = level;
-                        }
-                    } catch (Exception ex) {
-                        Logger.Warning($"Failed to parse battery level '{prop}': {ex.Message}");
-                        throw;
+                    prop = prop.Replace("%", "").Trim();
+                    if (int.TryParse(prop, out var level)) {
+                        BatteryLevel = level;
+                    } else {
+                        Logger.Warning($"Failed to parse battery level value '{prop}'");
                     }
                 }
             } catch (Exception ex) {
@@ -511,7 +518,12 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         public void Disconnect() {
             StopBatteryPolling();
-            CheckError(GpCameraExit(_camera, _context));
+            lock (_gpLock) {
+                if (!_cameraExited) {
+                    CheckError(GpCameraExit(_camera, _context));
+                    _cameraExited = true;
+                }
+            }
             Connected = false;
         }
 
@@ -521,8 +533,18 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         protected virtual void Dispose(bool disposing) {
             if (!_disposed) {
-                CheckError(GpCameraFree(_camera));
-                GpContextUnref(_context);
+                StopBatteryPolling();
+                lock (_gpLock) {
+                    if (!_cameraExited && _camera != IntPtr.Zero) {
+                        GpCameraExit(_camera, _context);
+                    }
+                    if (_camera != IntPtr.Zero) {
+                        CheckError(GpCameraFree(_camera));
+                    }
+                }
+                if (_context != IntPtr.Zero) {
+                    GpContextUnref(_context);
+                }
                 _disposed = true;
             }
         }
@@ -541,43 +563,40 @@ namespace NINA.Equipment.Equipment.MyCamera {
         public byte[] DownloadFile(string folder, string filename) {
             IntPtr file = IntPtr.Zero;
             try {
-                // Convert strings to UTF8 byte arrays for P/Invoke
                 byte[] folderBytes = Encoding.UTF8.GetBytes(folder + "\0");
                 byte[] filenameBytes = Encoding.UTF8.GetBytes(filename + "\0");
 
-                // Create a new file object
-                if (GpFileNew(out file) != (int)GP_ERROR_CODE.GP_OK) {
-                    Logger.Error("Failed to create new file object");
-                    return null;
+                lock (_gpLock) {
+                    if (GpFileNew(out file) != (int)GP_ERROR_CODE.GP_OK) {
+                        Logger.Error("Failed to create new file object");
+                        return null;
+                    }
+
+                    var result = GpCameraFileGet(_camera, folderBytes, filenameBytes, CameraFileType.GP_FILE_TYPE_NORMAL, file, _context);
+                    if (result != (int)GP_ERROR_CODE.GP_OK) {
+                        Logger.Error($"Failed to download file {folder}/{filename}: {result}");
+                        return null;
+                    }
+
+                    if (GpFileGetDataAndSize(file, out var dataPtr, out var size) != (int)GP_ERROR_CODE.GP_OK) {
+                        Logger.Error("Failed to get file data");
+                        return null;
+                    }
+
+                    // Marshal.Copy while still under lock so the CameraFile buffer stays valid
+                    byte[] fileData = new byte[size];
+                    Marshal.Copy(dataPtr, fileData, 0, (int)size);
+                    Logger.Info($"Downloaded {filename} from {folder}, size: {size} bytes");
+
+                    DeleteFileFromCamera(folder, filename);
+
+                    return fileData;
                 }
-
-                // Download file from camera
-                var result = GpCameraFileGet(_camera, folderBytes, filenameBytes, CameraFileType.GP_FILE_TYPE_NORMAL, file, _context);
-                if (result != (int)GP_ERROR_CODE.GP_OK) {
-                    Logger.Error($"Failed to download file {folder}/{filename}: {result}");
-                    return null;
-                }
-
-                // Get file data
-                if (GpFileGetDataAndSize(file, out var dataPtr, out var size) != (int)GP_ERROR_CODE.GP_OK) {
-                    Logger.Error("Failed to get file data");
-                    return null;
-                }
-
-                // Copy unmanaged data to managed byte array
-                byte[] fileData = new byte[size];
-                Marshal.Copy(dataPtr, fileData, 0, (int)size);
-
-                Logger.Info($"Downloaded {filename} from {folder}, size: {size} bytes");
-
-                // Delete file from camera after successful download
-                DeleteFileFromCamera(folder, filename);
-
-                return fileData;
             } catch (Exception ex) {
                 Logger.Error($"Exception during DownloadFile: {ex.Message}");
                 return null;
             } finally {
+                // GpFileFree only touches a memory-only refcount, safe outside lock
                 if (file != IntPtr.Zero) {
                     GpFileFree(file);
                 }
@@ -588,8 +607,11 @@ namespace NINA.Equipment.Equipment.MyCamera {
             try {
                 byte[] folderBytes = Encoding.UTF8.GetBytes(folder + "\0");
                 byte[] filenameBytes = Encoding.UTF8.GetBytes(filename + "\0");
-                var deleteResult = GpCameraFileDelete(_camera, folderBytes, filenameBytes, _context);
-                if (deleteResult != (int)GP_ERROR_CODE.GP_OK) {
+                GP_ERROR_CODE deleteResult;
+                lock (_gpLock) {
+                    deleteResult = GpCameraFileDelete(_camera, folderBytes, filenameBytes, _context);
+                }
+                if (deleteResult != GP_ERROR_CODE.GP_OK) {
                     Logger.Warning($"Failed to delete file {folder}/{filename} from camera: {deleteResult}");
                 } else {
                     Logger.Debug($"Deleted {filename} from camera storage");
@@ -635,10 +657,12 @@ namespace NINA.Equipment.Equipment.MyCamera {
                         var metaData = new ImageMetaData();
                         metaData.FromCamera(this);
 
-                        // Determine file type from extension
-                        string fileType = "cr2";  // Default to Canon RAW
-                        if (_lastCapturedFilename.EndsWith(".cr3", StringComparison.OrdinalIgnoreCase)) {
-                            fileType = "cr3";
+                        // Derive the file type from the actual filename extension
+                        string fileType = System.IO.Path.GetExtension(_lastCapturedFilename)
+                            .TrimStart('.')
+                            .ToLowerInvariant();
+                        if (string.IsNullOrEmpty(fileType)) {
+                            fileType = "cr2"; // Fallback for Canon
                         }
 
                         return this.exposureDataFactory.CreateRAWExposureData(
@@ -662,7 +686,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
             Logger.Debug("CancelDownloadExposure");
             try {
                 // Release the shutter only if we're currently in a bulb mode exposure
-                if (bulbCompletionCTS != null && !bulbCompletionCTS.IsCancellationRequested) {
+                if (_currentExposureIsBulb) {
                     Logger.Debug("libgphoto2: Canceling bulb exposure - releasing shutter");
                     ReleaseShutter();
 
@@ -678,6 +702,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
                     _lastCapturedFolder = null;
                     _lastCapturedFilename = null;
                 }
+                _currentExposureIsBulb = false;
                 bulbCompletionCTS?.Cancel();
             } catch (Exception ex) {
                 Logger.Error($"Exception in CancelDownloadExposure: {ex.Message}");
@@ -746,7 +771,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
                     // Need bulb mode for exposures > 30s
                     // Try to set shutterspeed to "bulb"
                     Logger.Info($"Exposure time {exposureTime}s > 30s, attempting to set shutter speed to bulb");
-                    if (CheckError(SetProperty("shutterspeed", "bulb"))) {
+                    if (CheckError(SetProperty("shutterspeed", "bulb"), "shutterspeed-bulb")) {
                         Notification.ShowError("Camera must be set to BULB mode for exposures > 30s. Please set shutterspeed to 'bulb' manually.");
                         Logger.Error("Could not set shutterspeed to bulb for long exposure");
                         throw new Exception("Invalid camera mode [Manual] for taking bulb exposures");
@@ -767,6 +792,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         private Task bulbCompletionTask = null;
         private CancellationTokenSource bulbCompletionCTS = null;
+        private bool _currentExposureIsBulb = false;
 
         public void StartExposure(CaptureSequence sequence) {
             if (downloadExposure?.Task?.Status <= TaskStatus.Running) {
@@ -777,6 +803,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
             downloadExposure = new TaskCompletionSource<object>();
             var exposureTime = sequence.ExposureTime;
             bool useBulb = (IsManualMode() && exposureTime > 30.0) || (IsBulbMode() && exposureTime >= 1.0);
+            _currentExposureIsBulb = useBulb;
 
             ValidateModeForExposure(exposureTime);
 
@@ -829,7 +856,11 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         public (bool success, string folder, string filename) TriggerCapture() {
             try {
-                var result = GpCameraCapture(_camera, CameraCaptureType.GP_CAPTURE_IMAGE, out var path, _context);
+                GP_ERROR_CODE result;
+                CameraFilePath path;
+                lock (_gpLock) {
+                    result = GpCameraCapture(_camera, CameraCaptureType.GP_CAPTURE_IMAGE, out path, _context);
+                }
                 if (result != GP_ERROR_CODE.GP_OK) {
                     Logger.Error($"Failed to trigger capture: {result}");
                     return (false, null, null);
@@ -849,28 +880,44 @@ namespace NINA.Equipment.Equipment.MyCamera {
                 Logger.Debug($"WaitForFileEvent: Polling up to {timeoutMs}ms for GP_EVENT_FILE_ADDED...");
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                while (stopwatch.ElapsedMilliseconds < timeoutMs) {
-                    var result = GpCameraWaitForEvent(_camera, timeoutMs, out var eventType, out var eventData, _context);
+                // Use short per-iteration timeouts so the lock window stays small,
+                // allowing other threads (e.g. abort) to interleave between iterations.
+                const int iterationTimeoutMs = 200;
 
-                    if (result == GP_ERROR_CODE.GP_OK && eventType == CameraEventType.GP_EVENT_FILE_ADDED) {
-                        // Got the file added event!
-                        try {
-                            var filePath = (CameraFilePath)Marshal.PtrToStructure(eventData, typeof(CameraFilePath));
-                            string folder = Encoding.UTF8.GetString(filePath.folder).TrimEnd('\0');
-                            string filename = Encoding.UTF8.GetString(filePath.name).TrimEnd('\0');
-                            Logger.Debug($"WaitForFileEvent: File event detected: {folder}/{filename}");
-                            stopwatch.Stop();
-                            return (true, folder, filename);
-                        } catch (Exception ex) {
-                            Logger.Error($"Exception parsing file event: {ex.Message}");
+                while (stopwatch.ElapsedMilliseconds < timeoutMs) {
+                    int remainingMs = (int)Math.Min(iterationTimeoutMs,
+                        Math.Max(0, timeoutMs - stopwatch.ElapsedMilliseconds));
+                    GP_ERROR_CODE result;
+                    CameraEventType eventType;
+                    IntPtr eventData = IntPtr.Zero;
+                    lock (_gpLock) {
+                        result = GpCameraWaitForEvent(_camera, remainingMs, out eventType, out eventData, _context);
+                    }
+
+                    // libgphoto2 heap-allocates eventData for all event types; caller must always free it.
+                    try {
+                        if (result == GP_ERROR_CODE.GP_OK && eventType == CameraEventType.GP_EVENT_FILE_ADDED) {
+                            try {
+                                var filePath = (CameraFilePath)Marshal.PtrToStructure(eventData, typeof(CameraFilePath));
+                                string folder = Encoding.UTF8.GetString(filePath.folder).TrimEnd('\0');
+                                string filename = Encoding.UTF8.GetString(filePath.name).TrimEnd('\0');
+                                Logger.Debug($"WaitForFileEvent: File event detected: {folder}/{filename}");
+                                stopwatch.Stop();
+                                return (true, folder, filename);
+                            } catch (Exception ex) {
+                                Logger.Error($"Exception parsing file event: {ex.Message}");
+                                stopwatch.Stop();
+                                return (false, null, null);
+                            }
+                        } else if (result != GP_ERROR_CODE.GP_OK && result != GP_ERROR_CODE.GP_ERROR_TIMEOUT) {
+                            // Real error (not just timeout)
+                            Logger.Warning($"WaitForFileEvent: gp_camera_wait_for_event returned {result}");
                             stopwatch.Stop();
                             return (false, null, null);
                         }
-                    } else if (result != GP_ERROR_CODE.GP_OK && result != GP_ERROR_CODE.GP_ERROR_TIMEOUT) {
-                        // Real error (not just timeout)
-                        Logger.Warning($"WaitForFileEvent: gp_camera_wait_for_event returned {result}");
-                        stopwatch.Stop();
-                        return (false, null, null);
+                        // GP_EVENT_TIMEOUT or other benign events: continue polling
+                    } finally {
+                        GpFree(eventData);
                     }
                 }
 
@@ -887,9 +934,8 @@ namespace NINA.Equipment.Equipment.MyCamera {
             try {
                 if (useBulb) {
                     Logger.Debug("libgphoto2: Initiating BULB mode exposure - pressing shutter via eosremoterelease");
-                    // For bulb mode, use eosremoterelease to press the shutter button
-                    // This will keep the shutter open as long as we don't release it
-                    if (CheckError(SetProperty("eosremoterelease", "Immediate"))) {
+                    // "Press Full MF" holds the shutter down without triggering autofocus.
+                    if (CheckError(SetProperty("eosremoterelease", "Press Full MF"), "eosremoterelease-pressfull")) {
                         Logger.Error("Failed to initiate bulb exposure via eosremoterelease");
                         return false;
                     }
@@ -939,13 +985,17 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         private void ReleaseShutter() {
             try {
-                if (CheckError(SetProperty("eosremoterelease", "Release Full"))) {
-                    Logger.Warning("Failed to release shutter with 'Release Full', trying numeric value");
-                    if (CheckError(SetProperty("eosremoterelease", "0"))) {
-                        Logger.Error("Failed to release shutter");
-                    }
+                // Use "Release" first; fall back to "Release Full" if unsupported.
+                var releaseResult = SetProperty("eosremoterelease", "Release");
+                if (releaseResult != GP_ERROR_CODE.GP_OK) {
+                    Logger.Warning($"eosremoterelease 'Release' failed ({releaseResult}), trying 'Release Full'");
+                    releaseResult = SetProperty("eosremoterelease", "Release Full");
                 }
-                Logger.Debug("libgphoto2: Shutter released");
+                if (CheckError(releaseResult, "eosremoterelease-release")) {
+                    Logger.Error("Failed to release shutter via eosremoterelease");
+                } else {
+                    Logger.Debug("libgphoto2: Shutter released");
+                }
             } catch (Exception ex) {
                 Logger.Error($"Exception releasing shutter: {ex.Message}");
             }
@@ -969,6 +1019,9 @@ namespace NINA.Equipment.Equipment.MyCamera {
             double nearestExposureTime = double.MaxValue;
             if (exposureTime != double.MaxValue) {
                 var l = new List<double>(ShutterSpeeds.Values);
+                if (l.Count == 0) {
+                    return false;
+                }
                 nearestExposureTime = l.Aggregate((x, y) => Math.Abs(x - exposureTime) < Math.Abs(y - exposureTime) ? x : y);
             } else {
                 // For new do dont deal with maxValue exposures in manual mode, just return false
@@ -981,7 +1034,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
             }
 
             // Set the shutter speed on the camera
-            if (CheckError(SetProperty("shutterspeed", key))) {
+            if (CheckError(SetProperty("shutterspeed", key), $"shutterspeed-{key}")) {
                 Logger.Error($"Failed to set shutter speed to {key}");
                 Notification.ShowError("Switch to bulb mode for exposures longer than 30s");
                 return false;
@@ -1015,92 +1068,88 @@ namespace NINA.Equipment.Equipment.MyCamera {
         }
 
         public void StopExposure() {
-            SendStopExposureCmd(false);
+            SendStopExposureCmd(_currentExposureIsBulb);
+            _currentExposureIsBulb = false;
         }
 
         private GP_ERROR_CODE SetProperty(string property, string value) {
-            IntPtr widget = IntPtr.Zero;
-            GP_ERROR_CODE err;
+            lock (_gpLock) {
+                IntPtr widget = IntPtr.Zero;
+                GP_ERROR_CODE err;
 
-            // Get widget
-            err = GpCameraGetSingleConfig(_camera, property, out widget, _context);
-            if (err != GP_ERROR_CODE.GP_OK) {
-                return err;
-            }
-
-            try {
-                // Try to set the value
-                err = GpWidgetSetValue(widget, value);
+                err = GpCameraGetSingleConfig(_camera, property, out widget, _context);
                 if (err != GP_ERROR_CODE.GP_OK) {
                     return err;
                 }
 
-                // Apply the change
-                err = GpCameraSetSingleConfig(_camera, property, widget, _context);
-                return err;
-            } finally {
-                // Free widget
-                GpWidgetFree(widget);
+                try {
+                    err = GpWidgetSetValue(widget, value);
+                    if (err != GP_ERROR_CODE.GP_OK) {
+                        return err;
+                    }
+                    err = GpCameraSetSingleConfig(_camera, property, widget, _context);
+                    return err;
+                } finally {
+                    GpWidgetFree(widget);
+                }
             }
         }
 
         private GP_ERROR_CODE GetProperty(string property, out string data) {
-            IntPtr widget = IntPtr.Zero;
-            GP_ERROR_CODE err;
-            data = string.Empty;
+            lock (_gpLock) {
+                IntPtr widget = IntPtr.Zero;
+                GP_ERROR_CODE err;
+                data = string.Empty;
 
-            // Get widget
-            err = GpCameraGetSingleConfig(_camera, property, out widget, _context);
-            if (err != GP_ERROR_CODE.GP_OK) {
-                return err;
-            }
-
-            try {
-                // Get data
-                err = GpWidgetGetValue(widget, out data);
+                err = GpCameraGetSingleConfig(_camera, property, out widget, _context);
                 if (err != GP_ERROR_CODE.GP_OK) {
-                    GpWidgetFree(widget);
                     return err;
                 }
-                return GP_ERROR_CODE.GP_OK;
-            } finally {
-                // Free widget
-                GpWidgetFree(widget);
+
+                try {
+                    err = GpWidgetGetValue(widget, out data);
+                    if (err != GP_ERROR_CODE.GP_OK) {
+                        return err;
+                    }
+                    return GP_ERROR_CODE.GP_OK;
+                } finally {
+                    GpWidgetFree(widget);
+                }
             }
         }
 
         private GP_ERROR_CODE GetPropertyList(string property, out IList<string> list) {
-            IntPtr widget = IntPtr.Zero;
-            GP_ERROR_CODE err;
-            list = [];
+            lock (_gpLock) {
+                IntPtr widget = IntPtr.Zero;
+                GP_ERROR_CODE err;
+                list = [];
 
-            // Get widget
-            err = GpCameraGetSingleConfig(_camera, property, out widget, _context);
-            if (err != GP_ERROR_CODE.GP_OK) {
-                return err;
-            }
-
-            try {
-                // Get number of available choices
-                int count = GpWidgetCountChoices(widget);
-                if (count <= 0) {
-                    Logger.Warning($"No choices available for {property}");
-                    return GP_ERROR_CODE.GP_ERROR_NOT_SUPPORTED;
+                err = GpCameraGetSingleConfig(_camera, property, out widget, _context);
+                if (err != GP_ERROR_CODE.GP_OK) {
+                    return err;
                 }
 
-                // Iterate through all choices
-                for (int i = 0; i < count; ++i) {
-                    err = GpWidgetGetChoice(widget, i, out var choice);
-                    if (err == GP_ERROR_CODE.GP_OK && !string.IsNullOrEmpty(choice)) {
-                        list.Add(choice);
+                try {
+                    // Get number of available choices
+                    int count = GpWidgetCountChoices(widget);
+                    if (count <= 0) {
+                        Logger.Warning($"No choices available for {property}");
+                        return GP_ERROR_CODE.GP_ERROR_NOT_SUPPORTED;
                     }
-                }
 
-                return err;
-            } finally {
-                // Free widget
-                GpWidgetFree(widget);
-            }
+                    // Iterate through all choices
+                    for (int i = 0; i < count; ++i) {
+                        err = GpWidgetGetChoice(widget, i, out var choice);
+                        if (err == GP_ERROR_CODE.GP_OK && !string.IsNullOrEmpty(choice)) {
+                            list.Add(choice);
+                        }
+                    }
+
+                    return err;
+                } finally {
+                    GpWidgetFree(widget);
+                }
+            } // lock (_gpLock)
         }
 
         private static bool CheckError(GP_ERROR_CODE err, [CallerMemberName] string memberName = "") {
@@ -1123,7 +1172,10 @@ namespace NINA.Equipment.Equipment.MyCamera {
         public async Task<bool> Connect(CancellationToken token) {
             return await Task.Run(() => {
                 try {
-                    CheckAndThrowError(GpCameraInit(_camera, _context));
+                    lock (_gpLock) {
+                        CheckAndThrowError(GpCameraInit(_camera, _context));
+                        _cameraExited = false;
+                    }
 
                     if (!Initialize()) {
                         Disconnect();
@@ -1153,9 +1205,6 @@ namespace NINA.Equipment.Equipment.MyCamera {
                 RaisePropertyChanged();
             }
         }
-
-        private bool usesCameraCommandBulb = true;
-        private bool IsManualModeBulb { get; set; } = false;
 
         public int BitDepth => (int)profileService.ActiveProfile.CameraSettings.BitDepth;
 
