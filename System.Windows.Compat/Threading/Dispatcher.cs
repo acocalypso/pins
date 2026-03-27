@@ -24,13 +24,13 @@ namespace System.Windows.Threading {
 
         // Overload for WPF compatibility
         public DispatcherOperation BeginInvoke(DispatcherPriority priority, Action callback) {
+            var task = System.Threading.Tasks.Task.Run(callback);
             var op = new DispatcherOperation {
                 Dispatcher = this,
                 Priority = priority,
                 Status = DispatcherOperationStatus.Completed,
-                Task = System.Threading.Tasks.Task.Run(callback)
+                Task = task
             };
-            callback();
             return op;
         }
         private static Dispatcher _currentDispatcher = new Dispatcher();

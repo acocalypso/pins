@@ -12,6 +12,7 @@
 using NINA.Profile.Interfaces;
 using NINA.ViewModel.Interfaces;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
@@ -58,8 +59,26 @@ namespace NINA.ViewModel {
 
         private static Dispatcher _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         private IApplicationStatusMediator applicationStatusMediator;
+        // Tracks which sources currently have an active status, for correct create/update signalling
+        private readonly ConcurrentDictionary<string, bool> _activeSources = new();
 
         public void StatusUpdate(ApplicationStatus status) {
+            // Broadcast via SignalR immediately on the calling thread.
+            // Do NOT put this inside BeginInvoke — the WPF dispatcher is not pumped in the
+            // headless server so those callbacks would queue up and never (or very tardily) fire.
+            if (!string.IsNullOrEmpty(status.Status)) {
+                if (_activeSources.TryAdd(status.Source, true)) {
+                    Progress.PublishNewStatus(status);
+                } else {
+                    Progress.PublishUpdateStatus(status);
+                }
+            } else if (status.Source != null && _activeSources.TryRemove(status.Source, out _)) {
+                Progress.PublishRemoveStatus(status);
+            }
+
+            // Update the WPF ObservableCollection asynchronously via the dispatcher.
+            // This is only needed for the NINA desktop UI; the SignalR broadcast above is
+            // already done synchronously so it is unaffected by dispatcher pump delays.
             _dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => {
                 try {
                     var item = ApplicationStatus.FirstOrDefault(x => x?.Source == status.Source);
@@ -77,9 +96,7 @@ namespace NINA.ViewModel {
                             item.Progress3 = status.Progress3;
                             item.MaxProgress3 = status.MaxProgress3;
                             item.ProgressType3 = status.ProgressType3;
-                            Progress.PublishUpdateStatus(item);
                         } else {
-                            Progress.PublishRemoveStatus(item);
                             ApplicationStatus.Remove(item);
                         }
                     } else {
@@ -99,7 +116,6 @@ namespace NINA.ViewModel {
                                 MaxProgress3 = status.MaxProgress3,
                                 ProgressType3 = status.ProgressType3
                             });
-                            Progress.PublishNewStatus(status);
                         }
                     }
                 } catch { }
