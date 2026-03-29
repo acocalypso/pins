@@ -102,7 +102,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          deb_root="${{ github.workspace }}/${{ env.DEB_ROOT }}"
+          deb_root="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
           control_dir="$deb_root/DEBIAN"
 
           rm -rf "$deb_root"
@@ -130,12 +130,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          deb_root="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
           package_version="${{ env.INDI_VERSION }}+${GITHUB_RUN_NUMBER}"
           release_date=$(date +%d%m%Y)
           output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
 
           mkdir -p "${{ env.ARTIFACT_DIR }}"
-          dpkg-deb --root-owner-group --build "${{ env.DEB_ROOT }}" "$output_file"
+          if [ ! -f "$deb_root/DEBIAN/control" ]; then
+            echo "Missing control file at $deb_root/DEBIAN/control" >&2
+            echo "Contents of $deb_root:" >&2
+            find "$deb_root" -maxdepth 3 -print >&2 || true
+            exit 1
+          fi
+
+          dpkg-deb --root-owner-group --build "$deb_root" "$output_file"
           sha256sum "$output_file" > "$output_file.sha256"
 
       - name: Upload INDI Debian artifact
