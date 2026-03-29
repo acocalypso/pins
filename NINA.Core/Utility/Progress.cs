@@ -26,8 +26,9 @@ namespace NINA.Core.Utility {
         public delegate Task ProgressBroadcaster(ProgressMessage message);
         public static ProgressBroadcaster Broadcaster { get; set; }
 
-        // Track last send time per source to throttle updates
+        // Track last send time AND last status text per source to throttle updates
         private static readonly Dictionary<string, DateTime> lastSendTime = new Dictionary<string, DateTime>();
+        private static readonly Dictionary<string, string> lastStatusText = new Dictionary<string, string>();
         private static readonly int throttleIntervalMs = 500;
 
         private static void BroadcastProgress(ProgressMessage message) {
@@ -41,24 +42,32 @@ namespace NINA.Core.Utility {
             }
         }
 
-        private static bool ShouldThrottle(string source) {
+        private static bool ShouldThrottle(string source, string status) {
             if (string.IsNullOrEmpty(source)) {
                 return false;
             }
 
             lock (lastSendTime) {
+                // Always send when the status text itself has changed
+                if (!lastStatusText.TryGetValue(source, out var prevStatus) || prevStatus != status) {
+                    lastSendTime[source] = DateTime.UtcNow;
+                    lastStatusText[source] = status;
+                    return false;
+                }
+
+                // Same status text — apply time-based throttle to suppress rapid progress ticks
                 if (!lastSendTime.ContainsKey(source)) {
                     lastSendTime[source] = DateTime.UtcNow;
-                    return false; // First message, don't throttle
+                    return false;
                 }
 
                 var timeSinceLastSend = DateTime.UtcNow - lastSendTime[source];
                 if (timeSinceLastSend.TotalMilliseconds >= throttleIntervalMs) {
                     lastSendTime[source] = DateTime.UtcNow;
-                    return false; // Enough time has passed, don't throttle
+                    return false;
                 }
 
-                return true; // Not enough time has passed, throttle this message
+                return true; // Same status, not enough time has passed — throttle this message
             }
         }
 
@@ -69,6 +78,7 @@ namespace NINA.Core.Utility {
 
             lock (lastSendTime) {
                 lastSendTime.Remove(source);
+                lastStatusText.Remove(source);
             }
         }
 
@@ -94,8 +104,8 @@ namespace NINA.Core.Utility {
         }
 
         public static void PublishUpdateStatus(ApplicationStatus status) {
-            // Throttle update messages to 1 per second per source
-            if (ShouldThrottle(status.Source)) {
+            // Throttle only when the same status text repeats rapidly (e.g. progress ticks)
+            if (ShouldThrottle(status.Source, status.Status)) {
                 return;
             }
 
