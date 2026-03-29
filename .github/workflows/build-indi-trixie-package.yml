@@ -1,0 +1,148 @@
+name: Build INDI Debian Trixie Package
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: build-indi-trixie-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  INDI_VERSION: 2.1.9
+  DEB_PACKAGE: indi-core
+  DEB_ARCH: arm64
+  DEB_ROOT: artifacts/indi-debroot
+  ARTIFACT_DIR: artifacts
+
+jobs:
+  build-indi-trixie:
+    name: Build INDI v2.1.9 (.deb)
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: debian:trixie
+    permissions:
+      contents: read
+
+    steps:
+      - name: Bootstrap build tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates \
+            git \
+            ninja-build \
+            cmake \
+            build-essential \
+            pkg-config \
+            dpkg-dev \
+            fakeroot \
+            cdbs \
+            dkms \
+            fxload \
+            libgps-dev \
+            libraw-dev \
+            libusb-dev \
+            libftdi-dev \
+            libkrb5-dev \
+            libtiff-dev \
+            libfftw3-dev \
+            librtlsdr-dev \
+            libcfitsio-dev \
+            libgphoto2-dev \
+            libdc1394-dev \
+            libboost-regex-dev \
+            libcurl4-gnutls-dev \
+            libtheora-dev \
+            libxisf-dev \
+            libnova-dev \
+            libusb-1.0-0-dev \
+            libgsl-dev \
+            libjpeg-dev \
+            zlib1g-dev \
+            libev-dev
+
+      - name: Clone INDI source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --branch v${{ env.INDI_VERSION }} --depth 1 https://github.com/indilib/indi.git indi
+
+      - name: Configure INDI build
+        shell: bash
+        working-directory: indi
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DUDEVRULES_INSTALL_DIR=/lib/udev/rules.d \
+            -DINDI_BUILD_SERVER=ON \
+            -DINDI_BUILD_CLIENT=ON \
+            -DINDI_BUILD_DRIVERS=ON \
+            -DINDI_BUILD_COMMON=ON \
+            -DINDI_BUILD_QT_CLIENT=OFF \
+            -DINDI_BUILD_UNITTESTS=OFF \
+            -DINDI_BUILD_INTEGTESTS=OFF \
+            -DINDI_BUILD_EXAMPLES=OFF \
+            -DINDI_BUILD_STATIC=OFF
+
+      - name: Compile INDI
+        shell: bash
+        working-directory: indi
+        run: |
+          set -euo pipefail
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Stage Debian filesystem
+        shell: bash
+        working-directory: indi
+        run: |
+          set -euo pipefail
+
+          deb_root="${{ github.workspace }}/${{ env.DEB_ROOT }}"
+          control_dir="$deb_root/DEBIAN"
+
+          rm -rf "$deb_root"
+          mkdir -p "$control_dir"
+
+          DESTDIR="$deb_root" cmake --install build
+
+          installed_size=$(du -sk "$deb_root/usr" | cut -f1)
+          package_version="${{ env.INDI_VERSION }}+${GITHUB_RUN_NUMBER}"
+
+          {
+            echo "Package: ${{ env.DEB_PACKAGE }}"
+            echo "Version: $package_version"
+            echo "Section: misc"
+            echo "Priority: optional"
+            echo "Architecture: ${{ env.DEB_ARCH }}"
+            echo "Maintainer: PINS CI <noreply@github.com>"
+            echo "Depends: libc6, libstdc++6"
+            echo "Installed-Size: $installed_size"
+            echo "Description: INDI core library, server, and drivers built from upstream v${{ env.INDI_VERSION }}"
+          } > "$control_dir/control"
+
+      - name: Build Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package_version="${{ env.INDI_VERSION }}+${GITHUB_RUN_NUMBER}"
+          release_date=$(date +%d%m%Y)
+          output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
+
+          mkdir -p "${{ env.ARTIFACT_DIR }}"
+          dpkg-deb --root-owner-group --build "${{ env.DEB_ROOT }}" "$output_file"
+          sha256sum "$output_file" > "$output_file.sha256"
+
+      - name: Upload INDI Debian artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: indi-trixie-deb
+          path: |
+            artifacts/*.deb
+            artifacts/*.deb.sha256
+          retention-days: 30
