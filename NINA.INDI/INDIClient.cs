@@ -14,8 +14,8 @@
 
 using NINA.Core.Utility;
 using NINA.INDI.Devices;
-using NINA.INDI.Protocol;
 using NINA.INDI.Enums;
+using NINA.INDI.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -70,7 +70,10 @@ namespace NINA.INDI {
         private readonly Dictionary<string, INDIDeviceInfo> _discoveredDevices = [];
         private readonly Dictionary<string, INDIDevice> _registeredDevices = [];
 
-        private readonly Dictionary<string, DeviceInterface> _loadedDrivers = [];
+        // Maps driver executable name → set of DeviceInterfaces it is currently serving.
+        // A single driver (e.g. indi_lx200generic) can expose devices for multiple interfaces
+        // (telescope + focuser). The driver process is only stopped when ALL interfaces are removed.
+        private readonly Dictionary<string, HashSet<DeviceInterface>> _loadedDrivers = [];
 
         public INDIClient(int port) {
             if (port < 1 || port > 65535) {
@@ -128,15 +131,11 @@ namespace NINA.INDI {
             try {
                 // Unload drivers - devices will see IsConnected=false and skip waiting
                 // Only try to gracefully unload drivers if server process is still alive
-                if (_process != null && !_process.HasExited)
-                {
-                    foreach (var driver in _loadedDrivers.ToList())
-                    {
+                if (_process != null && !_process.HasExited) {
+                    foreach (var driver in _loadedDrivers.ToList()) {
                         UnloadDriver(driver.Key);
                     }
-                }
-                else
-                {
+                } else {
                     Logger.Debug("INDI server process not running, skipping graceful driver unload");
                     _loadedDrivers.Clear();
                 }
@@ -197,7 +196,7 @@ namespace NINA.INDI {
 
                 bool success = await _driverTcs.Task;
                 if (success) {
-                    _loadedDrivers[driverName] = deviceInterface;
+                    _loadedDrivers[driverName] = [deviceInterface];
                     Logger.Info($"Loaded driver '{driverName}' ({deviceInterface})");
                 }
 
@@ -212,31 +211,44 @@ namespace NINA.INDI {
         }
 
         private void UnloadDriver(DeviceInterface deviceInterface) {
-            Logger.Info($"Trying to unload {deviceInterface}");
+            Logger.Info($"Trying to unload interface {deviceInterface}");
             lock (_driverLock) {
-                foreach (var driver in _loadedDrivers) {
-                    if (driver.Value == deviceInterface) {
-                        try {
-                            var driverName = driver.Key;
-                            Logger.Debug($"Removing driver '{driverName}'");
+                // Collect drivers that serve this interface
+                var driversWithInterface = _loadedDrivers
+                    .Where(d => d.Value.Contains(deviceInterface))
+                    .Select(d => d.Key)
+                    .ToList();
 
-                            using var fs = new FileStream(_fifoPath, FileMode.Open, FileAccess.Write);
-                            using var writer = new StreamWriter(fs);
-                            writer.WriteLine($"stop {driverName}");
-                            writer.Flush();
+                foreach (var driverName in driversWithInterface) {
+                    var interfaces = _loadedDrivers[driverName];
+                    interfaces.Remove(deviceInterface);
 
-                            _loadedDrivers.Remove(driverName);
+                    if (interfaces.Count > 0) {
+                        // Driver still needed for other interfaces — keep it running
+                        Logger.Info($"Driver '{driverName}' still serving [{string.Join(", ", interfaces)}] — not stopping");
+                        continue;
+                    }
 
-                            // Remove devices associated with this driver
-                            var devicesToRemove = _discoveredDevices.Where(d => d.Value.Driver == driverName).Select(d => d.Key).ToList();
-                            foreach (var deviceKey in devicesToRemove) {
-                                _discoveredDevices.Remove(deviceKey);
-                                Logger.Debug($"Removed device '{deviceKey}' (driver: {driverName})");
-                            }
-                            Logger.Info($"Unloaded driver '{driverName}'");
-                        } catch (Exception ex) {
-                            Logger.Error(ex.Message);
+                    // No interfaces left — stop the driver process
+                    try {
+                        Logger.Debug($"Removing driver '{driverName}'");
+
+                        using var fs = new FileStream(_fifoPath, FileMode.Open, FileAccess.Write);
+                        using var writer = new StreamWriter(fs);
+                        writer.WriteLine($"stop {driverName}");
+                        writer.Flush();
+
+                        _loadedDrivers.Remove(driverName);
+
+                        // Remove devices associated with this driver
+                        var devicesToRemove = _discoveredDevices.Where(d => d.Value.Driver == driverName).Select(d => d.Key).ToList();
+                        foreach (var deviceKey in devicesToRemove) {
+                            _discoveredDevices.Remove(deviceKey);
+                            Logger.Debug($"Removed device '{deviceKey}' (driver: {driverName})");
                         }
+                        Logger.Info($"Unloaded driver '{driverName}'");
+                    } catch (Exception ex) {
+                        Logger.Error(ex.Message);
                     }
                 }
             }
@@ -366,15 +378,26 @@ namespace NINA.INDI {
                 if (driver != string.Empty) {
                     // If driver is not yet loaded, load it, but unload any other drivers of the same interface
                     if (!_loadedDrivers.ContainsKey(driver)) {
-                        foreach (var drv in _loadedDrivers) {
-                            if (drv.Value == deviceInterface) {
-                                UnloadDriver(drv.Key);
-                            }
+                        // Unload any other driver already serving this interface
+                        foreach (var drv in _loadedDrivers.Where(d => d.Value.Contains(deviceInterface)).ToList()) {
+                            UnloadDriver(drv.Key);
                         }
 
                         ct.ThrowIfCancellationRequested();
 
                         await LoadDriver(driver, deviceInterface, TimeSpan.FromSeconds(3), ct);
+
+                        // Give multi-device drivers (e.g. indi_lx200generic which exposes both
+                        // a telescope AND a focuser) a moment to deliver all their DRIVER_INFO
+                        // messages.  The _driverTcs fires on the first DRIVER_INFO, so without
+                        // this delay the loop below might not yet see the second device.
+                        await Task.Delay(TimeSpan.FromMilliseconds(500), ct);
+                    } else {
+                        // Driver already running — record this interface so UnloadDriver(DeviceInterface)
+                        // does not prematurely stop the shared driver process.
+                        lock (_driverLock) {
+                            _loadedDrivers[driver].Add(deviceInterface);
+                        }
                     }
 
                     // Fetch all discovered devices

@@ -12,9 +12,9 @@
 
 #endregion "copyright"
 
+using NINA.INDI.Interfaces;
 using System.Collections;
 using System.Collections.Generic;
-using NINA.INDI.Interfaces;
 
 namespace NINA.INDI.Model {
     /// <summary>

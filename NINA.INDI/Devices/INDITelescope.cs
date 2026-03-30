@@ -12,26 +12,24 @@
 
 #endregion "copyright"
 
-using NINA.INDI.Protocol;
-using NINA.INDI.Interfaces;
+using NINA.Astrometry;
+using NINA.Astrometry;
 using NINA.Core.Enum;
 using NINA.Core.Utility;
+using NINA.INDI.Enums;
+using NINA.INDI.Interfaces;
+using NINA.INDI.Model;
+using NINA.INDI.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using NINA.INDI.Enums;
-using NINA.Astrometry;
-using NINA.INDI.Model;
-using NINA.Astrometry;
 
-namespace NINA.INDI.Devices
-{
+namespace NINA.INDI.Devices {
 
-    public class INDITelescope : INDIDevice, IINDITelescope
-    {
+    public class INDITelescope : INDIDevice, IINDITelescope {
 
         /// <summary>
         /// Configures the actual maximum slew rate of the mount in degrees per second.
@@ -50,8 +48,7 @@ namespace NINA.INDI.Devices
         /// Handles: "Max"/"Maximum" → ActualMaxSlewRateDps, "Half"/"Half-Max" → max/2,
         /// "NNx" / "NN×" sidereal multiples (e.g. "48x" → 48 * 0.00417°/s).
         /// </summary>
-        private double? TryParseSwitchRateDps(INDISwitch sw)
-        {
+        private double? TryParseSwitchRateDps(INDISwitch sw) {
             var text = string.IsNullOrWhiteSpace(sw.Label) ? sw.Name : sw.Label;
             var upper = text.ToUpperInvariant();
 
@@ -74,14 +71,12 @@ namespace NINA.INDI.Devices
         /// Returns the index of the switch whose parsed rate is closest to absRate.
         /// Falls back to proportional mapping if no labels can be parsed.
         /// </summary>
-        private int FindBestSwitchIndex(double absRate, IList<INDISwitch> switches)
-        {
+        private int FindBestSwitchIndex(double absRate, IList<INDISwitch> switches) {
             int maxIndex = switches.Count - 1;
 
             int bestIdx = -1;
             double bestDiff = double.MaxValue;
-            for (int i = 0; i <= maxIndex; i++)
-            {
+            for (int i = 0; i <= maxIndex; i++) {
                 var rate = TryParseSwitchRateDps(switches[i]);
                 if (rate == null) continue;
                 var diff = Math.Abs(rate.Value - absRate);
@@ -96,18 +91,15 @@ namespace NINA.INDI.Devices
 
 
 
-        public override void OnTextPropertyUpdated(INDITextProperty p)
-        {
+        public override void OnTextPropertyUpdated(INDITextProperty p) {
             base.OnTextPropertyUpdated(p);
         }
 
-        public override void OnNumberPropertyUpdated(INDINumberProperty p)
-        {
+        public override void OnNumberPropertyUpdated(INDINumberProperty p) {
             base.OnNumberPropertyUpdated(p);
         }
 
-        public override void OnSwitchPropertyUpdated(INDISwitchProperty p)
-        {
+        public override void OnSwitchPropertyUpdated(INDISwitchProperty p) {
             base.OnSwitchPropertyUpdated(p);
         }
 
@@ -116,23 +108,18 @@ namespace NINA.INDI.Devices
         /// <summary>
         /// Specify critical properties that must arrive before Connect() completes
         /// </summary>
-        protected override string[] GetRequiredConnectionProperties()
-        {
+        protected override string[] GetRequiredConnectionProperties() {
             return ["TELESCOPE_TRACK_MODE"];
         }
 
-        public INDITelescope(INDIDeviceInfo device) : base(device)
-        {
+        public INDITelescope(INDIDeviceInfo device) : base(device) {
         }
 
         public AlignmentMode AlignmentMode { get; }
-        public double Altitude
-        {
-            get
-            {
+        public double Altitude {
+            get {
                 var altitude = GetNumberPropertyValue("HORIZONTAL_COORD", "ALT");
-                if (!altitude.HasValue)
-                {
+                if (!altitude.HasValue) {
                     var hourAngle = AstroUtil.GetHourAngle(SiderealTime, RightAscension);
                     var hourAngleDeg = AstroUtil.HoursToDegrees(hourAngle);
                     return AstroUtil.GetAltitude(hourAngleDeg, SiteLatitude, Declination);
@@ -144,13 +131,10 @@ namespace NINA.INDI.Devices
         public double ApertureDiameter => GetNumberPropertyValue("TELESCOPE_INFO", "TELESCOPE_APERTURE") ?? double.NaN;
         public bool AtHome { get; }
         public bool AtPark => GetSwitchPropertyValue("TELESCOPE_PARK", "PARK") ?? false;
-        public double Azimuth
-        {
-            get
-            {
+        public double Azimuth {
+            get {
                 var azimuth = GetNumberPropertyValue("HORIZONTAL_COORD", "AZ");
-                if (!azimuth.HasValue)
-                {
+                if (!azimuth.HasValue) {
                     var hourAngle = AstroUtil.GetHourAngle(SiderealTime, RightAscension);
                     var hourAngleDeg = AstroUtil.HoursToDegrees(hourAngle);
                     return AstroUtil.GetAzimuth(hourAngleDeg, Altitude, SiteLatitude, Declination);
@@ -167,25 +151,19 @@ namespace NINA.INDI.Devices
         public bool IsPulseGuiding { get; }
         public double RightAscension => GetNumberPropertyValue("EQUATORIAL_EOD_COORD", "RA") ?? double.NaN;
         public double RightAscensionRate { get; set; }
-        public PierSide SideOfPier
-        {
-            get
-            {
+        public PierSide SideOfPier {
+            get {
                 var pierSide = GetSwitchPropertyValue("TELESCOPE_PIER_SIDE", "PIER_EAST");
-                if (pierSide.HasValue)
-                {
+                if (pierSide.HasValue) {
                     return pierSide.Value ? PierSide.pierEast : PierSide.pierWest;
                 }
                 return PierSide.pierUnknown;
             }
         }
-        public double SiderealTime
-        {
-            get
-            {
+        public double SiderealTime {
+            get {
                 double? lst = GetNumberPropertyValue("TIME_LST", "LST");
-                if (lst.HasValue)
-                {
+                if (lst.HasValue) {
                     return lst.Value;
                 }
 
@@ -193,35 +171,27 @@ namespace NINA.INDI.Devices
                 return AstroUtil.GetLocalSiderealTimeNow(SiteLongitude);
             }
         }
-        public double SiteElevation
-        {
+        public double SiteElevation {
             get => GetNumberPropertyValue("GEOGRAPHIC_COORD", "ELEV") ?? double.NaN;
-            set
-            {
+            set {
                 SetNumberValue("GEOGRAPHIC_COORD", "ELEV", value);
             }
         }
-        public double SiteLatitude
-        {
+        public double SiteLatitude {
             get => GetNumberPropertyValue("GEOGRAPHIC_COORD", "LAT") ?? double.NaN;
-            set
-            {
+            set {
                 SetNumberValue("GEOGRAPHIC_COORD", "LAT", value);
             }
         }
-        public double SiteLongitude
-        {
+        public double SiteLongitude {
             get => GetNumberPropertyValue("GEOGRAPHIC_COORD", "LONG") ?? double.NaN;
-            set
-            {
+            set {
                 SetNumberValue("GEOGRAPHIC_COORD", "LONG", value);
             }
         }
         public int SlewSettleTime { get; }
-        public bool Slewing
-        {
-            get
-            {
+        public bool Slewing {
+            get {
                 bool motionWest = GetSwitchPropertyValue("TELESCOPE_MOTION_WE", "MOTION_WEST") ?? false;
                 bool motionEast = GetSwitchPropertyValue("TELESCOPE_MOTION_WE", "MOTION_EAST") ?? false;
                 bool motionNorth = GetSwitchPropertyValue("TELESCOPE_MOTION_NS", "MOTION_NORTH") ?? false;
@@ -233,11 +203,9 @@ namespace NINA.INDI.Devices
         }
         public double TargetDeclination { get; }
         public double TargetRightAscension { get; }
-        public bool Tracking
-        {
+        public bool Tracking {
             get => GetSwitchPropertyValue("TELESCOPE_TRACK_STATE", "TRACK_ON") ?? false;
-            set
-            {
+            set {
                 // Use SetSwitchProperty to respect OneOfMany rule
                 var switchValues = new Dictionary<string, bool> {
                     { "TRACK_ON", value },
@@ -252,11 +220,9 @@ namespace NINA.INDI.Devices
         /// Uses SetSwitchProperty to respect the OneOfMany rule for TELESCOPE_TRACK_MODE
         /// </summary>
         /// <param name="mode">Tracking mode: 0=Sidereal, 1=Lunar, 2=Solar, 3=King/Custom, 5=Stopped</param>
-        public void SetTrackingMode(TrackingMode mode)
-        {
+        public void SetTrackingMode(TrackingMode mode) {
             // If Stopped, just turn tracking off without modifying TELESCOPE_TRACK_MODE
-            if (mode == TrackingMode.Stopped)
-            {
+            if (mode == TrackingMode.Stopped) {
                 Tracking = false;
                 return;
             }
@@ -264,8 +230,7 @@ namespace NINA.INDI.Devices
             // Build the switch values dictionary based on the desired tracking mode
             var switchValues = new Dictionary<string, bool>();
 
-            switch (mode)
-            {
+            switch (mode) {
                 case TrackingMode.Sidereal:
                     switchValues["TRACK_SIDEREAL"] = true;
                     switchValues["TRACK_LUNAR"] = false;
@@ -303,36 +268,24 @@ namespace NINA.INDI.Devices
         /// Get the current tracking mode from the TELESCOPE_TRACK_MODE property
         /// </summary>
         /// <returns>The current tracking mode</returns>
-        public TrackingMode GetTrackingMode()
-        {
+        public TrackingMode GetTrackingMode() {
             // If tracking is off, return Stopped
-            if (!Tracking)
-            {
+            if (!Tracking) {
                 return TrackingMode.Stopped;
             }
 
-            try
-            {
+            try {
                 // Check which tracking mode switch is active
-                if (GetSwitchPropertyValue("TELESCOPE_TRACK_MODE", "TRACK_SIDEREAL") == true)
-                {
+                if (GetSwitchPropertyValue("TELESCOPE_TRACK_MODE", "TRACK_SIDEREAL") == true) {
                     return TrackingMode.Sidereal;
-                }
-                else if (GetSwitchPropertyValue("TELESCOPE_TRACK_MODE", "TRACK_LUNAR") == true)
-                {
+                } else if (GetSwitchPropertyValue("TELESCOPE_TRACK_MODE", "TRACK_LUNAR") == true) {
                     return TrackingMode.Lunar;
-                }
-                else if (GetSwitchPropertyValue("TELESCOPE_TRACK_MODE", "TRACK_SOLAR") == true)
-                {
+                } else if (GetSwitchPropertyValue("TELESCOPE_TRACK_MODE", "TRACK_SOLAR") == true) {
                     return TrackingMode.Solar;
-                }
-                else if (GetSwitchPropertyValue("TELESCOPE_TRACK_MODE", "TRACK_CUSTOM") == true)
-                {
+                } else if (GetSwitchPropertyValue("TELESCOPE_TRACK_MODE", "TRACK_CUSTOM") == true) {
                     return TrackingMode.King;
                 }
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
 
@@ -344,22 +297,17 @@ namespace NINA.INDI.Devices
         /// Get the list of supported tracking modes from the TELESCOPE_TRACK_MODE property
         /// </summary>
         /// <returns>List of supported tracking modes</returns>
-        public IList<TrackingMode> GetSupportedTrackingModes()
-        {
+        public IList<TrackingMode> GetSupportedTrackingModes() {
             var modes = new List<TrackingMode>();
 
             // Sidereal is always supported
             modes.Add(TrackingMode.Sidereal);
 
-            try
-            {
+            try {
                 var trackModeProperty = GetSwitchProperty("TELESCOPE_TRACK_MODE");
-                if (trackModeProperty != null)
-                {
-                    foreach (var sw in trackModeProperty.Switches)
-                    {
-                        switch (sw.Name)
-                        {
+                if (trackModeProperty != null) {
+                    foreach (var sw in trackModeProperty.Switches) {
+                        switch (sw.Name) {
                             case "TRACK_LUNAR":
                                 modes.Add(TrackingMode.Lunar);
                                 break;
@@ -372,9 +320,7 @@ namespace NINA.INDI.Devices
                         }
                     }
                 }
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
 
@@ -384,36 +330,26 @@ namespace NINA.INDI.Devices
             return modes;
         }
 
-        public DateTime UTCDate
-        {
-            get
-            {
-                try
-                {
+        public DateTime UTCDate {
+            get {
+                try {
                     // Read UTC from TIME_UTC property
                     var utcTime = GetTextPropertyValue("TIME_UTC", "UTC");
-                    if (!string.IsNullOrEmpty(utcTime) && DateTime.TryParse(utcTime, out var parsedTime))
-                    {
+                    if (!string.IsNullOrEmpty(utcTime) && DateTime.TryParse(utcTime, out var parsedTime)) {
                         return DateTime.SpecifyKind(parsedTime, DateTimeKind.Utc);
                     }
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     Logger.Warning($"Could not read TIME_UTC: {ex.Message}");
                 }
                 return DateTime.MinValue;
             }
-            set
-            {
-                try
-                {
+            set {
+                try {
                     // Set UTC time via TIME_UTC property in ISO 8601 format
                     var utcString = value.ToString("yyyy-MM-ddTHH:mm:ss");
                     SetTextValue("TIME_UTC", "UTC", utcString);
                     Logger.Debug($"Set mount UTC time to {utcString}");
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     Logger.Error($"Could not set TIME_UTC: {ex.Message}");
                     throw;
                 }
@@ -421,26 +357,19 @@ namespace NINA.INDI.Devices
         }
 
 
-        public void AbortSlew()
-        {
-            try
-            {
+        public void AbortSlew() {
+            try {
                 SetSwitchValue("TELESCOPE_ABORT_MOTION", "ABORT_MOTION", true);
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
         }
 
-        public IAxisRates AxisRates(TelescopeAxes axis)
-        {
-            try
-            {
+        public IAxisRates AxisRates(TelescopeAxes axis) {
+            try {
                 // Check if we have TELESCOPE_SLEW_RATE (OnStep style with discrete rates)
                 var slewRateProp = GetSwitchProperty("TELESCOPE_SLEW_RATE");
-                if (slewRateProp != null && slewRateProp.Switches.Count > 1)
-                {
+                if (slewRateProp != null && slewRateProp.Switches.Count > 1) {
                     // Report real °/s so PolarAlignment calculates correct move timeouts
                     Logger.Debug($"TELESCOPE_SLEW_RATE: using configured ActualMaxSlewRateDps={ActualMaxSlewRateDps} as axis rate max");
                     return new AxisRates(0.0, ActualMaxSlewRateDps);
@@ -448,17 +377,13 @@ namespace NINA.INDI.Devices
 
                 // Try to get the TELESCOPE_MOTION_RATE property to find min/max values
                 var motionRateProperty = GetNumberProperty("TELESCOPE_MOTION_RATE");
-                if (motionRateProperty != null)
-                {
+                if (motionRateProperty != null) {
                     var motionRateElement = motionRateProperty.Numbers.FirstOrDefault(n => n.Name == "MOTION_RATE");
-                    if (motionRateElement != null)
-                    {
+                    if (motionRateElement != null) {
                         return new AxisRates(motionRateElement.Min, motionRateElement.Max);
                     }
                 }
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Debug($"Error getting axis rates: {ex.Message}");
             }
 
@@ -467,10 +392,8 @@ namespace NINA.INDI.Devices
             return new AxisRates(0.0, 9.0);
         }
 
-        public void ConfigureJNOW()
-        {
-            try
-            {
+        public void ConfigureJNOW() {
+            try {
                 // INDI drivers may support different coordinate properties:
                 // - EQUATORIAL_EOD_COORD: Epoch of Date (JNOW)
                 // - EQUATORIAL_COORD: J2000
@@ -478,63 +401,49 @@ namespace NINA.INDI.Devices
 
                 // Some drivers have TELESCOPE_EQUATORIAL_COORD property to select which system
                 // Try to set it to EOD if available
-                try
-                {
+                try {
                     var eqCoordProp = GetSwitchProperty("TELESCOPE_EQUATORIAL_COORD");
-                    if (eqCoordProp != null)
-                    {
+                    if (eqCoordProp != null) {
                         SetSwitchValue("TELESCOPE_EQUATORIAL_COORD", "EOD", true);
                     }
-                }
-                catch (ArgumentException)
-                {
+                } catch (ArgumentException) {
                     // Property doesn't exist, that's okay
                 }
 
                 Logger.Debug("INDI configured to use EQUATORIAL_EOD_COORD (JNOW)");
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Warning($"Could not configure JNOW: {ex.Message}");
             }
         }
 
-        private void SetSlewRateForMotion(double absRate)
-        {
+        private void SetSlewRateForMotion(double absRate) {
             // Different INDI drivers use different methods to set slew rate:
             // 1. TELESCOPE_MOTION_RATE (numeric) - used by some simulators
             // 2. TELESCOPE_SLEW_RATE (switch) - used by OnStep and others (GUIDE/CENTERING/FIND/MAX)
 
             // Try numeric TELESCOPE_MOTION_RATE first
-            try
-            {
+            try {
                 SetNumberValue("TELESCOPE_MOTION_RATE", "MOTION_RATE", absRate);
                 Task.Delay(50).Wait();
                 return;
-            }
-            catch { }
+            } catch { }
 
             // Try switch-based TELESCOPE_SLEW_RATE (OnStep style)
-            try
-            {
+            try {
                 var slewRateProp = GetSwitchProperty("TELESCOPE_SLEW_RATE");
-                if (slewRateProp != null)
-                {
+                if (slewRateProp != null) {
                     int targetIndex = FindBestSwitchIndex(absRate, slewRateProp.Switches);
                     var targetSwitch = slewRateProp.Switches[targetIndex];
                     Logger.Debug($"SetSlewRateForMotion: {absRate}°/s → switch {targetIndex}/{slewRateProp.Switches.Count - 1} '{targetSwitch.Label}' ({targetSwitch.Name})");
 
-                    foreach (var sw in slewRateProp.Switches)
-                    {
+                    foreach (var sw in slewRateProp.Switches) {
                         sw.Value = (sw.Name == targetSwitch.Name);
                     }
                     INDIClient.Instance.SendProperty(slewRateProp);
                     Task.Delay(100).Wait();
                     return;
                 }
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Debug($"TELESCOPE_SLEW_RATE not available: {ex.Message}");
             }
 
@@ -542,28 +451,22 @@ namespace NINA.INDI.Devices
         }
 
         /// <summary>Returns a string like "switch 7/9 'Half-Max'" for use in log messages.</summary>
-        public string GetSwitchDescription(double absRate)
-        {
+        public string GetSwitchDescription(double absRate) {
             if (absRate == 0) return "";
-            try
-            {
+            try {
                 var slewRateProp = GetSwitchProperty("TELESCOPE_SLEW_RATE");
-                if (slewRateProp != null && slewRateProp.Switches.Count > 1)
-                {
+                if (slewRateProp != null && slewRateProp.Switches.Count > 1) {
                     int idx = FindBestSwitchIndex(absRate, slewRateProp.Switches);
                     var sw = slewRateProp.Switches[idx];
                     var label = string.IsNullOrWhiteSpace(sw.Label) ? sw.Name : sw.Label;
                     return $"switch {idx}/{slewRateProp.Switches.Count - 1} '{label}'";
                 }
-            }
-            catch { }
+            } catch { }
             return "";
         }
 
-        public void MoveAxis(TelescopeAxes axis, double rate)
-        {
-            try
-            {
+        public void MoveAxis(TelescopeAxes axis, double rate) {
+            try {
                 // Rate is in degrees per second, sign indicates direction
                 // Per NINA convention: 
                 // Primary: negative=West, positive=East
@@ -572,48 +475,35 @@ namespace NINA.INDI.Devices
 
                 Logger.Debug($"INDITelescope.MoveAxis: axis={axis}, rate={rate}, absRate={absRate}");
 
-                switch (axis)
-                {
+                switch (axis) {
                     case TelescopeAxes.Primary:
                         // Primary axis is RA/Azimuth - use West/East motion
-                        if (rate != 0)
-                        {
+                        if (rate != 0) {
                             // Try to set the motion rate - different drivers use different properties
                             SetSlewRateForMotion(absRate);
 
                             // Set the direction switch
                             var prop = GetSwitchProperty("TELESCOPE_MOTION_WE");
-                            if (prop != null)
-                            {
-                                if (rate < 0)
-                                {
+                            if (prop != null) {
+                                if (rate < 0) {
                                     // Negative rate = West
-                                    foreach (var sw in prop.Switches)
-                                    {
+                                    foreach (var sw in prop.Switches) {
                                         sw.Value = (sw.Name == "MOTION_WEST");
                                     }
-                                }
-                                else
-                                {
+                                } else {
                                     // Positive rate = East
-                                    foreach (var sw in prop.Switches)
-                                    {
+                                    foreach (var sw in prop.Switches) {
                                         sw.Value = (sw.Name == "MOTION_EAST");
                                     }
                                 }
                                 INDIClient.Instance.SendProperty(prop);
                             }
-                        }
-                        else
-                        {
+                        } else {
                             // Stop motion - only send if actually moving
                             var prop = GetSwitchProperty("TELESCOPE_MOTION_WE");
-                            if (prop != null)
-                            {
-                                if (prop.Switches.Any(sw => sw.Value))
-                                {
-                                    foreach (var sw in prop.Switches)
-                                    {
+                            if (prop != null) {
+                                if (prop.Switches.Any(sw => sw.Value)) {
+                                    foreach (var sw in prop.Switches) {
                                         sw.Value = false;
                                     }
                                     INDIClient.Instance.SendProperty(prop);
@@ -623,44 +513,32 @@ namespace NINA.INDI.Devices
                         break;
                     case TelescopeAxes.Secondary:
                         // Secondary axis is Dec/Altitude - use North/South motion
-                        if (rate != 0)
-                        {
+                        if (rate != 0) {
                             // Try to set the motion rate - different drivers use different properties
                             SetSlewRateForMotion(absRate);
 
                             // Set the direction switch
                             var prop = GetSwitchProperty("TELESCOPE_MOTION_NS");
-                            if (prop != null)
-                            {
-                                if (rate > 0)
-                                {
+                            if (prop != null) {
+                                if (rate > 0) {
                                     // Positive rate = North
-                                    foreach (var sw in prop.Switches)
-                                    {
+                                    foreach (var sw in prop.Switches) {
                                         sw.Value = (sw.Name == "MOTION_NORTH");
                                     }
-                                }
-                                else
-                                {
+                                } else {
                                     // Negative rate = South
-                                    foreach (var sw in prop.Switches)
-                                    {
+                                    foreach (var sw in prop.Switches) {
                                         sw.Value = (sw.Name == "MOTION_SOUTH");
                                     }
                                 }
                                 INDIClient.Instance.SendProperty(prop);
                             }
-                        }
-                        else
-                        {
+                        } else {
                             // Stop motion - only send if actually moving
                             var prop = GetSwitchProperty("TELESCOPE_MOTION_NS");
-                            if (prop != null)
-                            {
-                                if (prop.Switches.Any(sw => sw.Value))
-                                {
-                                    foreach (var sw in prop.Switches)
-                                    {
+                            if (prop != null) {
+                                if (prop.Switches.Any(sw => sw.Value)) {
+                                    foreach (var sw in prop.Switches) {
                                         sw.Value = false;
                                     }
                                     INDIClient.Instance.SendProperty(prop);
@@ -669,19 +547,14 @@ namespace NINA.INDI.Devices
                         }
                         break;
                 }
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
         }
 
-        public void PulseGuide(GuideDirections direction, int duration)
-        {
-            try
-            {
-                switch (direction)
-                {
+        public void PulseGuide(GuideDirections direction, int duration) {
+            try {
+                switch (direction) {
                     case GuideDirections.guideNorth:
                         SetNumberValue("TELESCOPE_TIMED_GUIDE_NS", "TIMED_GUIDE_N", duration);
                         break;
@@ -695,76 +568,57 @@ namespace NINA.INDI.Devices
                         SetNumberValue("TELESCOPE_TIMED_GUIDE_WE", "TIMED_GUIDE_E", duration);
                         break;
                 }
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
         }
 
-        public async Task ParkAsync(CancellationToken ct = default)
-        {
-            try
-            {
+        public async Task ParkAsync(CancellationToken ct = default) {
+            try {
                 SetSwitchValue("TELESCOPE_PARK", "PARK", true);
 
                 // Wait for property to become busy then return to idle/ok
                 await Task.Delay(100, ct);
 
                 var parkProp = GetProperty("TELESCOPE_PARK");
-                while ((Slewing == true || parkProp?.State == PropertyState.Busy) && !ct.IsCancellationRequested)
-                {
+                while ((Slewing == true || parkProp?.State == PropertyState.Busy) && !ct.IsCancellationRequested) {
                     await Task.Delay(200, ct);
                     parkProp = GetProperty("TELESCOPE_PARK");
                 }
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
         }
 
-        public async Task UnparkAsync(CancellationToken ct = default)
-        {
-            try
-            {
+        public async Task UnparkAsync(CancellationToken ct = default) {
+            try {
                 SetSwitchValue("TELESCOPE_PARK", "UNPARK", true);
 
                 // Wait for property to become busy then return to idle/ok
                 await Task.Delay(100, ct);
 
                 var parkProp = GetProperty("TELESCOPE_PARK");
-                while (parkProp?.State == PropertyState.Busy && !ct.IsCancellationRequested)
-                {
+                while (parkProp?.State == PropertyState.Busy && !ct.IsCancellationRequested) {
                     await Task.Delay(200, ct);
                     parkProp = GetProperty("TELESCOPE_PARK");
                 }
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
         }
 
-        public void SetPark()
-        {
-            try
-            {
+        public void SetPark() {
+            try {
                 SetSwitchValue("TELESCOPE_PARK_OPTION", "PARK_CURRENT", true);
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
         }
 
-        public async Task SlewToCoordinates(double ra, double dec)
-        {
-            try
-            {
+        public async Task SlewToCoordinates(double ra, double dec) {
+            try {
                 // Check mount state before slewing
-                if (AtPark)
-                {
+                if (AtPark) {
                     Logger.Error("Cannot slew: Mount is parked");
                     throw new InvalidOperationException("Mount is parked");
                 }
@@ -773,26 +627,19 @@ namespace NINA.INDI.Devices
                 SetSwitchValue("ON_COORD_SET", "SLEW", true);
 
                 // Send coordinates and wait for server acknowledgement (Busy state)
-                if (!await SetNumberValuesAsync("EQUATORIAL_EOD_COORD", TimeSpan.FromSeconds(30), ("RA", ra), ("DEC", dec)))
-                {
+                if (!await SetNumberValuesAsync("EQUATORIAL_EOD_COORD", TimeSpan.FromSeconds(30), ("RA", ra), ("DEC", dec))) {
                     throw new InvalidOperationException("Mount rejected coordinates");
                 }
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error in SlewToCoordinates: {ex.Message}");
                 throw;
             }
         }
 
-        public async Task SlewToCoordinatesTaskAsync(double ra, double dec, CancellationToken ct = default)
-        {
-            try
-            {
+        public async Task SlewToCoordinatesTaskAsync(double ra, double dec, CancellationToken ct = default) {
+            try {
                 // Slew
                 await SlewToCoordinates(ra, dec);
 
@@ -800,41 +647,30 @@ namespace NINA.INDI.Devices
                 var coordProp = GetProperty("EQUATORIAL_EOD_COORD");
 
                 // Wait for slew to finish
-                while (Slewing && !ct.IsCancellationRequested)
-                {
+                while (Slewing && !ct.IsCancellationRequested) {
                     // Check slewing status
-                    if (coordProp?.State == PropertyState.Idle)
-                    {
+                    if (coordProp?.State == PropertyState.Idle) {
                         // Done
                         break;
-                    }
-                    else if (coordProp?.State == PropertyState.Alert)
-                    {
+                    } else if (coordProp?.State == PropertyState.Alert) {
                         Logger.Error("EQUATORIAL_EOD_COORD in Alert state - slew rejected by mount");
                         throw new InvalidOperationException("Slew rejected by mount - check mount limits and target accessibility");
                     }
 
                     await Task.Delay(500, ct);
                 }
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error in SlewToCoordinatesTaskAsync: {ex.Message}");
                 throw;
             }
         }
 
-        public void SlewToAltAz(double azimuth, double altitude)
-        {
-            try
-            {
+        public void SlewToAltAz(double azimuth, double altitude) {
+            try {
                 // Check mount state before slewing
-                if (AtPark)
-                {
+                if (AtPark) {
                     Logger.Error("Cannot slew: Mount is parked");
                     throw new InvalidOperationException("Mount is parked");
                 }
@@ -844,22 +680,16 @@ namespace NINA.INDI.Devices
 
                 // Send coordinates
                 SetNumberValues("HORIZONTAL_COORD", ("ALT", altitude), ("AZ", azimuth));
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error in SlewToCoordinates: {ex.Message}");
                 throw;
             }
         }
 
-        public async Task SlewToAltAzTaskAsync(double azimuth, double altitude, CancellationToken ct = default)
-        {
-            try
-            {
+        public async Task SlewToAltAzTaskAsync(double azimuth, double altitude, CancellationToken ct = default) {
+            try {
                 // Slew
                 SlewToAltAz(azimuth, altitude);
 
@@ -870,41 +700,30 @@ namespace NINA.INDI.Devices
                 var coordProp = GetProperty("HORIZONTAL_COORD");
 
                 // Wait for slew to finish
-                while (Slewing && !ct.IsCancellationRequested)
-                {
+                while (Slewing && !ct.IsCancellationRequested) {
                     // Check slewing status
-                    if (coordProp?.State == PropertyState.Idle)
-                    {
+                    if (coordProp?.State == PropertyState.Idle) {
                         // Done
                         break;
-                    }
-                    else if (coordProp?.State == PropertyState.Alert)
-                    {
+                    } else if (coordProp?.State == PropertyState.Alert) {
                         Logger.Error("HORIZONTAL_COORD in Alert state - slew rejected by mount");
                         throw new InvalidOperationException("Slew rejected by mount - check mount limits and target accessibility");
                     }
 
                     await Task.Delay(500, ct);
                 }
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error in SlewToCoordinatesTaskAsync: {ex.Message}");
                 throw;
             }
         }
 
-        public void SyncToCoordinates(double ra, double dec)
-        {
-            try
-            {
+        public void SyncToCoordinates(double ra, double dec) {
+            try {
                 // Check mount state before slewing
-                if (AtPark)
-                {
+                if (AtPark) {
                     Logger.Error("Cannot slew: Mount is parked");
                     throw new InvalidOperationException("Mount is parked");
                 }
@@ -914,26 +733,19 @@ namespace NINA.INDI.Devices
 
                 // Send coordinates
                 SetNumberValues("EQUATORIAL_EOD_COORD", ("RA", ra), ("DEC", dec));
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error in SlewToCoordinates: {ex.Message}");
                 throw;
             }
         }
 
-        public async Task FindHomeAsync(CancellationToken ct = default)
-        {
-            try
-            {
+        public async Task FindHomeAsync(CancellationToken ct = default) {
+            try {
                 // If the telescope cannot park, throw exception
                 var homeProp = GetSwitchProperty("TELESCOPE_HOME");
-                if (homeProp == null)
-                {
+                if (homeProp == null) {
                     Logger.Warning("TELESCOPE_HOME property not found");
                     throw new NotImplementedException("TELESCOPE_HOME property not found");
                 }
@@ -942,16 +754,11 @@ namespace NINA.INDI.Devices
                 var goSwitch = homeProp.Switches.FirstOrDefault(s => s.Name == "GO");
                 var findSwitch = homeProp.Switches.FirstOrDefault(s => s.Name == "FIND");
 
-                if (goSwitch != null)
-                {
+                if (goSwitch != null) {
                     SetSwitchValue("TELESCOPE_HOME", "GO", true);
-                }
-                else if (findSwitch != null)
-                {
+                } else if (findSwitch != null) {
                     SetSwitchValue("TELESCOPE_HOME", "FIND", true);
-                }
-                else
-                {
+                } else {
                     Logger.Warning("TELESCOPE_HOME switch not found");
                     throw new NotImplementedException("TELESCOPE_HOME switch not found");
                 }
@@ -960,25 +767,19 @@ namespace NINA.INDI.Devices
                 await Task.Delay(100, ct);
 
                 homeProp = GetSwitchProperty("TELESCOPE_HOME");
-                while ((Slewing == true || homeProp?.State == PropertyState.Busy) && !ct.IsCancellationRequested)
-                {
+                while ((Slewing == true || homeProp?.State == PropertyState.Busy) && !ct.IsCancellationRequested) {
                     await Task.Delay(200, ct);
                     homeProp = GetSwitchProperty("TELESCOPE_HOME");
                 }
-            }
-            catch (ArgumentException)
-            {
+            } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
         }
 
-        public bool CanMoveAxis(TelescopeAxes axis)
-        {
-            try
-            {
+        public bool CanMoveAxis(TelescopeAxes axis) {
+            try {
                 // Check if motion properties exist
-                switch (axis)
-                {
+                switch (axis) {
                     case TelescopeAxes.Primary:
                         GetProperty("TELESCOPE_MOTION_WE");
                         return true;
@@ -988,15 +789,12 @@ namespace NINA.INDI.Devices
                     default:
                         return false;
                 }
-            }
-            catch
-            {
+            } catch {
                 return false;
             }
         }
 
-        public PierSide DestinationSideOfPier(double ra, double dec)
-        {
+        public PierSide DestinationSideOfPier(double ra, double dec) {
             // INDI doesn't provide a standard way to predict pier side
             // Return unknown/current pier side as best guess
             return SideOfPier;
