@@ -12,38 +12,33 @@
 
 #endregion "copyright"
 
+using NINA.Core.Utility;
 using NINA.INDI.Enums;
-using NINA.INDI.Protocol;
 using NINA.INDI.Interfaces;
+using NINA.INDI.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using NINA.Core.Utility;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace NINA.INDI.Devices
-{
+namespace NINA.INDI.Devices {
 
-    public class PropertyEventArgs : EventArgs
-    {
+    public class PropertyEventArgs : EventArgs {
         public INDIProperty Property { get; }
 
-        public PropertyEventArgs(INDIProperty property)
-        {
+        public PropertyEventArgs(INDIProperty property) {
             Property = property;
         }
     }
 
-    public class INDIDevice : IINDIDevice
-    {
+    public class INDIDevice : IINDIDevice {
 
         private readonly INDIDeviceInfo _device;
 
-        public INDIDevice(INDIDeviceInfo device)
-        {
+        public INDIDevice(INDIDeviceInfo device) {
             _device = device;
 
             // Register device to receive property updates
@@ -55,8 +50,7 @@ namespace NINA.INDI.Devices
             // Wait for CONNECTION property (always required, according to INDI)
             string[] requiredProps = ["CONNECTION"];
             var propTimeout = DateTime.Now.AddSeconds(10);
-            while (!HasProperties(requiredProps) && DateTime.Now < propTimeout)
-            {
+            while (!HasProperties(requiredProps) && DateTime.Now < propTimeout) {
                 CoreUtil.Wait(TimeSpan.FromMilliseconds(500)).Wait();
             }
 
@@ -77,13 +71,10 @@ namespace NINA.INDI.Devices
         private bool _connected;
         private bool _connectionAttemptFailed;  // Track if the last connection attempt failed
 
-        public bool Connected
-        {
+        public bool Connected {
             get => _connected;
-            set
-            {
-                if (_connected && !value)
-                {
+            set {
+                if (_connected && !value) {
                     // Transitioning from connected to disconnected
                     Disconnect();
                 }
@@ -103,76 +94,61 @@ namespace NINA.INDI.Devices
         private readonly Dictionary<string, INDIProperty> _properties = new();
         private TaskCompletionSource<bool> _propertiesReadyTcs;
 
-        public void AddProperty(INDIProperty property)
-        {
-            lock (_properties)
-            {
+        public void AddProperty(INDIProperty property) {
+            lock (_properties) {
                 _properties[property.Name] = property;
 
                 // Signal when CONNECTION property arrives (if we're waiting)
-                if (property.Name == "CONNECTION" && _propertiesReadyTcs != null && !_propertiesReadyTcs.Task.IsCompleted)
-                {
+                if (property.Name == "CONNECTION" && _propertiesReadyTcs != null && !_propertiesReadyTcs.Task.IsCompleted) {
                     Logger.Debug($"Device {DeviceName}: CONNECTION property received");
                     _propertiesReadyTcs.TrySetResult(true);
                 }
             }
         }
 
-        public void RemoveProperty(string propertyName)
-        {
-            lock (_properties)
-            {
-                if (_properties.TryGetValue(propertyName, out var prop))
-                {
+        public void RemoveProperty(string propertyName) {
+            lock (_properties) {
+                if (_properties.TryGetValue(propertyName, out var prop)) {
                     _properties.Remove(propertyName);
                 }
             }
         }
 
-        public INDIProperty GetProperty(string propertyName)
-        {
-            lock (_properties)
-            {
+        public INDIProperty GetProperty(string propertyName) {
+            lock (_properties) {
                 _properties.TryGetValue(propertyName, out var property);
                 return property;
             }
         }
 
-        public INDINumberProperty GetNumberProperty(string propertyName)
-        {
+        public INDINumberProperty GetNumberProperty(string propertyName) {
             return GetProperty(propertyName) as INDINumberProperty;
         }
 
-        public INDISwitchProperty GetSwitchProperty(string propertyName)
-        {
+        public INDISwitchProperty GetSwitchProperty(string propertyName) {
             return GetProperty(propertyName) as INDISwitchProperty;
         }
 
-        public INDITextProperty GetTextProperty(string propertyName)
-        {
+        public INDITextProperty GetTextProperty(string propertyName) {
             return GetProperty(propertyName) as INDITextProperty;
         }
 
-        public double? GetNumberPropertyValue(string propertyName, string elementName)
-        {
+        public double? GetNumberPropertyValue(string propertyName, string elementName) {
             var prop = GetNumberProperty(propertyName);
             return prop?.Numbers.FirstOrDefault(n => n.Name == elementName)?.Value;
         }
 
-        public bool? GetSwitchPropertyValue(string propertyName, string elementName)
-        {
+        public bool? GetSwitchPropertyValue(string propertyName, string elementName) {
             var prop = GetSwitchProperty(propertyName);
             return prop?.Switches.FirstOrDefault(s => s.Name == elementName)?.Value;
         }
 
-        public string GetTextPropertyValue(string propertyName, string elementName)
-        {
+        public string GetTextPropertyValue(string propertyName, string elementName) {
             var prop = GetTextProperty(propertyName);
             return prop?.Texts.FirstOrDefault(t => t.Name == elementName)?.Value;
         }
 
-        public void SetNumberValue(string propertyName, string elementName, double value)
-        {
+        public void SetNumberValue(string propertyName, string elementName, double value) {
             var prop = GetNumberProperty(propertyName) ?? throw new ArgumentException($"Number property '{propertyName}' not found");
             if (prop == null) return;
 
@@ -183,16 +159,13 @@ namespace NINA.INDI.Devices
             INDIClient.Instance.SendProperty(prop);
         }
 
-        public void SetNumberValues(string propertyName, params (string elementName, double value)[] values)
-        {
+        public void SetNumberValues(string propertyName, params (string elementName, double value)[] values) {
             var prop = GetNumberProperty(propertyName) ?? throw new ArgumentException($"Number property '{propertyName}' not found");
             if (prop == null) return;
 
-            foreach (var (elementName, value) in values)
-            {
+            foreach (var (elementName, value) in values) {
                 var number = prop.Numbers.FirstOrDefault(n => n.Name == elementName);
-                if (number != null)
-                {
+                if (number != null) {
                     number.Value = value;
                 }
             }
@@ -200,22 +173,18 @@ namespace NINA.INDI.Devices
             INDIClient.Instance.SendProperty(prop);
         }
 
-        public async Task<bool> SetNumberValuesAsync(string propertyName, TimeSpan timeout, params (string elementName, double value)[] values)
-        {
-            try
-            {
+        public async Task<bool> SetNumberValuesAsync(string propertyName, TimeSpan timeout, params (string elementName, double value)[] values) {
+            try {
                 // Create a unique operation ID for this async set
                 var operationId = $"{propertyName}_{Guid.NewGuid()}";
 
                 // Create and register the TaskCompletionSource
                 var tcs = new TaskCompletionSource<bool>();
-                lock (_asyncOperationsLock)
-                {
+                lock (_asyncOperationsLock) {
                     _pendingAsyncOperations[operationId] = tcs;
                 }
 
-                try
-                {
+                try {
                     // Execute the actual set operation
                     SetNumberValues(propertyName, values);
 
@@ -223,15 +192,13 @@ namespace NINA.INDI.Devices
                     var timeoutTask = Task.Delay(timeout);
                     var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
 
-                    if (completedTask == timeoutTask)
-                    {
+                    if (completedTask == timeoutTask) {
                         Logger.Error($"SetNumberValuesAsync ({propertyName}) - server did not acknowledge within timeout");
                         return false;
                     }
 
                     var result = await tcs.Task;
-                    if (!result)
-                    {
+                    if (!result) {
                         Logger.Error($"SetNumberValuesAsync ({propertyName}) - server rejected operation (Alert state)");
                         return false;
                     }
@@ -239,44 +206,33 @@ namespace NINA.INDI.Devices
                     // Server acknowledged the operation (state changed to Busy)
                     Logger.Debug($"SetNumberValuesAsync ({propertyName}) - server acknowledged, operation proceeding");
                     return true;
-                }
-                finally
-                {
+                } finally {
                     // Clean up the pending operation
-                    lock (_asyncOperationsLock)
-                    {
+                    lock (_asyncOperationsLock) {
                         _pendingAsyncOperations.Remove(operationId);
                     }
                 }
-            }
-            catch (OperationCanceledException)
-            {
+            } catch (OperationCanceledException) {
                 Logger.Warning($"SetNumberValuesAsync ({propertyName}) was cancelled");
                 return false;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"SetNumberValuesAsync failed: {ex.Message}");
                 return false;
             }
         }
 
-        public async Task<bool> SetSwitchValueAsync(string propertyName, string elementName, bool value, TimeSpan timeout)
-        {
-            try
-            {
+        public async Task<bool> SetSwitchValueAsync(string propertyName, string elementName, bool value, TimeSpan timeout) {
+            try {
                 // Create a unique operation ID for this async set
                 var operationId = $"{propertyName}_{Guid.NewGuid()}";
 
                 // Create and register the TaskCompletionSource
                 var tcs = new TaskCompletionSource<bool>();
-                lock (_asyncOperationsLock)
-                {
+                lock (_asyncOperationsLock) {
                     _pendingAsyncOperations[operationId] = tcs;
                 }
 
-                try
-                {
+                try {
                     // Execute the actual set operation
                     SetSwitchValue(propertyName, elementName, value);
 
@@ -284,15 +240,13 @@ namespace NINA.INDI.Devices
                     var timeoutTask = Task.Delay(timeout);
                     var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
 
-                    if (completedTask == timeoutTask)
-                    {
+                    if (completedTask == timeoutTask) {
                         Logger.Error($"SetSwitchValueAsync ({propertyName}) - server did not acknowledge within timeout");
                         return false;
                     }
 
                     var result = await tcs.Task;
-                    if (!result)
-                    {
+                    if (!result) {
                         Logger.Error($"SetSwitchValueAsync ({propertyName}) - server rejected operation (Alert state)");
                         return false;
                     }
@@ -300,76 +254,55 @@ namespace NINA.INDI.Devices
                     // Server acknowledged the operation (state changed to Busy)
                     Logger.Debug($"SetSwitchValueAsync ({propertyName}) - server acknowledged, operation proceeding");
                     return true;
-                }
-                finally
-                {
+                } finally {
                     // Clean up the pending operation
-                    lock (_asyncOperationsLock)
-                    {
+                    lock (_asyncOperationsLock) {
                         _pendingAsyncOperations.Remove(operationId);
                     }
                 }
-            }
-            catch (OperationCanceledException)
-            {
+            } catch (OperationCanceledException) {
                 Logger.Warning($"SetSwitchValueAsync ({propertyName}) was cancelled");
                 return false;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"SetSwitchValueAsync failed: {ex.Message}");
                 return false;
             }
         }
 
-        public void SetSwitchValue(string propertyName, string elementName, bool value)
-        {
+        public void SetSwitchValue(string propertyName, string elementName, bool value) {
             var prop = GetSwitchProperty(propertyName) ?? throw new ArgumentException($"Switch property '{propertyName}' not found");
 
             // Handle switch rules
-            if (prop.Rule == SwitchRule.OneOfMany)
-            {
+            if (prop.Rule == SwitchRule.OneOfMany) {
                 // For OneOfMany, only allow setting one switch to true at a time
                 // First, turn off all switches
-                foreach (var sw in prop.Switches)
-                {
+                foreach (var sw in prop.Switches) {
                     sw.Value = false;
                 }
                 // Then turn on only the requested one (if value is true)
-                if (value)
-                {
+                if (value) {
                     var targetSw = prop.Switches.FirstOrDefault(s => s.Name == elementName);
-                    if (targetSw != null)
-                    {
+                    if (targetSw != null) {
                         targetSw.Value = true;
                     }
                 }
-            }
-            else if (prop.Rule == SwitchRule.AtMostOne)
-            {
-                if (value)
-                {
+            } else if (prop.Rule == SwitchRule.AtMostOne) {
+                if (value) {
                     // Turn off all other switches
-                    foreach (var sw in prop.Switches)
-                    {
+                    foreach (var sw in prop.Switches) {
                         sw.Value = sw.Name == elementName;
                     }
-                }
-                else
-                {
+                } else {
                     // Just turn off this switch, leave others as is
                     var sw = prop.Switches.FirstOrDefault(s => s.Name == elementName);
-                    if (sw != null)
-                    {
+                    if (sw != null) {
                         sw.Value = false;
                     }
                 }
-            }
-            else // AnyOfMany
-            {
+            } else // AnyOfMany
+              {
                 var sw = prop.Switches.FirstOrDefault(s => s.Name == elementName);
-                if (sw != null)
-                {
+                if (sw != null) {
                     sw.Value = value;
                 }
             }
@@ -377,37 +310,29 @@ namespace NINA.INDI.Devices
             INDIClient.Instance.SendProperty(prop);
         }
 
-        public void SetSwitchProperty(string propertyName, Dictionary<string, bool> values)
-        {
+        public void SetSwitchProperty(string propertyName, Dictionary<string, bool> values) {
             var prop = GetSwitchProperty(propertyName) ?? throw new ArgumentException($"Switch property '{propertyName}' not found");
             if (prop == null) return;
 
             // Validate based on switch rule
-            if (prop.Rule == SwitchRule.OneOfMany)
-            {
+            if (prop.Rule == SwitchRule.OneOfMany) {
                 // Must have exactly one switch set to true
                 var trueCount = values.Values.Count(v => v);
-                if (trueCount != 1)
-                {
+                if (trueCount != 1) {
                     throw new ArgumentException($"OneOfMany rule requires exactly one switch to be true, got {trueCount}");
                 }
-            }
-            else if (prop.Rule == SwitchRule.AtMostOne)
-            {
+            } else if (prop.Rule == SwitchRule.AtMostOne) {
                 // Can have at most one switch set to true
                 var trueCount = values.Values.Count(v => v);
-                if (trueCount > 1)
-                {
+                if (trueCount > 1) {
                     throw new ArgumentException($"AtMostOne rule allows at most one switch to be true, got {trueCount}");
                 }
             }
             // AnyOfMany has no restrictions
 
             // Apply the values
-            foreach (var sw in prop.Switches)
-            {
-                if (values.TryGetValue(sw.Name, out bool value))
-                {
+            foreach (var sw in prop.Switches) {
+                if (values.TryGetValue(sw.Name, out bool value)) {
                     sw.Value = value;
                 }
             }
@@ -415,8 +340,7 @@ namespace NINA.INDI.Devices
             INDIClient.Instance.SendProperty(prop);
         }
 
-        public void SetTextValue(string propertyName, string elementName, string value)
-        {
+        public void SetTextValue(string propertyName, string elementName, string value) {
             var prop = GetTextProperty(propertyName) ?? throw new ArgumentException($"Text property '{propertyName}' not found");
             if (prop == null) return;
 
@@ -427,22 +351,18 @@ namespace NINA.INDI.Devices
             INDIClient.Instance.SendProperty(prop);
         }
 
-        public async Task<bool> SetTextValueAsync(string propertyName, string elementName, string value, TimeSpan timeout)
-        {
-            try
-            {
+        public async Task<bool> SetTextValueAsync(string propertyName, string elementName, string value, TimeSpan timeout) {
+            try {
                 // Create a unique operation ID for this async set
                 var operationId = $"{propertyName}_{Guid.NewGuid()}";
 
                 // Create and register the TaskCompletionSource
                 var tcs = new TaskCompletionSource<bool>();
-                lock (_asyncOperationsLock)
-                {
+                lock (_asyncOperationsLock) {
                     _pendingAsyncOperations[operationId] = tcs;
                 }
 
-                try
-                {
+                try {
                     // Execute the actual set operation
                     SetTextValue(propertyName, elementName, value);
 
@@ -450,15 +370,13 @@ namespace NINA.INDI.Devices
                     var timeoutTask = Task.Delay(timeout);
                     var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
 
-                    if (completedTask == timeoutTask)
-                    {
+                    if (completedTask == timeoutTask) {
                         Logger.Error($"SetTextValueAsync ({propertyName}) - server did not acknowledge within timeout");
                         return false;
                     }
 
                     var result = await tcs.Task;
-                    if (!result)
-                    {
+                    if (!result) {
                         Logger.Error($"SetTextValueAsync ({propertyName}) - server rejected operation (Alert state)");
                         return false;
                     }
@@ -466,23 +384,16 @@ namespace NINA.INDI.Devices
                     // Server acknowledged the operation (state changed to Busy)
                     Logger.Debug($"SetTextValueAsync ({propertyName}) - server acknowledged, operation proceeding");
                     return true;
-                }
-                finally
-                {
+                } finally {
                     // Clean up the pending operation
-                    lock (_asyncOperationsLock)
-                    {
+                    lock (_asyncOperationsLock) {
                         _pendingAsyncOperations.Remove(operationId);
                     }
                 }
-            }
-            catch (OperationCanceledException)
-            {
+            } catch (OperationCanceledException) {
                 Logger.Warning($"SetTextValueAsync ({propertyName}) was cancelled");
                 return false;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"SetTextValueAsync failed: {ex.Message}");
                 return false;
             }
@@ -493,12 +404,9 @@ namespace NINA.INDI.Devices
         private readonly Dictionary<string, TaskCompletionSource<bool>> _pendingAsyncOperations = new();
         private readonly object _asyncOperationsLock = new();
 
-        public Task<bool> Connect(CancellationToken ct)
-        {
-            return Task.Run(async () =>
-            {
-                if (Connected)
-                {
+        public Task<bool> Connect(CancellationToken ct) {
+            return Task.Run(async () => {
+                if (Connected) {
                     Logger.Warning($"Device '{DeviceName}' is already connected");
                     return true;
                 }
@@ -506,8 +414,7 @@ namespace NINA.INDI.Devices
                 Logger.Info($"Connecting to INDI device: {DeviceName}");
 
                 // Call hook to configure connection properties before connecting
-                if (!await OnPreConnect())
-                {
+                if (!await OnPreConnect()) {
                     Logger.Error($"OnPreConnect failed for {DeviceName}");
                     return false;
                 }
@@ -515,27 +422,22 @@ namespace NINA.INDI.Devices
                 // Send the CONNECT command using async mechanism
                 bool success = await SetSwitchValueAsync("CONNECTION", "CONNECT", true, TimeSpan.FromSeconds(30));
 
-                if (success)
-                {
+                if (success) {
                     Logger.Info($"Connected to INDI device: {DeviceName}");
                     _connectionAttemptFailed = false;  // Clear failure flag on successful connection
 
                     // Wait for initial property definitions to arrive from the driver
                     var requiredProps = GetRequiredConnectionProperties();
-                    if (requiredProps != null && requiredProps.Length > 0)
-                    {
+                    if (requiredProps != null && requiredProps.Length > 0) {
                         Logger.Debug($"Waiting for required properties: {string.Join(", ", requiredProps)}");
 
                         // Poll for properties with timeout
                         var propStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                        while (!HasProperties(requiredProps) && propStopwatch.Elapsed < TimeSpan.FromSeconds(20) && !ct.IsCancellationRequested)
-                        {
+                        while (!HasProperties(requiredProps) && propStopwatch.Elapsed < TimeSpan.FromSeconds(20) && !ct.IsCancellationRequested) {
                             await CoreUtil.Wait(TimeSpan.FromMilliseconds(200), ct);
                         }
                     }
-                }
-                else
-                {
+                } else {
                     Logger.Error($"Connecting to {DeviceName} failed");
                 }
 
@@ -546,21 +448,18 @@ namespace NINA.INDI.Devices
             });
         }
 
-        public async Task<bool> DisconnectAsync()
-        {
+        public async Task<bool> DisconnectAsync() {
             Logger.Info($"Disconnecting from INDI device: {DeviceName}");
 
             // Check if INDI client is still connected to server
-            if (!INDIClient.Instance.IsConnected)
-            {
+            if (!INDIClient.Instance.IsConnected) {
                 Logger.Info($"INDI server already disconnected, skipping graceful disconnect for {DeviceName}");
                 _connected = false;
                 return true;
             }
 
             // If the last connection attempt failed, skip DISCONNECT (device never actually connected)
-            if (_connectionAttemptFailed)
-            {
+            if (_connectionAttemptFailed) {
                 Logger.Info($"Device '{DeviceName}' connection failed previously, skipping graceful disconnect");
                 _connected = false;
                 _connectionAttemptFailed = false;  // Reset flag
@@ -569,11 +468,9 @@ namespace NINA.INDI.Devices
 
             // Check if device is actually connected before trying to disconnect
             var connProp = GetSwitchProperty("CONNECTION");
-            if (connProp != null)
-            {
+            if (connProp != null) {
                 var connectSwitch = connProp.Switches.FirstOrDefault(s => s.Name == "CONNECT");
-                if (connectSwitch != null && !connectSwitch.Value)
-                {
+                if (connectSwitch != null && !connectSwitch.Value) {
                     Logger.Info($"Device '{DeviceName}' is not connected to server (CONNECT=false), skipping graceful disconnect");
                     _connected = false;
                     return true;
@@ -583,12 +480,9 @@ namespace NINA.INDI.Devices
             // Send DISCONNECT command using async mechanism
             bool success = await SetSwitchValueAsync("CONNECTION", "DISCONNECT", true, TimeSpan.FromSeconds(60));
 
-            if (success)
-            {
+            if (success) {
                 Logger.Info($"Disconnected from INDI device: {DeviceName}");
-            }
-            else
-            {
+            } else {
                 Logger.Warning($"Disconnecting from {DeviceName} timed out or failed");
             }
 
@@ -596,26 +490,19 @@ namespace NINA.INDI.Devices
             return success;
         }
 
-        public void Disconnect()
-        {
+        public void Disconnect() {
             // Use async variant as fire-and-forget for Dispose compatibility
-            _ = Task.Run(async () =>
-            {
-                try
-                {
+            _ = Task.Run(async () => {
+                try {
                     await DisconnectAsync();
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     Logger.Error($"Disconnect failed: {ex.Message}");
                 }
             });
         }
 
-        public void Dispose()
-        {
-            if (Connected)
-            {
+        public void Dispose() {
+            if (Connected) {
                 Disconnect();
             }
 
@@ -627,16 +514,14 @@ namespace NINA.INDI.Devices
         /// Override this to specify which properties must be received before Connect() completes.
         /// Return null/empty to skip waiting (uses fixed delay fallback).
         /// </summary>
-        protected virtual string[] GetRequiredConnectionProperties()
-        {
+        protected virtual string[] GetRequiredConnectionProperties() {
             return null;
         }
 
         /// <summary>
         /// Override this to configure device properties after driver load but before CONNECT
         /// </summary>
-        protected virtual async Task<bool> OnPreConnect()
-        {
+        protected virtual async Task<bool> OnPreConnect() {
             // Check if we have a valid connection mode setting
             bool HasConnectionMode = _hasConnectionModeProperty && !string.IsNullOrEmpty(_connectionMode);
             bool HasAddress = !string.IsNullOrEmpty(_address);
@@ -649,114 +534,91 @@ namespace NINA.INDI.Devices
             Logger.Info($"[{DeviceName}] Connection config: HasConnectionMode={HasConnectionMode}, HasAddress={HasAddress}, HasPort={HasPort}, IsAutoMode={IsAutoMode}, IsUsingSerialMode={IsUsingSerialMode}");
 
             // If no connection configuration is available or configured, skip pre-connect (e.g., direct USB devices)
-            if (!HasConnectionMode && !HasAddress && !HasPort && !IsAutoMode)
-            {
+            if (!HasConnectionMode && !HasAddress && !HasPort && !IsAutoMode) {
                 Logger.Info($"[{DeviceName}] No connection configuration needed - device will connect directly");
                 return true;
             }
 
             // Validate configuration if we're trying to configure something
-            if (HasConnectionMode || HasPort || HasAddress || IsAutoMode)
-            {
-                if (!IsAutoMode && !HasPort && !HasConnectionMode)
-                {
+            if (HasConnectionMode || HasPort || HasAddress || IsAutoMode) {
+                if (!IsAutoMode && !HasPort && !HasConnectionMode) {
                     Logger.Error($"[{DeviceName}] OnPreConnect validation failed: No auto-search and no port specified");
                     return false;
                 }
 
-                if (!IsUsingSerialMode && HasConnectionMode && (!HasAddress || !HasPort))
-                {
+                if (!IsUsingSerialMode && HasConnectionMode && (!HasAddress || !HasPort)) {
                     Logger.Error($"[{DeviceName}] OnPreConnect validation failed: TCP mode requires both address ({HasAddress}) and port ({HasPort})");
                     return false;
                 }
             }
 
             // Apply connection mode
-            if (HasConnectionMode)
-            {
+            if (HasConnectionMode) {
                 Logger.Info($"[{DeviceName}] Setting CONNECTION_MODE to {_connectionMode}");
-                if (!await SetSwitchValueAsync("CONNECTION_MODE", _connectionMode, true, TimeSpan.FromSeconds(10)))
-                {
+                if (!await SetSwitchValueAsync("CONNECTION_MODE", _connectionMode, true, TimeSpan.FromSeconds(10))) {
                     Logger.Error($"[{DeviceName}] Failed to set CONNECTION_MODE to {_connectionMode}");
                     return false;
                 }
                 Logger.Info($"[{DeviceName}] CONNECTION_MODE successfully set to {_connectionMode}");
             }
 
-            if (IsUsingSerialMode)
-            {
+            if (IsUsingSerialMode) {
                 Logger.Info($"[{DeviceName}] Configuring SERIAL mode connection");
                 // Process SERIAL mode
-                if (IsAutoMode)
-                {
+                if (IsAutoMode) {
                     // Just set auto mode and return
                     Logger.Info($"[{DeviceName}] Enabling DEVICE_AUTO_SEARCH");
                     bool autoSearchResult = await SetSwitchValueAsync("DEVICE_AUTO_SEARCH", "INDI_ENABLED", true, TimeSpan.FromSeconds(10));
-                    if (autoSearchResult)
-                    {
+                    if (autoSearchResult) {
                         Logger.Info($"[{DeviceName}] DEVICE_AUTO_SEARCH enabled successfully");
-                    }
-                    else
-                    {
+                    } else {
                         Logger.Error($"[{DeviceName}] Failed to enable DEVICE_AUTO_SEARCH");
                     }
                     return autoSearchResult;
                 }
 
-                // Disable auto mode
-                await SetSwitchValueAsync("DEVICE_AUTO_SEARCH", "INDI_DISABLED", true, TimeSpan.FromSeconds(10));
+                // Disable auto mode (only if this device actually has the auto-search property —
+                // secondary devices from a multi-device driver typically do not)
+                if (_hasAutoSearchProperty) {
+                    await SetSwitchValueAsync("DEVICE_AUTO_SEARCH", "INDI_DISABLED", true, TimeSpan.FromSeconds(10));
+                }
 
-                if (_hasDevicePortProperty)
-                {
+                if (_hasDevicePortProperty) {
                     Logger.Info($"[{DeviceName}] Setting DEVICE_PORT to {_port}");
-                    if (!await SetTextValueAsync("DEVICE_PORT", "PORT", _port, TimeSpan.FromSeconds(10)))
-                    {
+                    if (!await SetTextValueAsync("DEVICE_PORT", "PORT", _port, TimeSpan.FromSeconds(10))) {
                         Logger.Error($"[{DeviceName}] Failed to set DEVICE_PORT to {_port}");
                         return false;
                     }
                     Logger.Info($"[{DeviceName}] DEVICE_PORT set to {_port}");
                 }
-                if (_hasDeviceBaudRateProperty)
-                {
+                if (_hasDeviceBaudRateProperty) {
                     Logger.Info($"[{DeviceName}] Setting DEVICE_BAUD_RATE to {_baudRate}");
-                    if (!await SetSwitchValueAsync("DEVICE_BAUD_RATE", $"{_baudRate}", true, TimeSpan.FromSeconds(10)))
-                    {
+                    if (!await SetSwitchValueAsync("DEVICE_BAUD_RATE", $"{_baudRate}", true, TimeSpan.FromSeconds(10))) {
                         Logger.Error($"[{DeviceName}] Failed to set DEVICE_BAUD_RATE to {_baudRate}");
                         return false;
                     }
                     Logger.Info($"[{DeviceName}] DEVICE_BAUD_RATE set to {_baudRate}");
                 }
                 Logger.Info($"[{DeviceName}] Serial mode configuration complete - DEVICE_PORT={_port}, BAUD_RATE={_baudRate}");
-            }
-            else
-            {
+            } else {
                 Logger.Info($"[{DeviceName}] Configuring TCP mode connection");
                 // Process TCP mode
-                if (HasAddress)
-                {
-                    if (!_hasDeviceAddressProperty && DeviceName.Contains("Simulator", StringComparison.OrdinalIgnoreCase))
-                    {
+                if (HasAddress) {
+                    if (!_hasDeviceAddressProperty && DeviceName.Contains("Simulator", StringComparison.OrdinalIgnoreCase)) {
                         Logger.Info($"[{DeviceName}] Simulator device has no DEVICE_ADDRESS property - skipping TCP address configuration");
-                    }
-                    else
-                    {
-                        try
-                        {
+                    } else {
+                        try {
                             Logger.Info($"[{DeviceName}] Setting DEVICE_ADDRESS to {_address}:{_port}");
-                            if (!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10)))
-                            {
+                            if (!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10))) {
                                 Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS address to {_address}");
                                 return false;
                             }
-                            if (!await SetTextValueAsync("DEVICE_ADDRESS", "PORT", _port, TimeSpan.FromSeconds(10)))
-                            {
+                            if (!await SetTextValueAsync("DEVICE_ADDRESS", "PORT", _port, TimeSpan.FromSeconds(10))) {
                                 Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS port to {_port}");
                                 return false;
                             }
                             Logger.Info($"[{DeviceName}] TCP mode configuration complete - ADDRESS={_address}:{_port}");
-                        }
-                        catch (Exception ex)
-                        {
+                        } catch (Exception ex) {
                             Logger.Error($"[{DeviceName}] Exception during TCP configuration: {ex.Message}");
                             return false;
                         }
@@ -771,19 +633,14 @@ namespace NINA.INDI.Devices
         /// <summary>
         /// Check if all required properties have been received
         /// </summary>
-        private bool HasProperties(string[] props)
-        {
-            if (props == null || props.Length == 0)
-            {
+        private bool HasProperties(string[] props) {
+            if (props == null || props.Length == 0) {
                 return true;
             }
 
-            lock (_properties)
-            {
-                foreach (var propName in props)
-                {
-                    if (!_properties.ContainsKey(propName))
-                    {
+            lock (_properties) {
+                foreach (var propName in props) {
+                    if (!_properties.ContainsKey(propName)) {
                         return false;
                     }
                 }
@@ -791,8 +648,7 @@ namespace NINA.INDI.Devices
             return true;
         }
 
-        public virtual void OnSwitchPropertyUpdated(INDISwitchProperty p)
-        {
+        public virtual void OnSwitchPropertyUpdated(INDISwitchProperty p) {
             /*
             Logger.Info($"{p.Name}, {p.Label}, {p.State}, {p.Rule}");
             foreach (var s in p.Switches)
@@ -801,22 +657,19 @@ namespace NINA.INDI.Devices
             }
             */
             // Track CONNECTION failures to prevent spurious DISCONNECT attempts
-            if (p.Name == "CONNECTION" && p.State == PropertyState.Alert)
-            {
+            if (p.Name == "CONNECTION" && p.State == PropertyState.Alert) {
                 _connectionAttemptFailed = true;
                 Logger.Warning($"Device '{DeviceName}' connection attempt failed (Alert state)");
             }
 
             // Check if there are any pending async operations for this property
-            lock (_asyncOperationsLock)
-            {
+            lock (_asyncOperationsLock) {
                 // Find all pending operations for this property
                 var operationsForProperty = _pendingAsyncOperations
                     .Where(kvp => kvp.Key.StartsWith(p.Name + "_"))
                     .ToList();
 
-                foreach (var kvp in operationsForProperty)
-                {
+                foreach (var kvp in operationsForProperty) {
                     var operationId = kvp.Key;
                     var tcs = kvp.Value;
 
@@ -825,26 +678,18 @@ namespace NINA.INDI.Devices
                     // - Ok: operation completed successfully (some drivers skip Busy and go straight to Ok)
                     // - Alert: server rejected the command
                     // - Idle: operation still pending, keep waiting
-                    if (p.State == PropertyState.Busy)
-                    {
-                        if (!tcs.Task.IsCompleted)
-                        {
+                    if (p.State == PropertyState.Busy) {
+                        if (!tcs.Task.IsCompleted) {
                             Logger.Debug($"Async operation {operationId} acknowledged by server (state: Busy)");
                             tcs.TrySetResult(true);
                         }
-                    }
-                    else if (p.State == PropertyState.Ok)
-                    {
-                        if (!tcs.Task.IsCompleted)
-                        {
+                    } else if (p.State == PropertyState.Ok) {
+                        if (!tcs.Task.IsCompleted) {
                             Logger.Debug($"Async operation {operationId} completed by server (state: Ok)");
                             tcs.TrySetResult(true);
                         }
-                    }
-                    else if (p.State == PropertyState.Alert)
-                    {
-                        if (!tcs.Task.IsCompleted)
-                        {
+                    } else if (p.State == PropertyState.Alert) {
+                        if (!tcs.Task.IsCompleted) {
                             Logger.Warning($"Async operation {operationId} rejected by server (state: Alert)");
                             tcs.TrySetResult(false);
                         }
@@ -853,8 +698,7 @@ namespace NINA.INDI.Devices
             }
         }
 
-        public virtual void OnNumberPropertyUpdated(INDINumberProperty p)
-        {
+        public virtual void OnNumberPropertyUpdated(INDINumberProperty p) {
             /*
             Logger.Info($"{p.Name}, {p.Label}, {p.State}");
             foreach (var n in p.Numbers) {
@@ -863,15 +707,13 @@ namespace NINA.INDI.Devices
             */
 
             // Check if there are any pending async operations for this property
-            lock (_asyncOperationsLock)
-            {
+            lock (_asyncOperationsLock) {
                 // Find all pending operations for this property
                 var operationsForProperty = _pendingAsyncOperations
                     .Where(kvp => kvp.Key.StartsWith(p.Name + "_"))
                     .ToList();
 
-                foreach (var kvp in operationsForProperty)
-                {
+                foreach (var kvp in operationsForProperty) {
                     var operationId = kvp.Key;
                     var tcs = kvp.Value;
 
@@ -880,26 +722,18 @@ namespace NINA.INDI.Devices
                     // - Ok: operation completed successfully (some drivers skip Busy and go straight to Ok)
                     // - Alert: server rejected the command
                     // - Idle: operation still pending, keep waiting
-                    if (p.State == PropertyState.Busy)
-                    {
-                        if (!tcs.Task.IsCompleted)
-                        {
+                    if (p.State == PropertyState.Busy) {
+                        if (!tcs.Task.IsCompleted) {
                             Logger.Debug($"Async operation {operationId} acknowledged by server (state: Busy)");
                             tcs.TrySetResult(true);
                         }
-                    }
-                    else if (p.State == PropertyState.Ok)
-                    {
-                        if (!tcs.Task.IsCompleted)
-                        {
+                    } else if (p.State == PropertyState.Ok) {
+                        if (!tcs.Task.IsCompleted) {
                             Logger.Debug($"Async operation {operationId} completed by server (state: Ok)");
                             tcs.TrySetResult(true);
                         }
-                    }
-                    else if (p.State == PropertyState.Alert)
-                    {
-                        if (!tcs.Task.IsCompleted)
-                        {
+                    } else if (p.State == PropertyState.Alert) {
+                        if (!tcs.Task.IsCompleted) {
                             Logger.Warning($"Async operation {operationId} rejected by server (state: Alert)");
                             tcs.TrySetResult(false);
                         }
@@ -908,8 +742,7 @@ namespace NINA.INDI.Devices
             }
         }
 
-        public virtual void OnTextPropertyUpdated(INDITextProperty p)
-        {
+        public virtual void OnTextPropertyUpdated(INDITextProperty p) {
             /*
             Logger.Info($"{p.Name}, {p.Label}, {p.State}");
             foreach (var t in p.Texts) {
@@ -918,15 +751,13 @@ namespace NINA.INDI.Devices
             */
 
             // Check if there are any pending async operations for this property
-            lock (_asyncOperationsLock)
-            {
+            lock (_asyncOperationsLock) {
                 // Find all pending operations for this property
                 var operationsForProperty = _pendingAsyncOperations
                     .Where(kvp => kvp.Key.StartsWith(p.Name + "_"))
                     .ToList();
 
-                foreach (var kvp in operationsForProperty)
-                {
+                foreach (var kvp in operationsForProperty) {
                     var operationId = kvp.Key;
                     var tcs = kvp.Value;
 
@@ -935,26 +766,18 @@ namespace NINA.INDI.Devices
                     // - Ok: operation completed successfully (some drivers skip Busy and go straight to Ok)
                     // - Alert: server rejected the command
                     // - Idle: operation still pending, keep waiting
-                    if (p.State == PropertyState.Busy)
-                    {
-                        if (!tcs.Task.IsCompleted)
-                        {
+                    if (p.State == PropertyState.Busy) {
+                        if (!tcs.Task.IsCompleted) {
                             Logger.Debug($"Async operation {operationId} acknowledged by server (state: Busy)");
                             tcs.TrySetResult(true);
                         }
-                    }
-                    else if (p.State == PropertyState.Ok)
-                    {
-                        if (!tcs.Task.IsCompleted)
-                        {
+                    } else if (p.State == PropertyState.Ok) {
+                        if (!tcs.Task.IsCompleted) {
                             Logger.Debug($"Async operation {operationId} completed by server (state: Ok)");
                             tcs.TrySetResult(true);
                         }
-                    }
-                    else if (p.State == PropertyState.Alert)
-                    {
-                        if (!tcs.Task.IsCompleted)
-                        {
+                    } else if (p.State == PropertyState.Alert) {
+                        if (!tcs.Task.IsCompleted) {
                             Logger.Warning($"Async operation {operationId} rejected by server (state: Alert)");
                             tcs.TrySetResult(false);
                         }
@@ -963,8 +786,7 @@ namespace NINA.INDI.Devices
             }
         }
 
-        public virtual void OnBlobPropertyUpdated(INDIBlobProperty p)
-        {
+        public virtual void OnBlobPropertyUpdated(INDIBlobProperty p) {
         }
 
         private string _connectionMode;
@@ -973,8 +795,7 @@ namespace NINA.INDI.Devices
         private string _port;
         private int _baudRate;
 
-        public void ConfigureConnectionProperties(string connectionMode, bool autoSearch, string address, string port, int baudRate)
-        {
+        public void ConfigureConnectionProperties(string connectionMode, bool autoSearch, string address, string port, int baudRate) {
             _connectionMode = connectionMode;
             _autoSearch = autoSearch;
             _address = address;
@@ -985,8 +806,7 @@ namespace NINA.INDI.Devices
         #region Unsupported
         public virtual IList<string> SupportedActions => new List<string>();
 
-        public virtual string Action(string actionName, string actionParameters)
-        {
+        public virtual string Action(string actionName, string actionParameters) {
             throw new NotImplementedException();
         }
         #endregion
@@ -998,23 +818,18 @@ namespace NINA.INDI.Devices
         private NetworkStream _lx200Stream;
         private readonly object _lx200Lock = new object();
 
-        private int GetTcpPort()
-        {
-            if (string.IsNullOrEmpty(_address) || string.IsNullOrEmpty(_port))
-            {
+        private int GetTcpPort() {
+            if (string.IsNullOrEmpty(_address) || string.IsNullOrEmpty(_port)) {
                 throw new InvalidOperationException("Cannot send raw command: device is not configured for TCP mode (no address/port)");
             }
-            if (!int.TryParse(_port, out int port))
-            {
+            if (!int.TryParse(_port, out int port)) {
                 throw new InvalidOperationException($"Cannot send raw command: invalid port '{_port}'");
             }
             return port;
         }
 
-        private NetworkStream EnsureLx200Stream()
-        {
-            if (_lx200Client != null && _lx200Client.Connected)
-            {
+        private NetworkStream EnsureLx200Stream() {
+            if (_lx200Client != null && _lx200Client.Connected) {
                 return _lx200Stream;
             }
             _lx200Client?.Dispose();
@@ -1027,18 +842,15 @@ namespace NINA.INDI.Devices
             return _lx200Stream;
         }
 
-        private void DisposeLx200Connection()
-        {
+        private void DisposeLx200Connection() {
             _lx200Stream?.Dispose();
             _lx200Client?.Dispose();
             _lx200Stream = null;
             _lx200Client = null;
         }
 
-        private void SendRawTcpBlind(string command)
-        {
-            lock (_lx200Lock)
-            {
+        private void SendRawTcpBlind(string command) {
+            lock (_lx200Lock) {
                 var stream = EnsureLx200Stream();
                 var bytes = Encoding.ASCII.GetBytes(command);
                 stream.Write(bytes, 0, bytes.Length);
@@ -1046,10 +858,8 @@ namespace NINA.INDI.Devices
             }
         }
 
-        private bool SendRawTcpCommandBool(string command)
-        {
-            lock (_lx200Lock)
-            {
+        private bool SendRawTcpCommandBool(string command) {
+            lock (_lx200Lock) {
                 var stream = EnsureLx200Stream();
                 var bytes = Encoding.ASCII.GetBytes(command);
                 stream.Write(bytes, 0, bytes.Length);
@@ -1060,18 +870,15 @@ namespace NINA.INDI.Devices
             }
         }
 
-        private string SendRawTcpCommand(string command)
-        {
-            lock (_lx200Lock)
-            {
+        private string SendRawTcpCommand(string command) {
+            lock (_lx200Lock) {
                 var stream = EnsureLx200Stream();
                 var bytes = Encoding.ASCII.GetBytes(command);
                 stream.Write(bytes, 0, bytes.Length);
                 stream.Flush();
                 // Read until '#' terminator
                 var response = new StringBuilder();
-                while (true)
-                {
+                while (true) {
                     int b = stream.ReadByte();
                     if (b == -1) break;
                     var ch = (char)b;
@@ -1082,52 +889,37 @@ namespace NINA.INDI.Devices
             }
         }
 
-        public virtual void CommandBlind(string command, bool raw = false)
-        {
-            if (string.IsNullOrEmpty(_address) || _connectionMode != "CONNECTION_TCP")
-            {
+        public virtual void CommandBlind(string command, bool raw = false) {
+            if (string.IsNullOrEmpty(_address) || _connectionMode != "CONNECTION_TCP") {
                 throw new NotImplementedException();
             }
-            try
-            {
+            try {
                 SendRawTcpBlind(command);
-            }
-            catch (Exception)
-            {
+            } catch (Exception) {
                 DisposeLx200Connection();
                 throw;
             }
         }
 
-        public virtual bool CommandBool(string command, bool raw = false)
-        {
-            if (string.IsNullOrEmpty(_address) || _connectionMode != "CONNECTION_TCP")
-            {
+        public virtual bool CommandBool(string command, bool raw = false) {
+            if (string.IsNullOrEmpty(_address) || _connectionMode != "CONNECTION_TCP") {
                 throw new NotImplementedException();
             }
-            try
-            {
+            try {
                 return SendRawTcpCommandBool(command);
-            }
-            catch (Exception)
-            {
+            } catch (Exception) {
                 DisposeLx200Connection();
                 throw;
             }
         }
 
-        public virtual string CommandString(string command, bool raw = false)
-        {
-            if (string.IsNullOrEmpty(_address) || _connectionMode != "CONNECTION_TCP")
-            {
+        public virtual string CommandString(string command, bool raw = false) {
+            if (string.IsNullOrEmpty(_address) || _connectionMode != "CONNECTION_TCP") {
                 throw new NotImplementedException();
             }
-            try
-            {
+            try {
                 return SendRawTcpCommand(command);
-            }
-            catch (Exception)
-            {
+            } catch (Exception) {
                 DisposeLx200Connection();
                 throw;
             }

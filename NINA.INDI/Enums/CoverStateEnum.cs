@@ -12,10 +12,8 @@
 
 #endregion "copyright"
 
-namespace NINA.INDI.Enums
-{
-    public enum CoverState
-    {
+namespace NINA.INDI.Enums {
+    public enum CoverState {
         Unknown,
         NeitherOpenNorClosed,
         Closed,

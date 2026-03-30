@@ -12,14 +12,14 @@
 
 #endregion "copyright"
 
+using NINA.Core.Utility;
 using NINA.INDI.Enums;
-using NINA.INDI.Protocol;
 using NINA.INDI.Interfaces;
+using NINA.INDI.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using NINA.Core.Utility;
 
 namespace NINA.INDI.Devices {
 
@@ -74,22 +74,17 @@ namespace NINA.INDI.Devices {
         public bool IsMoving { get; private set; }
         public int MaxIncrement => MaxStep;
 
-        public bool CanSetMaxStep
-        {
-            get
-            {
+        public bool CanSetMaxStep {
+            get {
                 var prop = GetNumberProperty("FOCUS_MAX");
                 return prop != null;
             }
         }
 
-        public int MaxStep
-        {
-            get => (int)GetNumberPropertyValue("FOCUS_MAX", "FOCUS_MAX_VALUE");
-            set
-            {
-                if (!Connected)
-                {
+        public int MaxStep {
+            get => (int)(GetNumberPropertyValue("FOCUS_MAX", "FOCUS_MAX_VALUE") ?? 0.0);
+            set {
+                if (!Connected) {
                     Logger.Warning("Cannot set MaxStep: not connected");
                     return;
                 }
@@ -98,7 +93,7 @@ namespace NINA.INDI.Devices {
             }
         }
 
-        public int Position => (int)GetNumberPropertyValue("ABS_FOCUS_POSITION", "FOCUS_ABSOLUTE_POSITION");
+        public int Position => (int)(GetNumberPropertyValue("ABS_FOCUS_POSITION", "FOCUS_ABSOLUTE_POSITION") ?? 0.0);
 
         public double StepSize => MaxIncrement;
         public bool TempComp => false;

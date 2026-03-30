@@ -12,13 +12,13 @@
 
 #endregion "copyright"
 
+using NINA.Core.Enum;
+using NINA.Core.Model.Equipment;
+using NINA.INDI.Enums;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using NINA.Core.Enum;
-using NINA.Core.Model.Equipment;
-using NINA.INDI.Enums;
 
 namespace NINA.INDI.Interfaces {
     public interface IINDITelescope : IINDIDevice {

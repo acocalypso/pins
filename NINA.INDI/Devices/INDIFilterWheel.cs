@@ -12,14 +12,14 @@
 
 #endregion "copyright"
 
+using NINA.Core.Utility;
 using NINA.INDI.Enums;
-using NINA.INDI.Protocol;
 using NINA.INDI.Interfaces;
+using NINA.INDI.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using NINA.Core.Utility;
 
 namespace NINA.INDI.Devices {
 
@@ -65,8 +65,7 @@ namespace NINA.INDI.Devices {
         /// <summary>
         /// Specify critical properties that must arrive before Connect() completes
         /// </summary>
-        protected override string[] GetRequiredConnectionProperties()
-        {
+        protected override string[] GetRequiredConnectionProperties() {
             return ["FILTER_SLOT"];
         }
 
