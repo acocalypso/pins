@@ -42,6 +42,9 @@
     <!-- Exclude System.Drawing.Common as it conflicts with our compat library -->
     <PackageReference Include="System.Drawing.Common" Version="*" ExcludeAssets="all" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Utility\Converters\" />
+  </ItemGroup>
   <PropertyGroup>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>$(AssemblyName)</Title>
