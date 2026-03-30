@@ -24,7 +24,7 @@ jobs:
     container:
       image: debian:trixie
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Bootstrap build tooling
@@ -274,6 +274,20 @@ jobs:
             echo "Description: INDI development headers and build metadata built from upstream v${{ env.INDI_VERSION }}"
           } > "$dev_control_dir/control"
 
+      - name: Determine release version
+        id: release_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_date=$(date +%d%m%Y)
+          release_version="v${release_date}-${GITHUB_RUN_NUMBER}"
+          echo "Release version: $release_version"
+          echo "Release date: $release_date"
+          echo "RELEASE_DATE=$release_date" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+          echo "value=$release_version" >> "$GITHUB_OUTPUT"
+          echo "date=$release_date" >> "$GITHUB_OUTPUT"
+
       - name: Build Debian package
         shell: bash
         run: |
@@ -285,7 +299,7 @@ jobs:
           data_root="$deb_root_base/data"
           dev_root="$deb_root_base/dev"
           package_version="${{ env.INDI_VERSION }}+${GITHUB_RUN_NUMBER}"
-          release_date=$(date +%d%m%Y)
+          release_date="${RELEASE_DATE:-$(date +%d%m%Y)}"
           runtime_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_RUNTIME }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
           lib_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_LIB }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
           data_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_DATA }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
@@ -336,6 +350,20 @@ jobs:
           dpkg-deb --root-owner-group --build "$dev_root" "$dev_output_file"
           dpkg-deb -I "$dev_output_file" | sed -n '/^ Package:/,/^ Description:/p'
           sha256sum "$dev_output_file" > "$dev_output_file.sha256"
+
+      - name: Publish INDI GitHub release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: ${{ steps.release_tag.outputs.value }}
+          name: Release ${{ steps.release_tag.outputs.value }}
+          body: |
+            Automated INDI release ${{ steps.release_tag.outputs.value }} containing Debian packages for INDI runtime, libraries, data, and development files.
+          files: |
+            artifacts/*.deb
+            artifacts/*.deb.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload INDI Debian artifact
         uses: actions/upload-artifact@v4
