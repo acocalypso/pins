@@ -10,6 +10,7 @@ concurrency:
 env:
   INDI_VERSION: 2.1.9
   DEB_PACKAGE_RUNTIME: indi-bin
+  DEB_PACKAGE_LIB: libindi1
   DEB_PACKAGE_DEV: libindi-dev
   DEB_ARCH: arm64
   DEB_ROOT: artifacts/indi-debroot
@@ -106,14 +107,16 @@ jobs:
 
           deb_root_base="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
           runtime_root="$deb_root_base/runtime"
+          lib_root="$deb_root_base/lib"
           dev_root="$deb_root_base/dev"
           runtime_control_dir="$runtime_root/DEBIAN"
+          lib_control_dir="$lib_root/DEBIAN"
           dev_control_dir="$dev_root/DEBIAN"
           full_stage_dir="$(mktemp -d)"
           package_version="${{ env.INDI_VERSION }}+${GITHUB_RUN_NUMBER}"
 
           rm -rf "$deb_root_base"
-          mkdir -p "$runtime_control_dir" "$dev_control_dir"
+          mkdir -p "$runtime_control_dir" "$lib_control_dir" "$dev_control_dir"
 
           DESTDIR="$full_stage_dir" cmake --install build
 
@@ -127,11 +130,21 @@ jobs:
           rm -rf "$runtime_root/usr/lib/pkgconfig" "$runtime_root/usr/lib/aarch64-linux-gnu/pkgconfig"
           rm -rf "$runtime_root/usr/lib/cmake" "$runtime_root/usr/lib/aarch64-linux-gnu/cmake"
 
-          for libdir in "$runtime_root/usr/lib" "$runtime_root/usr/lib/aarch64-linux-gnu"; do
-            if [ -d "$libdir" ]; then
-              find "$libdir" -maxdepth 1 -type l -name 'lib*.so' -delete
-              find "$libdir" -maxdepth 1 -type f -name 'lib*.so' -delete
-              find "$libdir" -maxdepth 1 -type f -name 'lib*.a' -delete
+          # -------------------------
+          # Runtime libraries package: libindi1
+          # -------------------------
+          mkdir -p "$lib_root/usr/lib" "$lib_root/usr/lib/aarch64-linux-gnu"
+
+          for librel in "usr/lib" "usr/lib/aarch64-linux-gnu"; do
+            runtime_dir="$runtime_root/$librel"
+            lib_dir="$lib_root/$librel"
+
+            if [ -d "$runtime_dir" ]; then
+              find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.so.*' -exec cp -a {} "$lib_dir/" \;
+              find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.so.*' -delete
+              find "$runtime_dir" -maxdepth 1 -type l -name 'lib*.so' -delete
+              find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.so' -delete
+              find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.a' -delete
             fi
           done
 
@@ -144,13 +157,34 @@ jobs:
             echo "Priority: optional"
             echo "Architecture: ${{ env.DEB_ARCH }}"
             echo "Maintainer: PINS CI <noreply@github.com>"
-            echo "Depends: libc6, libstdc++6"
+            echo "Depends: ${{ env.DEB_PACKAGE_LIB }} (= $package_version), libc6, libstdc++6"
             echo "Provides: indi-core"
-            echo "Breaks: indi-bin (<< 2.1.9), indi-core (<< 2.1.9), libindi-dev (<< 2.1.9), libindi1 (<< 2.1.9)"
-            echo "Replaces: indi-bin (<< 2.1.9), indi-core (<< 2.1.9), libindi-dev (<< 2.1.9), libindi1 (<< 2.1.9)"
+            echo "Breaks: indi-bin (<< 2.1.9), indi-core (<< 2.1.9)"
+            echo "Replaces: indi-bin (<< 2.1.9), indi-core (<< 2.1.9)"
             echo "Installed-Size: $runtime_installed_size"
             echo "Description: INDI core library, server, and drivers built from upstream v${{ env.INDI_VERSION }}"
           } > "$runtime_control_dir/control"
+
+          if ! find "$lib_root/usr" -type f -name 'lib*.so.*' | grep -q .; then
+            echo "Expected runtime shared libraries were not staged for ${{ env.DEB_PACKAGE_LIB }}" >&2
+            exit 1
+          fi
+
+          lib_installed_size=$(du -sk "$lib_root/usr" | cut -f1)
+
+          {
+            echo "Package: ${{ env.DEB_PACKAGE_LIB }}"
+            echo "Version: $package_version"
+            echo "Section: libs"
+            echo "Priority: optional"
+            echo "Architecture: ${{ env.DEB_ARCH }}"
+            echo "Maintainer: PINS CI <noreply@github.com>"
+            echo "Depends: libc6, libstdc++6"
+            echo "Breaks: libindi1 (<< 2.1.9)"
+            echo "Replaces: libindi1 (<< 2.1.9)"
+            echo "Installed-Size: $lib_installed_size"
+            echo "Description: INDI runtime shared libraries built from upstream v${{ env.INDI_VERSION }}"
+          } > "$lib_control_dir/control"
 
           # --------------------------
           # Development package: libindi-dev
@@ -193,7 +227,7 @@ jobs:
             echo "Priority: optional"
             echo "Architecture: ${{ env.DEB_ARCH }}"
             echo "Maintainer: PINS CI <noreply@github.com>"
-            echo "Depends: ${{ env.DEB_PACKAGE_RUNTIME }} (= $package_version), libc6, libstdc++6"
+            echo "Depends: ${{ env.DEB_PACKAGE_LIB }} (= $package_version), libc6, libstdc++6"
             echo "Breaks: libindi-dev (<< 2.1.9)"
             echo "Replaces: libindi-dev (<< 2.1.9)"
             echo "Installed-Size: $dev_installed_size"
@@ -207,10 +241,12 @@ jobs:
 
           deb_root_base="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
           runtime_root="$deb_root_base/runtime"
+          lib_root="$deb_root_base/lib"
           dev_root="$deb_root_base/dev"
           package_version="${{ env.INDI_VERSION }}+${GITHUB_RUN_NUMBER}"
           release_date=$(date +%d%m%Y)
           runtime_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_RUNTIME }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
+          lib_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_LIB }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
           dev_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_DEV }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
 
           mkdir -p "${{ env.ARTIFACT_DIR }}"
@@ -229,9 +265,20 @@ jobs:
             exit 1
           fi
 
+          if [ ! -f "$lib_root/DEBIAN/control" ]; then
+            echo "Missing control file at $lib_root/DEBIAN/control" >&2
+            echo "Contents of $lib_root:" >&2
+            find "$lib_root" -maxdepth 3 -print >&2 || true
+            exit 1
+          fi
+
           dpkg-deb --root-owner-group --build "$runtime_root" "$runtime_output_file"
           dpkg-deb -I "$runtime_output_file" | sed -n '/^ Package:/,/^ Description:/p'
           sha256sum "$runtime_output_file" > "$runtime_output_file.sha256"
+
+          dpkg-deb --root-owner-group --build "$lib_root" "$lib_output_file"
+          dpkg-deb -I "$lib_output_file" | sed -n '/^ Package:/,/^ Description:/p'
+          sha256sum "$lib_output_file" > "$lib_output_file.sha256"
 
           dpkg-deb --root-owner-group --build "$dev_root" "$dev_output_file"
           dpkg-deb -I "$dev_output_file" | sed -n '/^ Package:/,/^ Description:/p'
