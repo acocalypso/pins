@@ -9,7 +9,7 @@ concurrency:
 
 env:
   INDI_VERSION: 2.1.9
-  DEB_PACKAGE: indi-core
+  DEB_PACKAGE: indi-bin
   DEB_ARCH: arm64
   DEB_ROOT: artifacts/indi-debroot
   ARTIFACT_DIR: artifacts
@@ -121,8 +121,9 @@ jobs:
             echo "Architecture: ${{ env.DEB_ARCH }}"
             echo "Maintainer: PINS CI <noreply@github.com>"
             echo "Depends: libc6, libstdc++6"
-            echo "Breaks: indi-bin (<< 2.1.9)"
-            echo "Replaces: indi-bin (<< 2.1.9)"
+            echo "Provides: indi-core"
+            echo "Breaks: indi-bin (<< 2.1.9), indi-core (<< 2.1.9)"
+            echo "Replaces: indi-bin (<< 2.1.9), indi-core (<< 2.1.9)"
             echo "Installed-Size: $installed_size"
             echo "Description: INDI core library, server, and drivers built from upstream v${{ env.INDI_VERSION }}"
           } > "$control_dir/control"
@@ -146,6 +147,7 @@ jobs:
           fi
 
           dpkg-deb --root-owner-group --build "$deb_root" "$output_file"
+          dpkg-deb -I "$output_file" | sed -n '/^ Package:/,/^ Description:/p'
           sha256sum "$output_file" > "$output_file.sha256"
 
       - name: Upload INDI Debian artifact
