@@ -228,6 +228,8 @@ namespace System.Windows.Media {
             Color = color;
         }
 
+        public void Freeze() { }
+
         // Implicit conversion to Scalar for OpenCV
         public static implicit operator OpenCvSharp.Scalar(SolidColorBrush brush) => brush.Color;
     }
