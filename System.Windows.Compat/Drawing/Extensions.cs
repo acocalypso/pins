@@ -308,7 +308,7 @@ namespace System.Drawing
                 var qualityParam = encoderParams.Param[0];
                 if (qualityParam != null)
                 {
-                    quality = (int)qualityParam.Value;
+                    quality = Math.Clamp((int)qualityParam.Value, 0, 100);
                 }
             }
 
@@ -424,7 +424,7 @@ namespace System.Drawing
                 var qualityParam = encoderParams.Param[0];
                 if (qualityParam != null)
                 {
-                    quality = (int)qualityParam.Value;
+                    quality = Math.Clamp((int)qualityParam.Value, 0, 100);
                 }
             }
 
@@ -437,8 +437,8 @@ namespace System.Drawing
         public void Dispose() => _mat?.Dispose();
 
         // Implicit conversions
-        // NOTE: Returns internal Mat without cloning for performance
-        // Caller must ensure Bitmap is not disposed while Mat is in use
+        // Returns internal Mat directly — in-place filter operations depend on this.
+        // Use GetMat() when a safe clone with independent lifetime is needed.
         public static implicit operator Mat(Bitmap bmp) => bmp._mat;
         public static implicit operator Bitmap(Mat mat) => new Bitmap(mat);
 

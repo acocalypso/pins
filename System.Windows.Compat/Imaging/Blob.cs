@@ -83,7 +83,7 @@ namespace Accord.Imaging {
     /// Blob counter - counts and extracts stand alone objects in images
     /// Uses OpenCV's findContours for blob detection
     /// </summary>
-    public class BlobCounter {
+    public class BlobCounter : System.IDisposable {
         private List<Blob> blobs = new List<Blob>();
         private Mat processedImage;
 
@@ -118,6 +118,7 @@ namespace Accord.Imaging {
         /// <param name="image">Binary image to process</param>
         public void ProcessImage(Bitmap image) {
             blobs.Clear();
+            processedImage?.Dispose();
 
             // Convert Bitmap to Mat (Bitmap has implicit conversion to Mat in our implementation)
             Mat mat = image;
@@ -173,5 +174,10 @@ namespace Accord.Imaging {
         /// Get number of detected objects
         /// </summary>
         public int ObjectsCount => blobs.Count;
+
+        public void Dispose() {
+            processedImage?.Dispose();
+            processedImage = null;
+        }
     }
 }

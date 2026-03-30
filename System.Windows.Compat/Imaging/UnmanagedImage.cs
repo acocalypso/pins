@@ -54,6 +54,7 @@ namespace Accord.Imaging {
         public PixelFormat PixelFormat { get; private set; }
 
         private UnmanagedImage(Mat mat, bool ownsData) {
+            if (mat == null) throw new ArgumentNullException(nameof(mat));
             this.mat = mat;
             this.ownsData = ownsData;
             this.imageData = mat.Data;
@@ -152,12 +153,13 @@ namespace Accord.Imaging {
 
             ushort[] values = new ushort[points.Count];
             ushort* ptr = (ushort*)imageData;
+            int strideInUshorts = Stride / 2;
 
             for (int i = 0; i < points.Count; i++) {
                 int x = points[i].X;
                 int y = points[i].Y;
                 if (x >= 0 && x < Width && y >= 0 && y < Height) {
-                    values[i] = ptr[y * (Stride / 2) + x];
+                    values[i] = ptr[y * strideInUshorts + x];
                 }
             }
 

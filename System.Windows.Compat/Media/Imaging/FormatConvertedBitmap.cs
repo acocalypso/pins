@@ -55,20 +55,22 @@ namespace System.Windows.Media.Imaging {
         }
 
         private void Initialize() {
-            _mat?.Dispose(); // dispose any existing Mat before replacing
+            _mat?.Dispose();
             if (_source == null) {
                 _mat = new Mat();
+                AddMemoryPressure();
                 return;
             }
 
-            Mat sourceMat = _source;
+            using Mat sourceMat = (Mat)_source;
             if (sourceMat.Empty()) {
                 _mat = new Mat();
+                AddMemoryPressure();
                 return;
             }
 
-            // Convert based on destination format
             _mat = ConvertFormat(sourceMat, _source.Format, _destinationFormat);
+            AddMemoryPressure();
         }
 
         private Mat ConvertFormat(Mat source, Media.PixelFormat sourceFormat, Media.PixelFormat destFormat) {
@@ -81,9 +83,9 @@ namespace System.Windows.Media.Imaging {
                 targetType = MatType.CV_8UC1;
 
                 // Determine conversion code based on source format
-                if (sourceFormat == Media.PixelFormats.Bgr24 || sourceFormat == Media.PixelFormats.Bgr32) {
+                if (sourceFormat == Media.PixelFormats.Bgr24) {
                     conversionCode = ColorConversionCodes.BGR2GRAY;
-                } else if (sourceFormat == Media.PixelFormats.Bgra32 || sourceFormat == Media.PixelFormats.Pbgra32) {
+                } else if (sourceFormat == Media.PixelFormats.Bgra32 || sourceFormat == Media.PixelFormats.Pbgra32 || sourceFormat == Media.PixelFormats.Bgr32) {
                     conversionCode = ColorConversionCodes.BGRA2GRAY;
                 } else if (sourceFormat == Media.PixelFormats.Gray16) {
                     // Convert from 16-bit to 8-bit

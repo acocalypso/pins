@@ -144,6 +144,21 @@ namespace System.Windows.Controls {
         public bool IsValid { get; }
         public object ErrorContent { get; }
     }
+
+    /// <summary>
+    /// Represents a control that can contain a collection of items.
+    /// </summary>
+    public class ItemsControl : FrameworkElement {
+        public static ItemsControl ItemsControlFromItemContainer(DependencyObject container) {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Represents an item in a TreeView control.
+    /// </summary>
+    public class TreeViewItem : ItemsControl {
+    }
 }
 
 namespace System.Windows.Controls.Primitives {

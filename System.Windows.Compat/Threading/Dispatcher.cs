@@ -118,31 +118,38 @@ namespace System.Windows.Threading {
     /// <summary>
     /// Timer that executes on the dispatcher (stub - uses System.Timers.Timer in headless mode)
     /// </summary>
-    public class DispatcherTimer {
+    public class DispatcherTimer : IDisposable {
         private System.Timers.Timer _timer;
+
+        private volatile bool _disposed;
 
         public DispatcherTimer() {
             _timer = new System.Timers.Timer();
-            _timer.Elapsed += (s, e) => Tick?.Invoke(this, EventArgs.Empty);
+            _timer.Elapsed += OnTimerElapsed;
         }
 
         public DispatcherTimer(DispatcherPriority priority) {
             // Ignore priority in headless mode
             _timer = new System.Timers.Timer();
-            _timer.Elapsed += (s, e) => Tick?.Invoke(this, EventArgs.Empty);
+            _timer.Elapsed += OnTimerElapsed;
         }
 
         public DispatcherTimer(DispatcherPriority priority, Dispatcher dispatcher) {
             // Ignore priority and dispatcher in headless mode
             _timer = new System.Timers.Timer();
-            _timer.Elapsed += (s, e) => Tick?.Invoke(this, EventArgs.Empty);
+            _timer.Elapsed += OnTimerElapsed;
         }
 
         public DispatcherTimer(System.TimeSpan interval, DispatcherPriority priority, System.EventHandler callback, Dispatcher dispatcher) {
             // Ignore priority and dispatcher in headless mode
             _timer = new System.Timers.Timer(interval.TotalMilliseconds);
-            _timer.Elapsed += (s, e) => callback?.Invoke(this, EventArgs.Empty);
+            _timer.Elapsed += OnTimerElapsed;
             Tick += callback;
+        }
+
+        private void OnTimerElapsed(object sender, System.Timers.ElapsedEventArgs e) {
+            if (_disposed) return;
+            Tick?.Invoke(this, EventArgs.Empty);
         }
 
         public TimeSpan Interval {
@@ -159,5 +166,11 @@ namespace System.Windows.Threading {
 
         public void Start() => _timer.Start();
         public void Stop() => _timer.Stop();
+
+        public void Dispose() {
+            _disposed = true;
+            _timer?.Dispose();
+            _timer = null;
+        }
     }
 }

@@ -20,7 +20,6 @@ namespace System.Windows {
     /// <summary>
     /// Represents the result of a hit test operation.
     /// </summary>
-    /// </summary>
     public interface IInputElement {
         event EventHandler<Input.MouseEventArgs> MouseMove;
     }
@@ -42,6 +41,32 @@ namespace System.Windows {
     /// <summary>
     /// Specifies the direction of text flow.
     /// </summary>
+    /// <summary>
+    /// Represents the thickness of a frame around a rectangle.
+    /// </summary>
+    public struct Thickness {
+        public Thickness(double uniformLength) {
+            Left = Top = Right = Bottom = uniformLength;
+        }
+
+        public Thickness(double leftRight, double topBottom) {
+            Left = Right = leftRight;
+            Top = Bottom = topBottom;
+        }
+
+        public Thickness(double left, double top, double right, double bottom) {
+            Left = left;
+            Top = top;
+            Right = right;
+            Bottom = bottom;
+        }
+
+        public double Left { get; set; }
+        public double Top { get; set; }
+        public double Right { get; set; }
+        public double Bottom { get; set; }
+    }
+
     public enum FlowDirection {
         LeftToRight,
         RightToLeft
@@ -213,6 +238,9 @@ namespace System.Windows.Data {
         }
 
         private int GetCount() {
+            if (_collection is System.Collections.ICollection col) {
+                return col.Count;
+            }
             int count = 0;
             foreach (var item in _collection) {
                 count++;
@@ -221,6 +249,9 @@ namespace System.Windows.Data {
         }
 
         private object GetItemAt(int index) {
+            if (_collection is System.Collections.IList list) {
+                return index >= 0 && index < list.Count ? list[index] : null;
+            }
             int count = 0;
             foreach (var item in _collection) {
                 if (count == index) return item;
@@ -279,32 +310,6 @@ namespace System.Windows.Data {
 
         public System.Type SourceType { get; }
         public System.Type TargetType { get; }
-    }
-
-    /// <summary>
-    /// Represents the thickness of a frame around a rectangle.
-    /// </summary>
-    public struct Thickness {
-        public Thickness(double uniformLength) {
-            Left = Top = Right = Bottom = uniformLength;
-        }
-
-        public Thickness(double leftRight, double topBottom) {
-            Left = Right = leftRight;
-            Top = Bottom = topBottom;
-        }
-
-        public Thickness(double left, double top, double right, double bottom) {
-            Left = left;
-            Top = top;
-            Right = right;
-            Bottom = bottom;
-        }
-
-        public double Left { get; set; }
-        public double Top { get; set; }
-        public double Right { get; set; }
-        public double Bottom { get; set; }
     }
 
     public class BindingExpression {
@@ -388,19 +393,18 @@ namespace System.Windows {
     public class Style { }
 
     public class DependencyObject : Media.Visual {
-        // Stub for WPF DependencyObject
-        private Dictionary<string, object> _propertyValues = new Dictionary<string, object>();
+        private Dictionary<DependencyProperty, object> _propertyValues = new Dictionary<DependencyProperty, object>();
 
         public object GetValue(DependencyProperty dp) {
-            if (dp != null && _propertyValues.TryGetValue(dp.ToString(), out var value)) {
+            if (dp != null && _propertyValues.TryGetValue(dp, out var value)) {
                 return value;
             }
-            return null;
+            return dp?.GetMetadata(GetType())?.DefaultValue;
         }
 
         public void SetValue(DependencyProperty dp, object value) {
             if (dp != null) {
-                _propertyValues[dp.ToString()] = value;
+                _propertyValues[dp] = value;
             }
         }
 
@@ -608,7 +612,7 @@ namespace System.Windows {
                 }
                 return null;
             }
-            set { } // No-op
+            set { } // No-op in headless mode — resources are not used for rendering
         }
 
         public bool Contains(object key) {

@@ -52,19 +52,7 @@ namespace System.Drawing {
         /// This is a stub that creates a blank image for compatibility
         /// </summary>
         public void CopyFromScreen(int sourceX, int sourceY, int destX, int destY, Size blockRegionSize, CopyPixelOperation copyPixelOperation) {
-            // On Linux, we would need to use X11 (XGetImage) or Wayland APIs for actual screen capture
-            // For now, this is a stub that fills with black
-            // TODO: Implement actual screen capture using native libraries
-
-            Rectangle destRect = new Rectangle(destX, destY, blockRegionSize.Width, blockRegionSize.Height);
-
-            // Fill the destination area with black (simulating a blank screenshot)
-            Cv2.Rectangle(_canvas,
-                new OpenCvSharp.Rect(destRect.X, destRect.Y, destRect.Width, destRect.Height),
-                Scalar.Black, -1);
-
-            // Log that screen capture is not fully implemented
-            Console.WriteLine("Warning: Screen capture (CopyFromScreen) is not fully implemented on Linux. Returning blank image.");
+            throw new PlatformNotSupportedException("Screen capture (CopyFromScreen) is not supported on Linux. Use X11/Wayland APIs directly.");
         }
 
         /// <summary>
@@ -97,15 +85,36 @@ namespace System.Drawing {
                 if (srcMat == null || srcMat.Empty()) return;
                 if (_canvas == null || _canvas.Empty()) return;
 
-                // If canvas is grayscale and source is grayscale, or both are color, just copy
-                if (_canvas.Channels() == srcMat.Channels()) {
-                    srcMat.CopyTo(_canvas);
-                } else if (_canvas.Channels() == 3 && srcMat.Channels() == 1) {
-                    // Convert grayscale source to color canvas
-                    Cv2.CvtColor(srcMat, _canvas, ColorConversionCodes.GRAY2BGR);
-                } else if (_canvas.Channels() == 1 && srcMat.Channels() == 3) {
-                    // Convert color source to grayscale canvas
-                    Cv2.CvtColor(srcMat, _canvas, ColorConversionCodes.BGR2GRAY);
+                // Clamp to canvas bounds
+                int width = Math.Min(srcMat.Width, _canvas.Width - x);
+                int height = Math.Min(srcMat.Height, _canvas.Height - y);
+                if (width <= 0 || height <= 0 || x < 0 || y < 0) return;
+
+                // Crop source if it extends beyond canvas
+                Mat src = srcMat;
+                bool srcOwned = false;
+                if (srcMat.Width != width || srcMat.Height != height) {
+                    src = new Mat(srcMat, new OpenCvSharp.Rect(0, 0, width, height));
+                    srcOwned = true;
+                }
+
+                try {
+                    var dstRoi = new OpenCvSharp.Rect(x, y, width, height);
+                    using (var dstRegion = new Mat(_canvas, dstRoi)) {
+                        if (dstRegion.Channels() == src.Channels()) {
+                            src.CopyTo(dstRegion);
+                        } else if (dstRegion.Channels() == 3 && src.Channels() == 1) {
+                            using var converted = new Mat();
+                            Cv2.CvtColor(src, converted, ColorConversionCodes.GRAY2BGR);
+                            converted.CopyTo(dstRegion);
+                        } else if (dstRegion.Channels() == 1 && src.Channels() == 3) {
+                            using var converted = new Mat();
+                            Cv2.CvtColor(src, converted, ColorConversionCodes.BGR2GRAY);
+                            converted.CopyTo(dstRegion);
+                        }
+                    }
+                } finally {
+                    if (srcOwned) src.Dispose();
                 }
             }
         }
@@ -166,8 +175,6 @@ namespace System.Drawing {
         /// Draws a line
         /// </summary>
         public void DrawLine(Pen pen, float x1, float y1, float x2, float y2) {
-            var pt1 = new Point2f(x1, y1);
-            var Point2 = new Point2f(x2, y2);
             Cv2.Line(_canvas, (int)x1, (int)y1, (int)x2, (int)y2, pen.Color, (int)Math.Max(1, pen.Width), pen.LineType);
         }
 
@@ -362,6 +369,7 @@ namespace System.Drawing {
 
             try {
                 if (!_hasTransform) {
+                    _transform?.Dispose();
                     _transform = translation.Clone();
                 } else {
                     // Combine transformations (multiply matrices)
@@ -393,6 +401,7 @@ namespace System.Drawing {
 
             try {
                 if (!_hasTransform) {
+                    _transform?.Dispose();
                     _transform = rotation.Clone();
                 } else {
                     var newTransform = MultiplyTransforms(_transform, rotation);
@@ -409,6 +418,7 @@ namespace System.Drawing {
         /// Resets the transformation matrix to identity
         /// </summary>
         public void ResetTransform() {
+            _transform?.Dispose();
             _transform = new Mat(2, 3, MatType.CV_64F);
             _transform.Set(0, 0, 1.0);
             _transform.Set(0, 1, 0.0);
@@ -496,22 +506,13 @@ namespace System.Drawing {
                                 if (transformed.Channels() == 4 && _canvas.Channels() == 4) {
                                     AlphaBlend(transformed, _canvas);
                                 } else {
-                                    // For non-alpha channels, just copy non-zero pixels
-                                    for (int y = 0; y < _canvas.Height; y++) {
-                                        for (int x = 0; x < _canvas.Width; x++) {
-                                            if (_canvas.Channels() == 4) {
-                                                var pixel = transformed.At<Vec4b>(y, x);
-                                                if (pixel[3] > 0) { // Check alpha
-                                                    _canvas.Set(y, x, pixel);
-                                                }
-                                            } else if (_canvas.Channels() == 3) {
-                                                var pixel = transformed.At<Vec3b>(y, x);
-                                                if (pixel[0] > 0 || pixel[1] > 0 || pixel[2] > 0) {
-                                                    _canvas.Set(y, x, pixel);
-                                                }
-                                            }
-                                        }
-                                    }
+                                    // Use a mask to composite only the actual image area
+                                    // (avoids incorrectly skipping genuinely black source pixels)
+                                    using var mask = new Mat(srcWithAlpha.Size(), MatType.CV_8UC1, Scalar.All(255));
+                                    using var transformedMask = new Mat(_canvas.Size(), MatType.CV_8UC1, Scalar.All(0));
+                                    Cv2.WarpAffine(mask, transformedMask, affineTransform, _canvas.Size(),
+                                        InterpolationFlags.Nearest, BorderTypes.Constant, new Scalar(0));
+                                    transformed.CopyTo(_canvas, transformedMask);
                                 }
                             }
                         }
@@ -576,22 +577,29 @@ namespace System.Drawing {
             if (src.Width != dst.Width || src.Height != dst.Height) return;
 
             unsafe {
-                byte* srcPtr = (byte*)src.DataPointer;
-                byte* dstPtr = (byte*)dst.DataPointer;
-                int totalPixels = src.Width * src.Height;
+                byte* srcBase = (byte*)src.DataPointer;
+                byte* dstBase = (byte*)dst.DataPointer;
+                int srcStep = (int)src.Step();
+                int dstStep = (int)dst.Step();
+                int width = src.Width;
+                int height = src.Height;
 
-                for (int i = 0; i < totalPixels; i++) {
-                    int idx = i * 4;
-                    byte alpha = srcPtr[idx + 3];
+                for (int row = 0; row < height; row++) {
+                    byte* srcRow = srcBase + row * srcStep;
+                    byte* dstRow = dstBase + row * dstStep;
+                    for (int col = 0; col < width; col++) {
+                        int idx = col * 4;
+                        byte alpha = srcRow[idx + 3];
 
-                    if (alpha > 0) {
-                        float a = alpha / 255.0f;
-                        float invA = 1.0f - a;
+                        if (alpha > 0) {
+                            float a = alpha / 255.0f;
+                            float invA = 1.0f - a;
 
-                        dstPtr[idx + 0] = (byte)(srcPtr[idx + 0] * a + dstPtr[idx + 0] * invA);
-                        dstPtr[idx + 1] = (byte)(srcPtr[idx + 1] * a + dstPtr[idx + 1] * invA);
-                        dstPtr[idx + 2] = (byte)(srcPtr[idx + 2] * a + dstPtr[idx + 2] * invA);
-                        dstPtr[idx + 3] = (byte)Math.Min(255, alpha + dstPtr[idx + 3] * invA);
+                            dstRow[idx + 0] = (byte)(srcRow[idx + 0] * a + dstRow[idx + 0] * invA);
+                            dstRow[idx + 1] = (byte)(srcRow[idx + 1] * a + dstRow[idx + 1] * invA);
+                            dstRow[idx + 2] = (byte)(srcRow[idx + 2] * a + dstRow[idx + 2] * invA);
+                            dstRow[idx + 3] = (byte)Math.Min(255, alpha + dstRow[idx + 3] * invA);
+                        }
                     }
                 }
             }

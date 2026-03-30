@@ -136,12 +136,13 @@ namespace System.Windows.Media.Imaging {
         public BitmapMetadata Metadata { get; set; }
 
         public static BitmapFrame Create(BitmapSource source) {
-            Mat mat = ((Mat)source)?.Clone() ?? new Mat();
+            // Implicit operator already clones — take ownership directly
+            Mat mat = (Mat)source ?? new Mat();
             return new BitmapFrame(mat);
         }
 
         public static BitmapFrame Create(BitmapSource source, BitmapSource thumbnail, BitmapMetadata metadata, System.Collections.ObjectModel.ReadOnlyCollection<ColorContext> colorContexts) {
-            var frame = new BitmapFrame(((Mat)source)?.Clone() ?? new Mat());
+            var frame = new BitmapFrame((Mat)source ?? new Mat());
             frame.Metadata = metadata;
             return frame;
         }

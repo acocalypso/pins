@@ -79,6 +79,8 @@ namespace Accord.Imaging.Filters {
             Cv2.Canny(blurred, dstMat, lowThreshold, highThreshold);
 
             blurred.Dispose();
+            srcMat.Dispose();
+            dstMat.Dispose();
         }
     }
 }
