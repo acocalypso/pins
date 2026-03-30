@@ -208,7 +208,8 @@ namespace NINA.Equipment.Equipment.MyFocuser {
         protected override string ConnectionLostMessage => "FocuserConnectionLost";
 
         private void Initialize() {
-            internalPosition = device.MaxStep / 2;
+            var maxStep = device.MaxStep;
+            internalPosition = maxStep > 0 ? maxStep / 2 : 0;
             _isAbsolute = device.Absolute;
             if (!_isAbsolute) {
                 Logger.Info("The focuser is a relative focuser. Simulating absolute focuser behavior");

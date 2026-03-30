@@ -14,11 +14,9 @@
 
 using System;
 
-namespace NINA.INDI.Enums
-{
+namespace NINA.INDI.Enums {
     [Flags]
-    public enum DeviceInterface
-    {
+    public enum DeviceInterface {
         GENERAL_INTERFACE = 0,
         TELESCOPE_INTERFACE = (1 << 0),
         CCD_INTERFACE = (1 << 1),

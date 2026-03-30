@@ -12,9 +12,9 @@
 
 #endregion "copyright"
 
+using NINA.INDI.Enums;
 using System.Threading;
 using System.Threading.Tasks;
-using NINA.INDI.Enums;
 
 namespace NINA.INDI.Interfaces {
     public interface IINDIFlatDevice : IINDIDevice {
