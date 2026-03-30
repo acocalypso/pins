@@ -9,7 +9,8 @@ concurrency:
 
 env:
   INDI_VERSION: 2.1.9
-  DEB_PACKAGE: indi-bin
+  DEB_PACKAGE_RUNTIME: indi-bin
+  DEB_PACKAGE_DEV: libindi-dev
   DEB_ARCH: arm64
   DEB_ROOT: artifacts/indi-debroot
   ARTIFACT_DIR: artifacts
@@ -102,19 +103,41 @@ jobs:
         run: |
           set -euo pipefail
 
-          deb_root="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
-          control_dir="$deb_root/DEBIAN"
-
-          rm -rf "$deb_root"
-          mkdir -p "$control_dir"
-
-          DESTDIR="$deb_root" cmake --install build
-
-          installed_size=$(du -sk "$deb_root/usr" | cut -f1)
+          deb_root_base="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
+          runtime_root="$deb_root_base/runtime"
+          dev_root="$deb_root_base/dev"
+          runtime_control_dir="$runtime_root/DEBIAN"
+          dev_control_dir="$dev_root/DEBIAN"
+          full_stage_dir="$(mktemp -d)"
           package_version="${{ env.INDI_VERSION }}+${GITHUB_RUN_NUMBER}"
 
+          rm -rf "$deb_root_base"
+          mkdir -p "$runtime_control_dir" "$dev_control_dir"
+
+          DESTDIR="$full_stage_dir" cmake --install build
+
+          # -------------------------
+          # Runtime package: indi-bin
+          # -------------------------
+          rsync -a "$full_stage_dir/" "$runtime_root/"
+
+          # Remove development artifacts from runtime package.
+          rm -rf "$runtime_root/usr/include"
+          rm -rf "$runtime_root/usr/lib/pkgconfig" "$runtime_root/usr/lib/aarch64-linux-gnu/pkgconfig"
+          rm -rf "$runtime_root/usr/lib/cmake" "$runtime_root/usr/lib/aarch64-linux-gnu/cmake"
+
+          for libdir in "$runtime_root/usr/lib" "$runtime_root/usr/lib/aarch64-linux-gnu"; do
+            if [ -d "$libdir" ]; then
+              find "$libdir" -maxdepth 1 -type l -name 'lib*.so' -delete
+              find "$libdir" -maxdepth 1 -type f -name 'lib*.so' -delete
+              find "$libdir" -maxdepth 1 -type f -name 'lib*.a' -delete
+            fi
+          done
+
+          runtime_installed_size=$(du -sk "$runtime_root/usr" | cut -f1)
+
           {
-            echo "Package: ${{ env.DEB_PACKAGE }}"
+            echo "Package: ${{ env.DEB_PACKAGE_RUNTIME }}"
             echo "Version: $package_version"
             echo "Section: misc"
             echo "Priority: optional"
@@ -122,33 +145,96 @@ jobs:
             echo "Maintainer: PINS CI <noreply@github.com>"
             echo "Depends: libc6, libstdc++6"
             echo "Provides: indi-core"
-            echo "Breaks: indi-bin (<< 2.1.9), indi-core (<< 2.1.9)"
-            echo "Replaces: indi-bin (<< 2.1.9), indi-core (<< 2.1.9)"
-            echo "Installed-Size: $installed_size"
+            echo "Breaks: indi-bin (<< 2.1.9), indi-core (<< 2.1.9), libindi-dev (<< 2.1.9), libindi1 (<< 2.1.9)"
+            echo "Replaces: indi-bin (<< 2.1.9), indi-core (<< 2.1.9), libindi-dev (<< 2.1.9), libindi1 (<< 2.1.9)"
+            echo "Installed-Size: $runtime_installed_size"
             echo "Description: INDI core library, server, and drivers built from upstream v${{ env.INDI_VERSION }}"
-          } > "$control_dir/control"
+          } > "$runtime_control_dir/control"
+
+          # --------------------------
+          # Development package: libindi-dev
+          # --------------------------
+          mkdir -p "$dev_root/usr"
+          if [ -d "$full_stage_dir/usr/include" ]; then
+            mkdir -p "$dev_root/usr/include"
+            rsync -a "$full_stage_dir/usr/include/" "$dev_root/usr/include/"
+          fi
+
+          for rel in "usr/lib/pkgconfig" "usr/lib/aarch64-linux-gnu/pkgconfig" "usr/lib/cmake" "usr/lib/aarch64-linux-gnu/cmake"; do
+            src="$full_stage_dir/$rel"
+            dst="$dev_root/$rel"
+            if [ -d "$src" ]; then
+              mkdir -p "$dst"
+              rsync -a "$src/" "$dst/"
+            fi
+          done
+
+          for librel in "usr/lib" "usr/lib/aarch64-linux-gnu"; do
+            src="$full_stage_dir/$librel"
+            dst="$dev_root/$librel"
+            if [ -d "$src" ]; then
+              mkdir -p "$dst"
+              find "$src" -maxdepth 1 \( -type l -o -type f \) \( -name 'lib*.so' -o -name 'lib*.a' \) -exec cp -a {} "$dst/" \;
+            fi
+          done
+
+          if [ ! -d "$dev_root/usr/include/libindi" ]; then
+            echo "Expected development headers were not staged under $dev_root/usr/include/libindi" >&2
+            exit 1
+          fi
+
+          dev_installed_size=$(du -sk "$dev_root/usr" | cut -f1)
+
+          {
+            echo "Package: ${{ env.DEB_PACKAGE_DEV }}"
+            echo "Version: $package_version"
+            echo "Section: libdevel"
+            echo "Priority: optional"
+            echo "Architecture: ${{ env.DEB_ARCH }}"
+            echo "Maintainer: PINS CI <noreply@github.com>"
+            echo "Depends: ${{ env.DEB_PACKAGE_RUNTIME }} (= $package_version), libc6, libstdc++6"
+            echo "Breaks: libindi-dev (<< 2.1.9)"
+            echo "Replaces: libindi-dev (<< 2.1.9)"
+            echo "Installed-Size: $dev_installed_size"
+            echo "Description: INDI development headers and build metadata built from upstream v${{ env.INDI_VERSION }}"
+          } > "$dev_control_dir/control"
 
       - name: Build Debian package
         shell: bash
         run: |
           set -euo pipefail
 
-          deb_root="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
+          deb_root_base="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
+          runtime_root="$deb_root_base/runtime"
+          dev_root="$deb_root_base/dev"
           package_version="${{ env.INDI_VERSION }}+${GITHUB_RUN_NUMBER}"
           release_date=$(date +%d%m%Y)
-          output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
+          runtime_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_RUNTIME }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
+          dev_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_DEV }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
 
           mkdir -p "${{ env.ARTIFACT_DIR }}"
-          if [ ! -f "$deb_root/DEBIAN/control" ]; then
-            echo "Missing control file at $deb_root/DEBIAN/control" >&2
-            echo "Contents of $deb_root:" >&2
-            find "$deb_root" -maxdepth 3 -print >&2 || true
+
+          if [ ! -f "$runtime_root/DEBIAN/control" ]; then
+            echo "Missing control file at $runtime_root/DEBIAN/control" >&2
+            echo "Contents of $runtime_root:" >&2
+            find "$runtime_root" -maxdepth 3 -print >&2 || true
             exit 1
           fi
 
-          dpkg-deb --root-owner-group --build "$deb_root" "$output_file"
-          dpkg-deb -I "$output_file" | sed -n '/^ Package:/,/^ Description:/p'
-          sha256sum "$output_file" > "$output_file.sha256"
+          if [ ! -f "$dev_root/DEBIAN/control" ]; then
+            echo "Missing control file at $dev_root/DEBIAN/control" >&2
+            echo "Contents of $dev_root:" >&2
+            find "$dev_root" -maxdepth 3 -print >&2 || true
+            exit 1
+          fi
+
+          dpkg-deb --root-owner-group --build "$runtime_root" "$runtime_output_file"
+          dpkg-deb -I "$runtime_output_file" | sed -n '/^ Package:/,/^ Description:/p'
+          sha256sum "$runtime_output_file" > "$runtime_output_file.sha256"
+
+          dpkg-deb --root-owner-group --build "$dev_root" "$dev_output_file"
+          dpkg-deb -I "$dev_output_file" | sed -n '/^ Package:/,/^ Description:/p'
+          sha256sum "$dev_output_file" > "$dev_output_file.sha256"
 
       - name: Upload INDI Debian artifact
         uses: actions/upload-artifact@v4
