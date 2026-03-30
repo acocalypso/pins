@@ -48,7 +48,7 @@ namespace System.Windows.Media.Imaging {
 
             // Use the first frame's bitmap source
             var frame = Frames[0];
-            Mat mat = frame; // Use implicit conversion from BitmapSource to Mat
+            using Mat mat = (Mat)frame;
 
             // Encode as TIFF using OpenCV
             Cv2.ImEncode(".tif", mat, out byte[] buffer);
@@ -65,10 +65,8 @@ namespace System.Windows.Media.Imaging {
                 throw new InvalidOperationException("No frames to encode");
             }
 
-            // Use the first frame's bitmap source
             var frame = Frames[0];
-
-            Mat mat = frame; // Use implicit conversion from BitmapSource to Mat
+            using Mat mat = (Mat)frame;
 
             if (mat == null) {
                 throw new InvalidOperationException("Mat is null");
@@ -78,35 +76,16 @@ namespace System.Windows.Media.Imaging {
                 throw new InvalidOperationException("Mat is empty");
             }
 
-            // Check if the Mat's data pointer is valid
             if (mat.Data == IntPtr.Zero) {
                 throw new InvalidOperationException("Mat data pointer is null");
             }
 
-            try {
-                // Workaround: Use ImWrite directly with the original mat
-                string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"opencv_temp_{Guid.NewGuid()}.png");
+            var encodingParams = new ImageEncodingParam[] {
+                new ImageEncodingParam(ImwriteFlags.PngCompression, 3)
+            };
 
-                try {
-                    var encodingParams = new ImageEncodingParam[] {
-                        new ImageEncodingParam(ImwriteFlags.PngCompression, 3)
-                    };
-
-                    // Write to file using the original mat directly
-                    Cv2.ImWrite(tempFile, mat, encodingParams);
-
-                    // Read back and write to stream
-                    byte[] buffer = System.IO.File.ReadAllBytes(tempFile);
-                    stream.Write(buffer, 0, buffer.Length);
-                } finally {
-                    // Clean up temp file
-                    if (System.IO.File.Exists(tempFile)) {
-                        System.IO.File.Delete(tempFile);
-                    }
-                }
-            } catch (Exception ex) {
-                throw new InvalidOperationException($"PNG encoding failed: {ex.Message}", ex);
-            }
+            Cv2.ImEncode(".png", mat, out byte[] buffer, encodingParams);
+            stream.Write(buffer, 0, buffer.Length);
         }
     }
 
@@ -123,7 +102,7 @@ namespace System.Windows.Media.Imaging {
 
             // Use the first frame's bitmap source
             var frame = Frames[0];
-            Mat mat = frame; // Use implicit conversion from BitmapSource to Mat
+            using Mat mat = (Mat)frame;
 
             // JPEG only supports 8-bit, so convert if necessary
             Mat matToEncode = mat;

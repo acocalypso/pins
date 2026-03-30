@@ -25,7 +25,7 @@ namespace System.Windows.Media.Imaging {
                 return;
             }
 
-            Mat sourceMat = source;
+            using Mat sourceMat = (Mat)source;
 
             // Create OpenCV Rect from Int32Rect
             OpenCvSharp.Rect cvRect = new OpenCvSharp.Rect(sourceRect.X, sourceRect.Y, sourceRect.Width, sourceRect.Height);

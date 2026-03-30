@@ -32,16 +32,21 @@ namespace Accord.Imaging.Filters {
 
         public Bitmap Apply(Bitmap source) {
             Mat sourceMat = source;
-            Mat result = new Mat();
 
             // If already grayscale, just clone
             if (sourceMat.Channels() == 1) {
-                sourceMat.CopyTo(result);
-                return new Bitmap(result);
+                Mat clone = new Mat();
+                sourceMat.CopyTo(clone);
+                return new Bitmap(clone);
             }
 
             // Convert to grayscale using custom weights
             // OpenCV's cvtColor uses different default weights, so we need to do it manually
+            if (sourceMat.Channels() < 3) {
+                Mat clone = new Mat();
+                sourceMat.CopyTo(clone);
+                return new Bitmap(clone);
+            }
             Mat[] channels = Cv2.Split(sourceMat);
 
             // Create weighted sum: gray = cr*R + cg*G + cb*B
@@ -53,13 +58,11 @@ namespace Accord.Imaging.Filters {
             Cv2.AddWeighted(weighted, 1.0, channels[0], blueCoefficient, 0.0, temp);
             weighted.Dispose();
 
-            // Convert to 8-bit if needed with proper scaling
-            result = new Mat();
+            // Preserve the source bit depth
+            Mat result = new Mat();
             if (temp.Depth() == MatType.CV_16U) {
-                // 16-bit to 8-bit conversion with scaling
-                temp.ConvertTo(result, MatType.CV_8UC1, 1.0 / 256.0);
+                temp.ConvertTo(result, MatType.CV_16UC1);
             } else {
-                // Already 8-bit or other depth
                 temp.ConvertTo(result, MatType.CV_8UC1);
             }
 
@@ -74,7 +77,22 @@ namespace Accord.Imaging.Filters {
             var result = Apply(image);
             Mat resultMat = result;
             Mat imageMat = image;
-            resultMat.CopyTo(imageMat);
+            // Convert back to source channel count if needed
+            if (resultMat.Channels() != imageMat.Channels()) {
+                using var converted = new Mat();
+                if (imageMat.Channels() == 3) {
+                    Cv2.CvtColor(resultMat, converted, ColorConversionCodes.GRAY2BGR);
+                } else if (imageMat.Channels() == 4) {
+                    Cv2.CvtColor(resultMat, converted, ColorConversionCodes.GRAY2BGRA);
+                } else {
+                    resultMat.CopyTo(imageMat);
+                    result.Dispose();
+                    return;
+                }
+                converted.CopyTo(imageMat);
+            } else {
+                resultMat.CopyTo(imageMat);
+            }
             result.Dispose();
         }
     }

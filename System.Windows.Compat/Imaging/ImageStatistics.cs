@@ -38,127 +38,38 @@ namespace Accord.Imaging {
                 return;
             }
 
-            // Calculate histogram for all pixels
+            // Convert to single-channel if needed
             Mat grayMat = mat;
             if (mat.Channels() > 1) {
                 grayMat = new Mat();
                 Cv2.CvtColor(mat, grayMat, ColorConversionCodes.BGR2GRAY);
             }
 
-            // Calculate histogram
-            int[] histSize = { 256 };
-            Rangef[] ranges = { new Rangef(0, 256) };
+            // Determine histogram parameters based on image bit depth
+            bool is16Bit = grayMat.Depth() == MatType.CV_16U;
+            int numBins = is16Bit ? 65536 : 256;
+            float rangeMax = is16Bit ? 65536f : 256f;
+
+            int[] histSize = { numBins };
+            Rangef[] ranges = { new Rangef(0, rangeMax) };
             Mat hist = new Mat();
             Cv2.CalcHist(new Mat[] { grayMat }, new int[] { 0 }, null, hist, 1, histSize, ranges);
 
-            // Calculate statistics from histogram
-            double sum = 0, weightedSum = 0;
-            int count = 0;
-            int min = 256, max = -1;
-
-            for (int i = 0; i < 256; i++) {
-                int binCount = (int)hist.At<float>(i);
-                if (binCount > 0) {
-                    sum += binCount;
-                    weightedSum += i * binCount;
-                    count += binCount;
-                    if (min > i) min = i;
-                    if (max < i) max = i;
-                }
-            }
-
-            double mean = count > 0 ? weightedSum / sum : 0;
-
-            // Calculate standard deviation
-            double variance = 0;
-            for (int i = 0; i < 256; i++) {
-                int binCount = (int)hist.At<float>(i);
-                if (binCount > 0) {
-                    double diff = i - mean;
-                    variance += diff * diff * binCount;
-                }
-            }
-            double stdDev = count > 0 ? System.Math.Sqrt(variance / sum) : 0;
-
-            // Calculate median
-            double median = 0;
-            int medianCount = (int)(sum / 2);
-            int cumulative = 0;
-            for (int i = 0; i < 256; i++) {
-                cumulative += (int)hist.At<float>(i);
-                if (cumulative >= medianCount) {
-                    median = i;
-                    break;
-                }
-            }
-
-            Gray = new HistogramStatistics {
-                Mean = mean,
-                StdDev = stdDev,
-                Median = median,
-                Min = min,
-                Max = max,
-                PixelsCount = count
-            };
+            Gray = ComputeStatistics(hist, numBins, 0);
 
             // Calculate histogram without black pixels (value > 0)
             Mat mask = new Mat();
-            Cv2.Threshold(grayMat, mask, 0, 255, ThresholdTypes.Binary);
+            if (is16Bit) {
+                Cv2.Threshold(grayMat, mask, 0, 65535, ThresholdTypes.Binary);
+                mask.ConvertTo(mask, MatType.CV_8UC1, 255.0 / 65535.0);
+            } else {
+                Cv2.Threshold(grayMat, mask, 0, 255, ThresholdTypes.Binary);
+            }
 
             Mat histNoBlack = new Mat();
             Cv2.CalcHist(new Mat[] { grayMat }, new int[] { 0 }, mask, histNoBlack, 1, histSize, ranges);
 
-            // Calculate statistics from histogram without black
-            sum = 0;
-            weightedSum = 0;
-            count = 0;
-            min = 256;
-            max = -1;
-
-            for (int i = 1; i < 256; i++) { // Start from 1 to exclude black
-                int binCount = (int)histNoBlack.At<float>(i);
-                if (binCount > 0) {
-                    sum += binCount;
-                    weightedSum += i * binCount;
-                    count += binCount;
-                    if (min > i) min = i;
-                    if (max < i) max = i;
-                }
-            }
-
-            double meanNoBlack = count > 0 ? weightedSum / sum : 0;
-
-            // Calculate standard deviation without black
-            variance = 0;
-            for (int i = 1; i < 256; i++) {
-                int binCount = (int)histNoBlack.At<float>(i);
-                if (binCount > 0) {
-                    double diff = i - meanNoBlack;
-                    variance += diff * diff * binCount;
-                }
-            }
-            double stdDevNoBlack = count > 0 ? System.Math.Sqrt(variance / sum) : 0;
-
-            // Calculate median without black
-            double medianNoBlack = 0;
-            medianCount = (int)(sum / 2);
-            cumulative = 0;
-            for (int i = 1; i < 256; i++) {
-                cumulative += (int)histNoBlack.At<float>(i);
-                if (cumulative >= medianCount) {
-                    medianNoBlack = i;
-                    break;
-                }
-            }
-
-            GrayWithoutBlack = new HistogramStatistics {
-                Mean = meanNoBlack,
-                StdDev = stdDevNoBlack,
-                Median = medianNoBlack,
-                Min = min,
-                Max = max,
-                PixelsCount = count
-            };
+            GrayWithoutBlack = ComputeStatistics(histNoBlack, numBins, 1);
 
             // Cleanup
             hist.Dispose();
@@ -167,6 +78,55 @@ namespace Accord.Imaging {
             if (grayMat != mat) {
                 grayMat.Dispose();
             }
+        }
+
+        private static HistogramStatistics ComputeStatistics(Mat hist, int numBins, int startBin) {
+            double sum = 0, weightedSum = 0;
+            int count = 0;
+            int min = numBins, max = -1;
+
+            for (int i = startBin; i < numBins; i++) {
+                int binCount = (int)hist.At<float>(i);
+                if (binCount > 0) {
+                    sum += binCount;
+                    weightedSum += (double)i * binCount;
+                    count += binCount;
+                    if (min > i) min = i;
+                    if (max < i) max = i;
+                }
+            }
+
+            double mean = count > 0 ? weightedSum / sum : 0;
+
+            double variance = 0;
+            for (int i = startBin; i < numBins; i++) {
+                int binCount = (int)hist.At<float>(i);
+                if (binCount > 0) {
+                    double diff = i - mean;
+                    variance += diff * diff * binCount;
+                }
+            }
+            double stdDev = count > 0 ? System.Math.Sqrt(variance / sum) : 0;
+
+            double median = 0;
+            int medianCount = (int)(sum / 2);
+            int cumulative = 0;
+            for (int i = startBin; i < numBins; i++) {
+                cumulative += (int)hist.At<float>(i);
+                if (cumulative >= medianCount) {
+                    median = i;
+                    break;
+                }
+            }
+
+            return new HistogramStatistics {
+                Mean = mean,
+                StdDev = stdDev,
+                Median = median,
+                Min = min,
+                Max = max,
+                PixelsCount = count
+            };
         }
     }
 

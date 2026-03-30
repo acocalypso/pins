@@ -18,28 +18,35 @@ namespace System.Windows {
         private PropertyMetadata metadata;
 
         /// <summary>
+        /// The registered name of this dependency property.
+        /// </summary>
+        public string Name { get; private set; }
+
+        /// <summary>
         /// Represents an unset value for a dependency property.
         /// </summary>
         public static readonly object UnsetValue = new object();
 
         public static DependencyProperty Register(string name, System.Type propertyType, System.Type ownerType) 
-            => new DependencyProperty { metadata = new PropertyMetadata() };
+            => new DependencyProperty { Name = name, metadata = new PropertyMetadata() };
 
         public static DependencyProperty Register(string name, System.Type propertyType, System.Type ownerType, PropertyMetadata metadata) 
-            => new DependencyProperty { metadata = metadata };
+            => new DependencyProperty { Name = name, metadata = metadata };
 
         public static DependencyProperty Register(string name, System.Type propertyType, System.Type ownerType, object metadata) 
-            => new DependencyProperty { metadata = metadata as PropertyMetadata ?? new PropertyMetadata() };
+            => new DependencyProperty { Name = name, metadata = metadata as PropertyMetadata ?? new PropertyMetadata() };
 
         public static DependencyProperty RegisterAttached(string name, System.Type propertyType, System.Type ownerType, PropertyMetadata metadata) 
-            => new DependencyProperty { metadata = metadata };
+            => new DependencyProperty { Name = name, metadata = metadata };
 
         public static DependencyProperty RegisterAttached(string name, System.Type propertyType, System.Type ownerType, object metadata) 
-            => new DependencyProperty { metadata = metadata as PropertyMetadata ?? new PropertyMetadata() };
+            => new DependencyProperty { Name = name, metadata = metadata as PropertyMetadata ?? new PropertyMetadata() };
 
         public PropertyMetadata GetMetadata(System.Type forType) {
             return metadata ?? new PropertyMetadata();
         }
+
+        public override string ToString() => Name ?? base.ToString();
     }
 
     /// <summary>

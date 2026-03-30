@@ -176,16 +176,19 @@ namespace System.Windows.Media {
 
     public class PixelFormat {
         public int BitsPerPixel { get; set; }
+        internal string FormatName { get; set; }
 
-        public static PixelFormat Bgr24 => new PixelFormat { BitsPerPixel = 24 };
-        public static PixelFormat Bgra32 => new PixelFormat { BitsPerPixel = 32 };
-        public static PixelFormat Gray16 => new PixelFormat { BitsPerPixel = 16 };
-        public static PixelFormat Gray8 => new PixelFormat { BitsPerPixel = 8 };
+        public static PixelFormat Bgr24 { get; } = new PixelFormat { BitsPerPixel = 24, FormatName = "Bgr24" };
+        public static PixelFormat Bgra32 { get; } = new PixelFormat { BitsPerPixel = 32, FormatName = "Bgra32" };
+        public static PixelFormat Gray16 { get; } = new PixelFormat { BitsPerPixel = 16, FormatName = "Gray16" };
+        public static PixelFormat Gray8 { get; } = new PixelFormat { BitsPerPixel = 8, FormatName = "Gray8" };
 
-        // Equality operators for format comparison
+        // Equality operators — compare by format name to distinguish formats with the same bpp
         public static bool operator ==(PixelFormat left, PixelFormat right) {
             if (ReferenceEquals(left, right)) return true;
             if (left is null || right is null) return false;
+            if (left.FormatName != null && right.FormatName != null)
+                return left.FormatName == right.FormatName;
             return left.BitsPerPixel == right.BitsPerPixel;
         }
 
@@ -193,20 +196,30 @@ namespace System.Windows.Media {
 
         public override bool Equals(object obj) => obj is PixelFormat pf && this == pf;
 
-        public override int GetHashCode() => BitsPerPixel.GetHashCode();
+        public override int GetHashCode() => (FormatName ?? BitsPerPixel.ToString()).GetHashCode();
 
-        // Implicit conversion to OpenCV MatType
+        // Implicit conversion to OpenCV MatType — uses FormatName for precise mapping
         public static implicit operator OpenCvSharp.MatType(PixelFormat pf) {
-            // Map based on bits per pixel
-            return pf.BitsPerPixel switch {
-                8 => OpenCvSharp.MatType.CV_8UC1,   // Gray8
-                16 => OpenCvSharp.MatType.CV_16UC1, // Gray16
-                24 => OpenCvSharp.MatType.CV_8UC3,  // Bgr24
-                32 => OpenCvSharp.MatType.CV_8UC4,  // Bgra32
-                48 => OpenCvSharp.MatType.CV_16UC3, // Rgb48
-                _ => OpenCvSharp.MatType.CV_8UC3
+            return pf.FormatName switch {
+                "Gray8" or "Indexed8" => OpenCvSharp.MatType.CV_8UC1,
+                "Gray16" => OpenCvSharp.MatType.CV_16UC1,
+                "Bgr24" => OpenCvSharp.MatType.CV_8UC3,
+                "Bgra32" or "Pbgra32" => OpenCvSharp.MatType.CV_8UC4,
+                "Bgr32" => OpenCvSharp.MatType.CV_8UC4,
+                "Bgr565" => OpenCvSharp.MatType.CV_16UC1,
+                "Rgb48" => OpenCvSharp.MatType.CV_16UC3,
+                _ => pf.BitsPerPixel switch {
+                    8 => OpenCvSharp.MatType.CV_8UC1,
+                    16 => OpenCvSharp.MatType.CV_16UC1,
+                    24 => OpenCvSharp.MatType.CV_8UC3,
+                    32 => OpenCvSharp.MatType.CV_8UC4,
+                    48 => OpenCvSharp.MatType.CV_16UC3,
+                    _ => OpenCvSharp.MatType.CV_8UC3
+                }
             };
         }
+
+        public override string ToString() => FormatName ?? $"PixelFormat({BitsPerPixel}bpp)";
     }
 
     /// <summary>
@@ -271,32 +284,32 @@ namespace System.Windows.Media {
     /// Static Brushes class with predefined brushes
     /// </summary>
     public static class Brushes {
-        public static SolidColorBrush Transparent => new SolidColorBrush(Colors.Transparent);
-        public static SolidColorBrush Black => new SolidColorBrush(Colors.Black);
-        public static SolidColorBrush White => new SolidColorBrush(Colors.White);
-        public static SolidColorBrush Red => new SolidColorBrush(Colors.Red);
-        public static SolidColorBrush Green => new SolidColorBrush(Colors.Green);
-        public static SolidColorBrush Blue => new SolidColorBrush(Colors.Blue);
-        public static SolidColorBrush Yellow => new SolidColorBrush(Colors.Yellow);
-        public static SolidColorBrush Cyan => new SolidColorBrush(Colors.Cyan);
-        public static SolidColorBrush Magenta => new SolidColorBrush(Colors.Magenta);
-        public static SolidColorBrush Gray => new SolidColorBrush(Colors.Gray);
-        public static SolidColorBrush Orange => new SolidColorBrush(Colors.Orange);
-        public static SolidColorBrush Purple => new SolidColorBrush(Colors.Purple);
-        public static SolidColorBrush Pink => new SolidColorBrush(Colors.Pink);
-        public static SolidColorBrush Brown => new SolidColorBrush(Colors.Brown);
+        public static SolidColorBrush Transparent { get; } = new SolidColorBrush(Colors.Transparent);
+        public static SolidColorBrush Black { get; } = new SolidColorBrush(Colors.Black);
+        public static SolidColorBrush White { get; } = new SolidColorBrush(Colors.White);
+        public static SolidColorBrush Red { get; } = new SolidColorBrush(Colors.Red);
+        public static SolidColorBrush Green { get; } = new SolidColorBrush(Colors.Green);
+        public static SolidColorBrush Blue { get; } = new SolidColorBrush(Colors.Blue);
+        public static SolidColorBrush Yellow { get; } = new SolidColorBrush(Colors.Yellow);
+        public static SolidColorBrush Cyan { get; } = new SolidColorBrush(Colors.Cyan);
+        public static SolidColorBrush Magenta { get; } = new SolidColorBrush(Colors.Magenta);
+        public static SolidColorBrush Gray { get; } = new SolidColorBrush(Colors.Gray);
+        public static SolidColorBrush Orange { get; } = new SolidColorBrush(Colors.Orange);
+        public static SolidColorBrush Purple { get; } = new SolidColorBrush(Colors.Purple);
+        public static SolidColorBrush Pink { get; } = new SolidColorBrush(Colors.Pink);
+        public static SolidColorBrush Brown { get; } = new SolidColorBrush(Colors.Brown);
     }
 
     public static class PixelFormats {
-        public static PixelFormat Bgr24 => PixelFormat.Bgr24;
-        public static PixelFormat Bgra32 => PixelFormat.Bgra32;
-        public static PixelFormat Gray16 => PixelFormat.Gray16;
-        public static PixelFormat Gray8 => PixelFormat.Gray8;
-        public static PixelFormat Rgb48 => new PixelFormat { BitsPerPixel = 48 };
-        public static PixelFormat Bgr32 => new PixelFormat { BitsPerPixel = 32 };
-        public static PixelFormat Pbgra32 => new PixelFormat { BitsPerPixel = 32 };
-        public static PixelFormat Indexed8 => new PixelFormat { BitsPerPixel = 8 };
-        public static PixelFormat Bgr565 => new PixelFormat { BitsPerPixel = 16 };
+        public static PixelFormat Bgr24 { get; } = PixelFormat.Bgr24;
+        public static PixelFormat Bgra32 { get; } = PixelFormat.Bgra32;
+        public static PixelFormat Gray16 { get; } = PixelFormat.Gray16;
+        public static PixelFormat Gray8 { get; } = PixelFormat.Gray8;
+        public static PixelFormat Rgb48 { get; } = new PixelFormat { BitsPerPixel = 48, FormatName = "Rgb48" };
+        public static PixelFormat Bgr32 { get; } = new PixelFormat { BitsPerPixel = 32, FormatName = "Bgr32" };
+        public static PixelFormat Pbgra32 { get; } = new PixelFormat { BitsPerPixel = 32, FormatName = "Pbgra32" };
+        public static PixelFormat Indexed8 { get; } = new PixelFormat { BitsPerPixel = 8, FormatName = "Indexed8" };
+        public static PixelFormat Bgr565 { get; } = new PixelFormat { BitsPerPixel = 16, FormatName = "Bgr565" };
         public static PixelFormat Default => Bgra32;
     }
 

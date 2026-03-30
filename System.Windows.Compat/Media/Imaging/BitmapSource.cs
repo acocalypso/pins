@@ -47,6 +47,10 @@ namespace System.Windows.Media.Imaging {
         }
 
         protected void AddMemoryPressure() {
+            if (_memoryPressure > 0) {
+                GC.RemoveMemoryPressure(_memoryPressure);
+                _memoryPressure = 0;
+            }
             if (_mat != null && !_mat.Empty()) {
                 _memoryPressure = (long)(_mat.Total() * _mat.ElemSize());
                 if (_memoryPressure > 0)
@@ -70,8 +74,10 @@ namespace System.Windows.Media.Imaging {
                 GC.RemoveMemoryPressure(_memoryPressure);
                 _memoryPressure = 0;
             }
-            _mat?.Dispose();
-            _mat = null;
+            if (disposing) {
+                _mat?.Dispose();
+                _mat = null;
+            }
         }
 
         public int PixelWidth => _mat.Width;
@@ -108,7 +114,8 @@ namespace System.Windows.Media.Imaging {
         }
 
         // Implicit conversions
-        public static implicit operator Mat(BitmapSource bmp) => bmp._mat;
+        // Clone to prevent aliased ownership — caller owns the returned Mat
+        public static implicit operator Mat(BitmapSource bmp) => bmp._mat?.Clone();
         public static implicit operator BitmapSource(Mat mat) => new BitmapSource(mat);
 
         public void Freeze() {
@@ -123,8 +130,8 @@ namespace System.Windows.Media.Imaging {
             int bytesPerPixel = _mat.ElemSize();
             int dataSize = _mat.Rows * _mat.Cols * bytesPerPixel;
 
-            if (pixels.Length < dataSize) {
-                throw new ArgumentException($"Destination array too small. Need {dataSize} bytes, got {pixels.Length}");
+            if (pixels.Length < offset + dataSize) {
+                throw new ArgumentException($"Destination array too small. Need {offset + dataSize} bytes, got {pixels.Length}");
             }
 
             // Copy the Mat data directly to the byte array
@@ -137,8 +144,8 @@ namespace System.Windows.Media.Imaging {
 
             int dataSize = _mat.Rows * _mat.Cols * _mat.Channels();
 
-            if (pixels.Length < dataSize) {
-                throw new ArgumentException($"Destination array too small. Need {dataSize} elements, got {pixels.Length}");
+            if (pixels.Length < offset + dataSize) {
+                throw new ArgumentException($"Destination array too small. Need {offset + dataSize} elements, got {pixels.Length}");
             }
 
             // Copy as raw bytes then reinterpret — Marshal.Copy does not accept ushort[]
@@ -288,12 +295,13 @@ namespace System.Windows.Media.Imaging {
         }
 
         public WriteableBitmap(BitmapSource source) : base() {
-            // Copy the Mat from the source using implicit conversion
+            // Implicit operator already clones — take ownership directly
             if (source != null) {
-                Mat sourceMat = source; // Use implicit conversion operator
+                Mat sourceMat = (Mat)source;
                 if (sourceMat != null && !sourceMat.Empty()) {
-                    _mat = sourceMat.Clone();
+                    _mat = sourceMat;
                 } else {
+                    sourceMat?.Dispose();
                     _mat = new Mat();
                 }
             } else {
@@ -339,6 +347,8 @@ namespace System.Windows.Media.Imaging {
                     _mat?.Dispose();
                     _mat = mat;
                     AddMemoryPressure();
+                } else {
+                    mat?.Dispose();
                 }
             }
         }
@@ -380,62 +390,118 @@ namespace System.Windows.Media.Imaging {
 
             // Process each drawing operation
             foreach (var operation in visual.Operations) {
-                if (operation.Image == null) continue;
-
-                Mat sourceMat = operation.Image; // Use implicit conversion
-                if (sourceMat == null || sourceMat.Empty()) continue;
-
-                // Calculate the region of interest in the target
-                int x = (int)operation.Rect.X;
-                int y = (int)operation.Rect.Y;
-                int width = (int)operation.Rect.Width;
-                int height = (int)operation.Rect.Height;
-
-                // Ensure we don't write outside the target bounds
-                if (x < 0 || y < 0 || x + width > _mat.Width || y + height > _mat.Height) {
-                    continue;
-                }
-
-                // Resize source if needed
-                Mat resizedSource = sourceMat;
-                if (sourceMat.Width != width || sourceMat.Height != height) {
-                    resizedSource = new Mat();
-                    OpenCvSharp.Cv2.Resize(sourceMat, resizedSource, new OpenCvSharp.Size(width, height));
-                }
-
-                try {
-                    // Convert source to target format if needed
-                    Mat convertedSource = resizedSource;
-                    if (resizedSource.Type() != _mat.Type()) {
-                        convertedSource = new Mat();
-                        // Convert grayscale to BGRA if needed
-                        if (resizedSource.Channels() == 1 && _mat.Channels() == 4) {
-                            OpenCvSharp.Cv2.CvtColor(resizedSource, convertedSource, OpenCvSharp.ColorConversionCodes.GRAY2BGRA);
-                        } else if (resizedSource.Channels() == 3 && _mat.Channels() == 4) {
-                            OpenCvSharp.Cv2.CvtColor(resizedSource, convertedSource, OpenCvSharp.ColorConversionCodes.BGR2BGRA);
-                        } else if (resizedSource.Channels() == 4 && _mat.Channels() == 3) {
-                            OpenCvSharp.Cv2.CvtColor(resizedSource, convertedSource, OpenCvSharp.ColorConversionCodes.BGRA2BGR);
-                        } else {
-                            resizedSource.ConvertTo(convertedSource, _mat.Depth());
-                        }
-                    }
-
-                    // Copy to the target ROI
-                    var roi = new OpenCvSharp.Rect(x, y, width, height);
-                    using (var targetRoi = new Mat(_mat, roi)) {
-                        convertedSource.CopyTo(targetRoi);
-                    }
-
-                    // Cleanup
-                    if (convertedSource != resizedSource) {
-                        convertedSource.Dispose();
-                    }
-                } finally {
-                    if (resizedSource != sourceMat) {
-                        resizedSource.Dispose();
-                    }
+                switch (operation.Type) {
+                    case System.Windows.Media.DrawingOperation.OperationType.DrawImage:
+                        RenderDrawImage(operation);
+                        break;
+                    case System.Windows.Media.DrawingOperation.OperationType.DrawLine:
+                        RenderDrawLine(operation);
+                        break;
+                    case System.Windows.Media.DrawingOperation.OperationType.DrawRectangle:
+                        RenderDrawRectangle(operation);
+                        break;
+                    case System.Windows.Media.DrawingOperation.OperationType.DrawText:
+                        RenderDrawText(operation);
+                        break;
+                    case System.Windows.Media.DrawingOperation.OperationType.DrawGeometry:
+                        // Geometry path decomposition is complex; not yet implemented
+                        break;
                 }
             }
+        }
+
+        private void RenderDrawImage(System.Windows.Media.DrawingOperation operation) {
+            if (operation.Image == null) return;
+
+            using Mat sourceMat = (Mat)operation.Image;
+            if (sourceMat == null || sourceMat.Empty()) return;
+
+            int x = (int)operation.Rect.X;
+            int y = (int)operation.Rect.Y;
+            int width = (int)operation.Rect.Width;
+            int height = (int)operation.Rect.Height;
+
+            if (x < 0 || y < 0 || x + width > _mat.Width || y + height > _mat.Height) {
+                return;
+            }
+
+            Mat resizedSource = sourceMat;
+            if (sourceMat.Width != width || sourceMat.Height != height) {
+                resizedSource = new Mat();
+                OpenCvSharp.Cv2.Resize(sourceMat, resizedSource, new OpenCvSharp.Size(width, height));
+            }
+
+            try {
+                Mat convertedSource = resizedSource;
+                if (resizedSource.Type() != _mat.Type()) {
+                    convertedSource = new Mat();
+                    if (resizedSource.Channels() == 1 && _mat.Channels() == 4) {
+                        OpenCvSharp.Cv2.CvtColor(resizedSource, convertedSource, OpenCvSharp.ColorConversionCodes.GRAY2BGRA);
+                    } else if (resizedSource.Channels() == 3 && _mat.Channels() == 4) {
+                        OpenCvSharp.Cv2.CvtColor(resizedSource, convertedSource, OpenCvSharp.ColorConversionCodes.BGR2BGRA);
+                    } else if (resizedSource.Channels() == 4 && _mat.Channels() == 3) {
+                        OpenCvSharp.Cv2.CvtColor(resizedSource, convertedSource, OpenCvSharp.ColorConversionCodes.BGRA2BGR);
+                    } else {
+                        resizedSource.ConvertTo(convertedSource, _mat.Depth());
+                    }
+                }
+
+                var roi = new OpenCvSharp.Rect(x, y, width, height);
+                using (var targetRoi = new Mat(_mat, roi)) {
+                    convertedSource.CopyTo(targetRoi);
+                }
+
+                if (convertedSource != resizedSource) {
+                    convertedSource.Dispose();
+                }
+            } finally {
+                if (resizedSource != sourceMat) {
+                    resizedSource.Dispose();
+                }
+            }
+        }
+
+        private static OpenCvSharp.Scalar GetScalarFromBrush(System.Windows.Media.Brush brush) {
+            if (brush is System.Windows.Media.SolidColorBrush scb) {
+                var c = scb.Color;
+                return new OpenCvSharp.Scalar(c.B, c.G, c.R, c.A);
+            }
+            return new OpenCvSharp.Scalar(255, 255, 255, 255);
+        }
+
+        private void RenderDrawLine(System.Windows.Media.DrawingOperation operation) {
+            if (operation.Pen == null) return;
+            var color = GetScalarFromBrush(operation.Pen.Brush);
+            int thickness = System.Math.Max(1, (int)operation.Pen.Thickness);
+            OpenCvSharp.Cv2.Line(_mat,
+                new OpenCvSharp.Point((int)operation.Point1.X, (int)operation.Point1.Y),
+                new OpenCvSharp.Point((int)operation.Point2.X, (int)operation.Point2.Y),
+                color, thickness);
+        }
+
+        private void RenderDrawRectangle(System.Windows.Media.DrawingOperation operation) {
+            var rect = new OpenCvSharp.Rect(
+                (int)operation.Rect.X, (int)operation.Rect.Y,
+                (int)operation.Rect.Width, (int)operation.Rect.Height);
+            if (operation.Brush != null) {
+                var fillColor = GetScalarFromBrush(operation.Brush);
+                OpenCvSharp.Cv2.Rectangle(_mat, rect, fillColor, -1);
+            }
+            if (operation.Pen != null) {
+                var penColor = GetScalarFromBrush(operation.Pen.Brush);
+                int thickness = System.Math.Max(1, (int)operation.Pen.Thickness);
+                OpenCvSharp.Cv2.Rectangle(_mat, rect, penColor, thickness);
+            }
+        }
+
+        private void RenderDrawText(System.Windows.Media.DrawingOperation operation) {
+            if (operation.FormattedText == null) return;
+            string text = operation.FormattedText.Text ?? "";
+            var color = GetScalarFromBrush(operation.FormattedText.Foreground);
+            double fontScale = operation.FormattedText.FontSize / 20.0;
+            OpenCvSharp.Cv2.PutText(_mat, text,
+                new OpenCvSharp.Point((int)operation.Point1.X, (int)operation.Point1.Y),
+                OpenCvSharp.HersheyFonts.HersheySimplex, fontScale, color, 1);
         }
     }
 }

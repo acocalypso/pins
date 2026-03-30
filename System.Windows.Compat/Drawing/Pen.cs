@@ -181,22 +181,22 @@ namespace System.Drawing {
     /// Static Brushes class with predefined brush colors
     /// </summary>
     public static class Brushes {
-        public static Windows.Media.SolidColorBrush Transparent => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Transparent);
-        public static Windows.Media.SolidColorBrush Black => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Black);
-        public static Windows.Media.SolidColorBrush White => new Windows.Media.SolidColorBrush(Windows.Media.Colors.White);
-        public static Windows.Media.SolidColorBrush Red => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Red);
-        public static Windows.Media.SolidColorBrush Green => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Green);
-        public static Windows.Media.SolidColorBrush Blue => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Blue);
-        public static Windows.Media.SolidColorBrush Yellow => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Yellow);
-        public static Windows.Media.SolidColorBrush Cyan => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Cyan);
-        public static Windows.Media.SolidColorBrush Magenta => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Magenta);
-        public static Windows.Media.SolidColorBrush Gray => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Gray);
-        public static Windows.Media.SolidColorBrush Orange => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Orange);
-        public static Windows.Media.SolidColorBrush Purple => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Purple);
-        public static Windows.Media.SolidColorBrush Pink => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Pink);
-        public static Windows.Media.SolidColorBrush Brown => new Windows.Media.SolidColorBrush(Windows.Media.Colors.Brown);
-        public static Windows.Media.SolidColorBrush DarkBlue => new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(0, 0, 139));
-        public static Windows.Media.SolidColorBrush DarkRed => new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(139, 0, 0));
-        public static Windows.Media.SolidColorBrush LightYellow => new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(255, 255, 224));
+        public static Windows.Media.SolidColorBrush Transparent { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Transparent);
+        public static Windows.Media.SolidColorBrush Black { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Black);
+        public static Windows.Media.SolidColorBrush White { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.White);
+        public static Windows.Media.SolidColorBrush Red { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Red);
+        public static Windows.Media.SolidColorBrush Green { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Green);
+        public static Windows.Media.SolidColorBrush Blue { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Blue);
+        public static Windows.Media.SolidColorBrush Yellow { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Yellow);
+        public static Windows.Media.SolidColorBrush Cyan { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Cyan);
+        public static Windows.Media.SolidColorBrush Magenta { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Magenta);
+        public static Windows.Media.SolidColorBrush Gray { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Gray);
+        public static Windows.Media.SolidColorBrush Orange { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Orange);
+        public static Windows.Media.SolidColorBrush Purple { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Purple);
+        public static Windows.Media.SolidColorBrush Pink { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Pink);
+        public static Windows.Media.SolidColorBrush Brown { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Colors.Brown);
+        public static Windows.Media.SolidColorBrush DarkBlue { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(0, 0, 139));
+        public static Windows.Media.SolidColorBrush DarkRed { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(139, 0, 0));
+        public static Windows.Media.SolidColorBrush LightYellow { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(255, 255, 224));
     }
 }

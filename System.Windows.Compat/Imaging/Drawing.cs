@@ -44,7 +44,7 @@ namespace Accord.Imaging {
             byte grayValue = (byte)((color.R + color.G + color.B) / 3);
 
             // Draw top and bottom horizontal lines
-            for (int x = rect.Left; x < rect.Right && x < width; x++) {
+            for (int x = System.Math.Max(0, rect.Left); x < rect.Right && x < width; x++) {
                 if (rect.Top >= 0 && rect.Top < height) {
                     byte* ptr = basePtr + rect.Top * stride + x * pixelSize;
                     for (int i = 0; i < pixelSize; i++) {
@@ -60,7 +60,7 @@ namespace Accord.Imaging {
             }
 
             // Draw left and right vertical lines
-            for (int y = rect.Top; y < rect.Bottom && y < height; y++) {
+            for (int y = System.Math.Max(0, rect.Top); y < rect.Bottom && y < height; y++) {
                 if (rect.Left >= 0 && rect.Left < width) {
                     byte* ptr = basePtr + y * stride + rect.Left * pixelSize;
                     for (int i = 0; i < pixelSize; i++) {

@@ -210,6 +210,10 @@ namespace System.Windows {
         /// Click a button on a dialog
         /// </summary>
         public static bool ClickButton(int dialogId, string buttonName) {
+            Action onClick = null;
+            bool isCancel = false;
+            bool found = false;
+
             lock (_lock) {
                 if (_activeDialogs.TryGetValue(dialogId, out var dialog)) {
                     var button = dialog.Buttons.FirstOrDefault(b =>
@@ -217,19 +221,20 @@ namespace System.Windows {
                         b.Text.Equals(buttonName, StringComparison.OrdinalIgnoreCase));
 
                     if (button != null) {
-                        button.OnClick?.Invoke();
-
-                        // If it's a cancel button, close with false result
-                        if (button.IsCancel) {
-                            CloseDialog(dialogId, false);
-                        } else {
-                            CloseDialog(dialogId, true);
-                        }
-                        return true;
+                        onClick = button.OnClick;
+                        isCancel = button.IsCancel;
+                        found = true;
                     }
                 }
-                return false;
             }
+
+            if (found) {
+                // Invoke user callback outside the lock to prevent deadlocks
+                onClick?.Invoke();
+                CloseDialog(dialogId, !isCancel);
+            }
+
+            return found;
         }
 
         /// <summary>
@@ -295,16 +300,19 @@ namespace System.Windows {
         /// Close all dialogs
         /// </summary>
         public static int CloseAllDialogs(bool result = true) {
+            List<int> dialogIds;
+            int count;
             lock (_lock) {
-                var count = _activeDialogs.Count;
-                var dialogIds = _activeDialogs.Keys.ToList();
-
-                foreach (var id in dialogIds) {
-                    CloseDialog(id, result);
-                }
-
-                return count;
+                count = _activeDialogs.Count;
+                dialogIds = _activeDialogs.Keys.ToList();
             }
+
+            // Close outside the lock — CloseDialog acquires _lock itself
+            foreach (var id in dialogIds) {
+                CloseDialog(id, result);
+            }
+
+            return count;
         }
 
         /// <summary>

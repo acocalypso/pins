@@ -58,7 +58,7 @@ namespace System.Windows.Media.Imaging {
                 return;
             }
 
-            Mat sourceMat = _source;
+            using Mat sourceMat = (Mat)_source;
             Mat result = new Mat();
 
             // Apply the transform
