@@ -33,6 +33,9 @@ namespace NINA.INDI.Interfaces {
 
         void ConfigureConnectionProperties(string connectionMode, bool autoSearch, string address, string port, int baudRate);
 
+        /// <summary>Returns the value of a switch element in a named INDI switch property, or null if not available.</summary>
+        bool? GetSwitchPropertyValue(string propertyName, string elementName);
+
         IList<string> SupportedActions { get; }
         string Action(string actionName, string actionParameters);
         void CommandBlind(string command, bool raw = false);
