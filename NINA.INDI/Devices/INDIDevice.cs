@@ -419,8 +419,25 @@ namespace NINA.INDI.Devices {
                     return false;
                 }
 
-                // Send the CONNECT command using async mechanism
-                bool success = await SetSwitchValueAsync("CONNECTION", "CONNECT", true, TimeSpan.FromSeconds(30));
+                // If the INDI driver is already connected at the server level (e.g. a shared
+                // driver whose other interface was connected first), skip the redundant CONNECT
+                // command.  Sending CONNECT to an already-connected INDI device is well-defined
+                // but many drivers simply ignore it and never send an ack, which would cause the
+                // 30-second SetSwitchValueAsync timeout to fire.
+                // NOTE: use only the CONNECT switch *value* — the property State can be Idle in
+                // a defSwitchVector even when the device is actually connected, so do NOT gate
+                // on State == Ok here.
+                var connPropBefore = GetSwitchProperty("CONNECTION");
+                var alreadyConnectedAtIndi =
+                    connPropBefore?.Switches.FirstOrDefault(s => s.Name == "CONNECT")?.Value == true;
+
+                bool success;
+                if (alreadyConnectedAtIndi) {
+                    Logger.Info($"[{DeviceName}] INDI driver already connected at server level — skipping CONNECT command");
+                    success = true;
+                } else {
+                    success = await SetSwitchValueAsync("CONNECTION", "CONNECT", true, TimeSpan.FromSeconds(30));
+                }
 
                 if (success) {
                     Logger.Info($"Connected to INDI device: {DeviceName}");
@@ -483,7 +500,15 @@ namespace NINA.INDI.Devices {
             if (success) {
                 Logger.Info($"Disconnected from INDI device: {DeviceName}");
             } else {
-                Logger.Warning($"Disconnecting from {DeviceName} timed out or failed");
+                // If the driver was unloaded while we were waiting (e.g. the user switched to a
+                // different INDI driver), the INDI server will never ack the DISCONNECT command.
+                // Skip the failure and treat the device as disconnected.
+                if (!INDIClient.Instance.IsDeviceKnown(Id)) {
+                    Logger.Info($"INDI device '{DeviceName}' driver was unloaded during disconnect — treating as disconnected");
+                    success = true;
+                } else {
+                    Logger.Warning($"Disconnecting from {DeviceName} timed out or failed");
+                }
             }
 
             _connected = false;
@@ -522,6 +547,18 @@ namespace NINA.INDI.Devices {
         /// Override this to configure device properties after driver load but before CONNECT
         /// </summary>
         protected virtual async Task<bool> OnPreConnect() {
+            // If the INDI driver is already connected (shared driver, other interface connected
+            // first), skip all pre-connect property writes.  Attempting to change CONNECTION_MODE,
+            // DEVICE_PORT or DEVICE_BAUD_RATE while connected causes many drivers to silently
+            // ignore the command and never send an ack, which would result in up to 30 s of
+            // cumulative timeouts before the CONNECT command is even sent.
+            var connPropCurrent = GetSwitchProperty("CONNECTION");
+            bool alreadyConnected = connPropCurrent?.Switches.FirstOrDefault(s => s.Name == "CONNECT")?.Value == true;
+            if (alreadyConnected) {
+                Logger.Info($"[{DeviceName}] OnPreConnect: INDI driver already connected — skipping connection property configuration");
+                return true;
+            }
+
             // Check if we have a valid connection mode setting
             bool HasConnectionMode = _hasConnectionModeProperty && !string.IsNullOrEmpty(_connectionMode);
             bool HasAddress = !string.IsNullOrEmpty(_address);
@@ -657,9 +694,31 @@ namespace NINA.INDI.Devices {
             }
             */
             // Track CONNECTION failures to prevent spurious DISCONNECT attempts
-            if (p.Name == "CONNECTION" && p.State == PropertyState.Alert) {
-                _connectionAttemptFailed = true;
-                Logger.Warning($"Device '{DeviceName}' connection attempt failed (Alert state)");
+            if (p.Name == "CONNECTION") {
+                if (p.State == PropertyState.Alert) {
+                    _connectionAttemptFailed = true;
+                    Logger.Warning($"Device '{DeviceName}' connection attempt failed (Alert state)");
+                }
+
+                // Sync _connected with the actual INDI CONNECTION switch state so that
+                // an external disconnect (e.g. another device role using the same INDI driver
+                // sent DISCONNECT) is reflected here without waiting for a poll.
+                // Only act when there is no pending CONNECTION operation on this instance —
+                // if there is one, the update is the ack for our own DISCONNECT command and
+                // DisconnectAsync will set _connected = false itself once it completes.
+                var connectSwitch = p.Switches.FirstOrDefault(s => s.Name == "CONNECT");
+                if (connectSwitch != null && !connectSwitch.Value && _connected) {
+                    bool hasPendingConnectionOp;
+                    lock (_asyncOperationsLock) {
+                        hasPendingConnectionOp = _pendingAsyncOperations.Keys
+                            .Any(k => k.StartsWith("CONNECTION_"));
+                    }
+                    if (!hasPendingConnectionOp) {
+                        Logger.Warning($"Device '{DeviceName}' CONNECTION property shows DISCONNECT while we " +
+                                       "thought it was connected — marking as externally disconnected");
+                        _connected = false;
+                    }
+                }
             }
 
             // Check if there are any pending async operations for this property
