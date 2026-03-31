@@ -90,6 +90,23 @@ namespace NINA.Equipment.Equipment {
         }
 
         private bool TryReconnect() {
+            // Before blindly restoring the in-memory flag, confirm with the INDI server
+            // that the device is actually still connected.  If the INDI driver was
+            // physically disconnected (e.g. the other device role using the same shared
+            // INDI driver sent a DISCONNECT), we must NOT fake a successful reconnect \u2014
+            // instead we mark the device as properly disconnected so the user is aware.
+            var indiConnectionState = device.GetSwitchPropertyValue("CONNECTION", "CONNECT");
+            if (indiConnectionState != true) {
+                Logger.Warning($"{Name} detected as externally disconnected (INDI CONNECTION/CONNECT \u2260 true) \u2014 treating as real disconnect");
+                // Clear the expectation flag inside the lock we already hold.
+                connectedExpectation = false;
+                InvalidatePropertyCache();
+                // Schedule proper cleanup without calling Disconnect() from within the lock.
+                Task.Run(() => { try { Disconnect(); } catch { } });
+                return false;
+            }
+
+            // Device is confirmed connected by INDI \u2014 restore the tracking flag.
             Connected = true;
             if (propertyGETMemory.TryGetValue(nameof(Connected), out var getmemory)) {
                 getmemory.InvalidateCache();

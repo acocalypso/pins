@@ -68,7 +68,11 @@ namespace NINA.INDI {
         private readonly TaskCompletionSource<bool> _serverReadyTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private readonly Dictionary<string, INDIDeviceInfo> _discoveredDevices = [];
-        private readonly Dictionary<string, INDIDevice> _registeredDevices = [];
+        // Multiple devices can share the same INDI device name when the driver exposes
+        // both a telescope and a focuser interface (e.g. indi_lx200generic).
+        // All registered instances receive property updates so that an external disconnect
+        // from one role is correctly reflected in the other.
+        private readonly Dictionary<string, List<INDIDevice>> _registeredDevices = [];
 
         // Maps driver executable name → set of DeviceInterfaces it is currently serving.
         // A single driver (e.g. indi_lx200generic) can expose devices for multiple interfaces
@@ -290,15 +294,38 @@ namespace NINA.INDI {
 
         internal void RegisterDevice(INDIDevice device) {
             lock (_lock) {
-                _registeredDevices[device.Id] = device;
-                Logger.Debug($"Registered device: '{device.Id}' (Name: '{device.DeviceName}')");
+                if (!_registeredDevices.TryGetValue(device.Id, out var list)) {
+                    list = [];
+                    _registeredDevices[device.Id] = list;
+                }
+                if (!list.Contains(device)) {
+                    list.Add(device);
+                }
+                Logger.Debug($"Registered device: '{device.Id}' (Name: '{device.DeviceName}', total for this id: {list.Count})");
             }
         }
 
         internal void UnregisterDevice(INDIDevice device) {
             lock (_lock) {
-                _registeredDevices.Remove(device.Id);
-                Logger.Debug($"Unregistered device: '{device.Id}'");
+                if (_registeredDevices.TryGetValue(device.Id, out var list)) {
+                    list.Remove(device);
+                    if (list.Count == 0) {
+                        _registeredDevices.Remove(device.Id);
+                    }
+                    Logger.Debug($"Unregistered device: '{device.Id}'");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns true when the given device ID is still present in the discovered-devices
+        /// table (i.e. the driver is still loaded and the device is visible to indiserver).
+        /// Used by DisconnectAsync to bail out early when the driver was killed before
+        /// the graceful DISCONNECT handshake could complete.
+        /// </summary>
+        public bool IsDeviceKnown(string id) {
+            lock (_driverLock) {
+                return _discoveredDevices.ContainsKey(id);
             }
         }
 
@@ -643,93 +670,102 @@ namespace NINA.INDI {
                 switch (element.Name.LocalName) {
                     case "defNumberVector": {
                             property = INDIProtocolParser.ParseDefNumberVector(element);
-                            // Add property to registered device
-                            if (_registeredDevices.TryGetValue(deviceName, out var deviceInstance)) {
-                                deviceInstance.AddProperty(property);
-                                // Immediately process initial value as an update
-                                if (property is INDINumberProperty np)
-                                    deviceInstance.OnNumberPropertyUpdated(np);
+                            // Broadcast initial property definition to all registered devices with this name
+                            if (_registeredDevices.TryGetValue(deviceName, out var defNumDevices)) {
+                                foreach (var deviceInstance in defNumDevices) {
+                                    deviceInstance.AddProperty(property);
+                                    if (property is INDINumberProperty np)
+                                        deviceInstance.OnNumberPropertyUpdated(np);
+                                }
                             }
                             break;
                         }
                     case "defSwitchVector": {
-
                             property = INDIProtocolParser.ParseDefSwitchVector(element);
-                            // Add property to registered device
-                            if (_registeredDevices.TryGetValue(deviceName, out var deviceInstance)) {
-                                deviceInstance.AddProperty(property);
-                                // Immediately process initial value as an update
-                                if (property is INDISwitchProperty sp)
-                                    deviceInstance.OnSwitchPropertyUpdated(sp);
+                            // Broadcast initial property definition to all registered devices with this name
+                            if (_registeredDevices.TryGetValue(deviceName, out var defSwDevices)) {
+                                foreach (var deviceInstance in defSwDevices) {
+                                    deviceInstance.AddProperty(property);
+                                    if (property is INDISwitchProperty sp)
+                                        deviceInstance.OnSwitchPropertyUpdated(sp);
+                                }
                             }
                             break;
                         }
                     case "defTextVector": {
                             property = INDIProtocolParser.ParseDefTextVector(element);
                             CheckForNewDevice(property);
-                            // Add property to registered device
-                            if (_registeredDevices.TryGetValue(deviceName, out var deviceInstance)) {
-                                deviceInstance.AddProperty(property);
-                                // Immediately process initial value as an update
-                                if (property is INDITextProperty tp)
-                                    deviceInstance.OnTextPropertyUpdated(tp);
+                            // Broadcast initial property definition to all registered devices with this name
+                            if (_registeredDevices.TryGetValue(deviceName, out var defTxtDevices)) {
+                                foreach (var deviceInstance in defTxtDevices) {
+                                    deviceInstance.AddProperty(property);
+                                    if (property is INDITextProperty tp)
+                                        deviceInstance.OnTextPropertyUpdated(tp);
+                                }
                             }
                             break;
                         }
                     case "defBLOBVector": {
                             property = INDIProtocolParser.ParseDefBlobVector(element);
-                            // Add property to registered device
-                            if (_registeredDevices.TryGetValue(deviceName, out var deviceInstance)) {
-                                deviceInstance.AddProperty(property);
-                                // Immediately process initial value as an update
-                                if (property is INDIBlobProperty bp)
-                                    deviceInstance.OnBlobPropertyUpdated(bp);
+                            // Broadcast initial property definition to all registered devices with this name
+                            if (_registeredDevices.TryGetValue(deviceName, out var defBlobDevices)) {
+                                foreach (var deviceInstance in defBlobDevices) {
+                                    deviceInstance.AddProperty(property);
+                                    if (property is INDIBlobProperty bp)
+                                        deviceInstance.OnBlobPropertyUpdated(bp);
+                                }
                             }
                             break;
                         }
                     case "setBLOBVector": {
-                            // Update registered device property if it exists
-                            if (_registeredDevices.TryGetValue(deviceName, out var deviceInstance)) {
-                                if (deviceInstance.GetProperty(propertyName) is INDIBlobProperty bp) {
+                            // Update the property on the first registered device (all share the same object)
+                            // then notify all devices.
+                            if (_registeredDevices.TryGetValue(deviceName, out var setBlobDevices) && setBlobDevices.Count > 0) {
+                                if (setBlobDevices[0].GetProperty(propertyName) is INDIBlobProperty bp) {
                                     INDIProtocolParser.UpdateBlobProperty(bp, element);
-                                    deviceInstance.OnBlobPropertyUpdated(bp);
+                                    foreach (var deviceInstance in setBlobDevices)
+                                        deviceInstance.OnBlobPropertyUpdated(bp);
                                 }
                             }
                             break;
                         }
                     case "setTextVector": {
-                            // Update registered device property if it exists
-                            if (_registeredDevices.TryGetValue(deviceName, out var deviceInstance)) {
-                                if (deviceInstance.GetProperty(propertyName) is INDITextProperty tp) {
+                            // Update the property once then notify all registered devices.
+                            if (_registeredDevices.TryGetValue(deviceName, out var setTxtDevices) && setTxtDevices.Count > 0) {
+                                if (setTxtDevices[0].GetProperty(propertyName) is INDITextProperty tp) {
                                     INDIProtocolParser.UpdateTextProperty(tp, element);
-                                    deviceInstance.OnTextPropertyUpdated(tp);
+                                    foreach (var deviceInstance in setTxtDevices)
+                                        deviceInstance.OnTextPropertyUpdated(tp);
                                 }
                             }
                             break;
                         }
                     case "setNumberVector": {
-                            // Update registered device property if it exists
-                            if (_registeredDevices.TryGetValue(deviceName, out var deviceInstance)) {
-                                if (deviceInstance.GetProperty(propertyName) is INDINumberProperty np) {
+                            // Update the property once then notify all registered devices.
+                            if (_registeredDevices.TryGetValue(deviceName, out var setNumDevices) && setNumDevices.Count > 0) {
+                                if (setNumDevices[0].GetProperty(propertyName) is INDINumberProperty np) {
                                     INDIProtocolParser.UpdateNumberProperty(np, element);
-                                    deviceInstance.OnNumberPropertyUpdated(np);
+                                    foreach (var deviceInstance in setNumDevices)
+                                        deviceInstance.OnNumberPropertyUpdated(np);
                                 }
                             }
                             break;
                         }
                     case "setSwitchVector": {
-                            // Update registered device property if it exists
-                            if (_registeredDevices.TryGetValue(deviceName, out var deviceInstance)) {
-                                if (deviceInstance.GetProperty(propertyName) is INDISwitchProperty sp) {
+                            // Update the property once then notify all registered devices.
+                            if (_registeredDevices.TryGetValue(deviceName, out var setSwDevices) && setSwDevices.Count > 0) {
+                                if (setSwDevices[0].GetProperty(propertyName) is INDISwitchProperty sp) {
                                     INDIProtocolParser.UpdateSwitchProperty(sp, element);
-                                    deviceInstance.OnSwitchPropertyUpdated(sp);
+                                    foreach (var deviceInstance in setSwDevices)
+                                        deviceInstance.OnSwitchPropertyUpdated(sp);
                                 }
                             }
                             break;
                         }
                     case "delProperty": {
-                            if (_registeredDevices.TryGetValue(deviceName, out var deviceInstance)) {
-                                deviceInstance.RemoveProperty(propertyName);
+                            if (_registeredDevices.TryGetValue(deviceName, out var delDevices)) {
+                                foreach (var deviceInstance in delDevices)
+                                    deviceInstance.RemoveProperty(propertyName);
                             }
                             break;
                         }
