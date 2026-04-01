@@ -18,6 +18,49 @@ This fork is not affiliated with the original N.I.N.A. authors. Please see [N.I.
 
 ---
 
+## ✅ Already Tested Devices
+
+PI.N.S. supports a wide range of astronomy equipment. Here is a list of tested devices:
+
+### 📷 **Cameras**
+- ToupTek
+- ZWO
+
+### 🔍 **Filter Wheels**
+- Astroasis
+- ToupTek
+- ZWO
+
+### 🎯 **Focusers**
+- Astroasis
+- Gemini (indi\_myfocuserpro2\_focus)
+- Nitecrawler
+- QHY
+- ToupTek
+- ZWO
+
+### 🔄 **Rotators**
+- Nitecrawler
+- Wanderer
+
+### 🔭 **Mounts**
+- 10Micron
+- OnStep
+
+### 🌟 **Flat Panels**
+- Gemini
+- Wanderer
+
+### 🔌 **Switches**
+- Svbony
+
+### 🛠️ **Other Accessories**
+- ToupTek-a-like
+- Wanderer ETA
+- ZWO Seestar (Alpaca)
+
+---
+
 ## 🤝 Contributing
 
 Contributions, bug reports, and feature requests are welcome! Please open an issue or pull request on GitHub.
