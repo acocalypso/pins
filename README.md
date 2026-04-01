@@ -33,6 +33,7 @@ PI.N.S. supports a wide range of astronomy equipment. Here is a list of tested d
 
 ### 🎯 **Focusers**
 - Astroasis
+- Gemini (indi\_myfocuserpro2\_focus)
 - Nitecrawler
 - QHY
 - ToupTek
@@ -47,6 +48,7 @@ PI.N.S. supports a wide range of astronomy equipment. Here is a list of tested d
 - OnStep
 
 ### 🌟 **Flat Panels**
+- Gemini
 - Wanderer
 
 ### 🔌 **Switches**
@@ -55,6 +57,7 @@ PI.N.S. supports a wide range of astronomy equipment. Here is a list of tested d
 ### 🛠️ **Other Accessories**
 - ToupTek-a-like
 - Wanderer ETA
+- ZWO Seestar (Alpaca)
 
 ---
 
