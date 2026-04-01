@@ -25,6 +25,7 @@ using NINA.Equipment.Interfaces.ViewModel;
 using NINA.Equipment.SDK.CameraSDKs.PlayerOneSDK;
 using NINA.Equipment.Utility;
 using NINA.Profile.Interfaces;
+using QHYCCD;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -45,6 +46,28 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FilterWheel {
 
                 devices.Add(new DummyDevice(Loc.Instance["LblNoFilterwheel"]));
 
+                /*
+                 * QHY - Integrated or 4-pin connected filter wheels only
+                 */
+                try {
+                    var qhy = new QHYFilterWheels();
+                    Logger.Trace("Adding QHY integrated/4-pin filter wheels");
+                    List<string> fwheels = qhy.GetFilterWheels();
+
+                    if (fwheels.Count > 0) {
+                        foreach (var entry in fwheels) {
+                            var fwheel = new QHYFilterWheel(entry, profileService);
+
+                            if (!string.IsNullOrEmpty(fwheel.Name)) {
+                                Logger.Debug($"Adding QHY Filter Wheel {fwheel.Id} (as {fwheel.Name})");
+                                devices.Add(fwheel);
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
                 /* ZWO filter wheels */
                 try {
                     Logger.Trace("Adding ZWOptical filter wheels");
@@ -54,6 +77,21 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FilterWheel {
                     for (int i = 0; i < wheels; i++) {
                         var fw = new ASIFilterWheel(i, profileService);
                         Logger.Debug($"Adding ZWOptical Filter Wheel: {fw.Name}");
+                        devices.Add(fw);
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
+                /* PlayerOne filter wheels */
+                try {
+                    Logger.Trace("Adding PlayerOne filter wheels");
+
+                    var wheels = PlayerOneFilterWheelSDK.POAGetPWCount();
+
+                    for (int i = 0; i < wheels; i++) {
+                        var fw = new PlayerOneFilterWheel(i, profileService);
+                        Logger.Debug($"Adding PlayerOne Filter Wheel {i})");
                         devices.Add(fw);
                     }
                 } catch (Exception ex) {
