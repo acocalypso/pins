@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -22,6 +22,7 @@ using NINA.Equipment.Equipment.MyFilterWheel;
 using NINA.Equipment.Equipment.MyFocuser;
 using NINA.Equipment.Interfaces;
 using NINA.Equipment.Interfaces.ViewModel;
+using NINA.Equipment.SDK.CameraSDKs.AtikSDK;
 using NINA.Equipment.SDK.CameraSDKs.PlayerOneSDK;
 using NINA.Equipment.Utility;
 using NINA.Profile.Interfaces;
@@ -45,6 +46,36 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FilterWheel {
                 var devices = new List<IDevice>();
 
                 devices.Add(new DummyDevice(Loc.Instance["LblNoFilterwheel"]));
+
+                // Atik EFW
+                try {
+                    Logger.Trace("Adding Atik EFW filter wheels");
+                    for (int i = 0; i < 10; i++) {
+                        if (AtikCameraDll.ArtemisEfwIsPresent(i)) {
+                            var wheel = new AtikFilterWheel(i, profileService);
+                            Logger.Debug($"Adding Atik Filter Wheel {i} as {wheel.Name}");
+                            devices.Add(wheel);
+                        }
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
+                // Atik internal Wheels
+                try {
+                    Logger.Trace("Adding Atik internal filter wheels");
+                    var atikDevices = AtikCameraDll.GetDevicesCount();
+                    Logger.Trace($"Cameras found: {atikDevices}");
+                    for (int i = 0; i < atikDevices; i++) {
+                        var wheel = new AtikInternalFilterWheel(i, profileService);
+                        if (wheel.CameraHasInternalFilterWheel) {
+                            Logger.Debug($"Adding Atik internal Filter Wheel {i} as {wheel.Name}");
+                            devices.Add(wheel);
+                        }
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
 
                 /*
                  * QHY - Integrated or 4-pin connected filter wheels only
@@ -209,7 +240,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FilterWheel {
                     int[] ids = new int[AOFilterWheel.OFW_MAX_NUM];
                     AOFilterWheel.FilterWheelScan(out var ofws, ids);
                     for (int i = 0; i < ofws; i++) {
-                        var ofw= new OasisFilterWheel(ids[i], profileService);
+                        var ofw = new OasisFilterWheel(ids[i], profileService);
                         Logger.Debug($"Adding Oasis Filter Wheel: {ofw.Name}");
                         devices.Add(ofw);
                     }

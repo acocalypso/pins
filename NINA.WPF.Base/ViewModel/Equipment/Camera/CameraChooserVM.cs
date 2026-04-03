@@ -21,6 +21,7 @@ using QHYCCD;
 using System;
 using System.Collections.Generic;
 using ZWOptical.ASISDK;
+using NINA.Equipment.SDK.CameraSDKs.AtikSDK;
 using NINA.Equipment.Utility;
 using NINA.Core.Locale;
 using NINA.Equipment.Equipment;
@@ -79,6 +80,20 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                         if (((ToupTekAlikeFlag)info.model.flag & ToupTekAlikeFlag.FLAG_AUTOFOCUSER) > 0) { continue; }
                         var cam = new ToupTekAlikeCamera(instance.ToDeviceInfo(), new AltairSDKWrapper(), profileService, exposureDataFactory);
                         devices.Add(cam);
+                    }
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
+                /* Atik */
+                try {
+                    var atikDevices = AtikCameraDll.GetDevicesCount();
+                    Logger.Info($"Found {atikDevices} Atik Cameras");
+                    if (atikDevices > 0) {
+                        for (int i = 0; i < atikDevices; i++) {                            
+                            var cam = new AtikCamera(i, profileService, exposureDataFactory);
+                            devices.Add(cam);
+                        }
                     }
                 } catch (Exception ex) {
                     Logger.Error(ex);
