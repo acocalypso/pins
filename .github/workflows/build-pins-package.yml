@@ -355,7 +355,7 @@ jobs:
           cp systemd/sysupdate-api.service build/etc/systemd/system/
 
           # Udev rules
-          cp packaging/99-asi.rules build/lib/udev/rules.d/99-asi.rules
+          cp packaging/zz-pins.rules build/lib/udev/rules.d/zz-pins.rules
                   
           # Sudoers
           cp packaging/sudoers build/etc/sudoers.d/sysupdate-api
