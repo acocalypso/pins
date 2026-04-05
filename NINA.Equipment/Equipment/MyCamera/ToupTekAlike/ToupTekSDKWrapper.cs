@@ -224,6 +224,7 @@ namespace NINA.Equipment.Equipment.MyCamera.ToupTekAlike {
 
         public bool Trigger(ushort v) {
             using var _ = lockObj.EnterScope();
+            if (sdk == null) { return false; }
             return sdk.Trigger(v);
         }
 

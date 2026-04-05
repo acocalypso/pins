@@ -46,6 +46,7 @@ PI.N.S. supports a wide range of astronomy equipment. Here is a list of tested d
 ### 🔭 **Mounts**
 - 10Micron
 - OnStep
+- ZWO
 
 ### 🌟 **Flat Panels**
 - Gemini
