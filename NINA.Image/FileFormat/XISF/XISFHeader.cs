@@ -59,7 +59,7 @@ namespace NINA.Image.FileFormat.XISF {
             Xisf.Add(MetaData);
 
             Content = new XDocument(
-                new XDeclaration("1.0", "UTF-8", null), 
+                new XDeclaration("1.0", "UTF-8", null),
                 Xisf
             );
         }
@@ -683,7 +683,7 @@ namespace NINA.Image.FileFormat.XISF {
             }
 
             AddImageProperty(XISFImageProperty.Observation.Equinox, 2000d, "Equinox of celestial coordinate system");
-            AddImageFITSKeyword("SWCREATE", string.Format("N.I.N.A. {0} ({1})", CoreUtil.Version, DllLoader.IsX86() ? "x86" : "x64"), "Software that created this file");
+            AddImageFITSKeyword("SWCREATE", string.Format("PI N Stars (N.I.N.A. {0} ({1}))", CoreUtil.Version, DllLoader.GetProcessorArchitecture()), "Software that created this file");
 
             foreach (var elem in metaData.GenericHeaders) {
                 switch (elem) {
@@ -877,7 +877,7 @@ namespace NINA.Image.FileFormat.XISF {
         /// <param name="imageProperties"></param>
         /// <param name="imageType"></param>
         public void AddImageMetaData(ImageProperties imageProperties, string imageType, XISFSampleFormat format = XISFSampleFormat.UInt16) {
-            if (imageType == "SNAPSHOT") { imageType = "LIGHT"; } 
+            if (imageType == "SNAPSHOT") { imageType = "LIGHT"; }
 
             XElement image = new XElement(xmlns + "Image",
                     new XAttribute("geometry", imageProperties.Width + ":" + imageProperties.Height + ":" + "1"),

@@ -31,6 +31,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -1622,7 +1623,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
         private double GetQhySensorAirPressure() {
             double pressure = double.NaN;
 
-            if (Connected && QhyHasSensorHumidity) {
+            if (Connected && QhyHasSensorAirPressure) {
                 Sdk.GetPressure(ref pressure);
             }
 
@@ -1773,6 +1774,11 @@ namespace NINA.Equipment.Equipment.MyCamera {
         }
 
         private void DriverVersionCheck() {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                Logger.Debug("QHYCCD: Skipping Fx3DriverVersionCheck on non-Windows platform.");
+                return;
+            }
+
             // Minimum driver versions. Key: Driver name. Value: Minimum driver version
             var driverDatabase = new Dictionary<string, string> {
                 { "QHYCameras_IO", "25.4.10.1516" },

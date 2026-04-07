@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -89,7 +89,7 @@ namespace NINA.Core.Utility {
                         // Register on NINA.Equipment assembly so all vendor SDKs can use it
                         var equipmentAssembly = AppDomain.CurrentDomain.GetAssemblies()
                             .FirstOrDefault(a => a.GetName().Name == "NINA.Equipment");
-                        
+
                         if (equipmentAssembly != null) {
                             NativeLibrary.SetDllImportResolver(equipmentAssembly, ResolveLibrary);
                             Logger.Debug("DllLoader: Registered DllImportResolver on NINA.Equipment assembly");
@@ -163,6 +163,18 @@ namespace NINA.Core.Utility {
 
         public static bool IsX86() {
             return !Environment.Is64BitProcess;
+        }
+
+        public static string GetProcessorArchitecture() {
+            var arch = RuntimeInformation.ProcessArchitecture;
+
+            return arch switch {
+                Architecture.X86 => "x86",
+                Architecture.X64 => "x64",
+                Architecture.Arm => "arm",
+                Architecture.Arm64 => "arm64",
+                _ => "unknown"
+            };
         }
     }
 }
