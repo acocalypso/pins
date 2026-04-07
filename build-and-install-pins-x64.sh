@@ -102,6 +102,7 @@ PHD2_OPENCV_VERSION="${PHD2_OPENCV_VERSION:-4.11.0}"
 OPENCVSHARP_REPO_URL="${OPENCVSHARP_REPO_URL:-https://github.com/shimat/opencvsharp.git}"
 OPENCVSHARP_BRANCH="${OPENCVSHARP_BRANCH:-main}"
 OPENCVSHARP_WORKDIR="${OPENCVSHARP_WORKDIR:-artifacts/src/opencvsharp}"
+OPENCVSHARP_OPENCV_VERSION="${OPENCVSHARP_OPENCV_VERSION:-4.11.0}"
 
 SETUP_RUNTIME_PREREQS="${SETUP_RUNTIME_PREREQS:-true}"
 SETUP_FRAMINGASSISTANT_CACHE="${SETUP_FRAMINGASSISTANT_CACHE:-true}"
@@ -288,13 +289,37 @@ build_and_stage_opencvsharp_extern() {
 
   git clone --recursive --branch "$clone_branch" "$OPENCVSHARP_REPO_URL" "$OPENCVSHARP_WORKDIR"
 
-  local opencv_src="$OPENCVSHARP_WORKDIR/opencv"
-  local opencv_contrib_modules="$OPENCVSHARP_WORKDIR/opencv_contrib/modules"
-  local opencv_build_dir="$OPENCVSHARP_WORKDIR/opencv/build"
+  local opencv_src="$OPENCVSHARP_WORKDIR/opencv-src-${OPENCVSHARP_OPENCV_VERSION}"
+  local opencv_contrib_src="$OPENCVSHARP_WORKDIR/opencv-contrib-src-${OPENCVSHARP_OPENCV_VERSION}"
+  local opencv_contrib_modules="$opencv_contrib_src/modules"
+  local opencv_build_dir="$OPENCVSHARP_WORKDIR/opencv-build-${OPENCVSHARP_OPENCV_VERSION}"
   local opencv_install_dir="$OPENCVSHARP_WORKDIR/opencv_artifacts"
 
-  [[ -d "$opencv_src" ]] || fail "OpenCvSharp submodule 'opencv' was not cloned"
-  [[ -d "$opencv_contrib_modules" ]] || fail "OpenCvSharp submodule 'opencv_contrib' was not cloned"
+  rm -rf "$opencv_src" "$opencv_contrib_src" "$opencv_build_dir"
+  mkdir -p "$opencv_src" "$opencv_contrib_src"
+
+  local opencv_tar="$OPENCVSHARP_WORKDIR/opencv-${OPENCVSHARP_OPENCV_VERSION}.tar.gz"
+  local opencv_contrib_tar="$OPENCVSHARP_WORKDIR/opencv_contrib-${OPENCVSHARP_OPENCV_VERSION}.tar.gz"
+
+  curl -fL --retry 5 --retry-delay 5 \
+    "https://codeload.github.com/opencv/opencv/tar.gz/refs/tags/${OPENCVSHARP_OPENCV_VERSION}" \
+    -o "$opencv_tar"
+  curl -fL --retry 5 --retry-delay 5 \
+    "https://codeload.github.com/opencv/opencv_contrib/tar.gz/refs/tags/${OPENCVSHARP_OPENCV_VERSION}" \
+    -o "$opencv_contrib_tar"
+
+  tar -xzf "$opencv_tar" -C "$OPENCVSHARP_WORKDIR"
+  tar -xzf "$opencv_contrib_tar" -C "$OPENCVSHARP_WORKDIR"
+
+  local extracted_opencv_dir="$OPENCVSHARP_WORKDIR/opencv-${OPENCVSHARP_OPENCV_VERSION}"
+  local extracted_opencv_contrib_dir="$OPENCVSHARP_WORKDIR/opencv_contrib-${OPENCVSHARP_OPENCV_VERSION}"
+  [[ -d "$extracted_opencv_dir" ]] || fail "Failed to extract OpenCV ${OPENCVSHARP_OPENCV_VERSION}"
+  [[ -d "$extracted_opencv_contrib_dir" ]] || fail "Failed to extract OpenCV contrib ${OPENCVSHARP_OPENCV_VERSION}"
+
+  mv "$extracted_opencv_dir" "$opencv_src"
+  mv "$extracted_opencv_contrib_dir" "$opencv_contrib_src"
+
+  [[ -d "$opencv_contrib_modules" ]] || fail "OpenCV contrib modules directory missing: $opencv_contrib_modules"
 
   local opencv_cache_args=()
   if [[ -f "$OPENCVSHARP_WORKDIR/cmake/opencv_build_options.cmake" ]]; then
@@ -306,16 +331,23 @@ build_and_stage_opencvsharp_extern() {
     -B "$opencv_build_dir" \
     -D CMAKE_BUILD_TYPE=Release \
     -D OPENCV_EXTRA_MODULES_PATH="$opencv_contrib_modules" \
+    -D OPENCV_ENABLE_NONFREE=ON \
+    -D BUILD_opencv_xfeatures2d=ON \
     -D CMAKE_INSTALL_PREFIX="$opencv_install_dir"
 
   cmake --build "$opencv_build_dir" --parallel "$(nproc)"
   cmake --install "$opencv_build_dir"
+
+  local opencv_cmake_dir
+  opencv_cmake_dir="$(find "$opencv_install_dir" -type d -path '*/opencv4' | head -n 1 || true)"
+  [[ -n "$opencv_cmake_dir" ]] || fail "Could not locate OpenCV CMake package directory under $opencv_install_dir"
 
   local cmake_prefix
   cmake_prefix="$opencv_install_dir;/usr/local;/usr"
 
   cmake -S "$OPENCVSHARP_WORKDIR/src" -B "$OPENCVSHARP_WORKDIR/src/build" \
     -D CMAKE_BUILD_TYPE=Release \
+    -D OpenCV_DIR="$opencv_cmake_dir" \
     -D CMAKE_PREFIX_PATH="$cmake_prefix"
 
   cmake --build "$OPENCVSHARP_WORKDIR/src/build" --parallel "$(nproc)"
