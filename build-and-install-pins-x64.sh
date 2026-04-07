@@ -19,6 +19,13 @@ fail() {
   exit 1
 }
 
+is_truthy() {
+  case "${1,,}" in
+    1|true|yes|y|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 run_as_root() {
   if [[ "${EUID}" -eq 0 ]]; then
     "$@"
@@ -70,6 +77,19 @@ PHD2_REPO_URL="${PHD2_REPO_URL:-https://github.com/acocalypso/phd2.git}"
 PHD2_BRANCH="${PHD2_BRANCH:-master}"
 PHD2_INDI_VERSION="${PHD2_INDI_VERSION:-2.1.9}"
 PHD2_OPENCV_VERSION="${PHD2_OPENCV_VERSION:-4.11.0}"
+
+SETUP_RUNTIME_PREREQS="${SETUP_RUNTIME_PREREQS:-true}"
+SETUP_FRAMINGASSISTANT_CACHE="${SETUP_FRAMINGASSISTANT_CACHE:-true}"
+SETUP_ASTAP="${SETUP_ASTAP:-true}"
+RUNTIME_SETUP_STRICT="${RUNTIME_SETUP_STRICT:-false}"
+
+FRAMINGASSISTANT_CACHE_URL="${FRAMINGASSISTANT_CACHE_URL:-https://nighttime-imaging.eu/downloads/Setup/Releases/FramingAssistantCache_Full.zip}"
+FRAMINGASSISTANT_CACHE_ROOT="${FRAMINGASSISTANT_CACHE_ROOT:-$TARGET_HOME/.local/share/NINA}"
+FRAMINGASSISTANT_CACHE_DIR="${FRAMINGASSISTANT_CACHE_DIR:-$FRAMINGASSISTANT_CACHE_ROOT/FramingAssistantCache}"
+
+ASTAP_CLI_SOURCE="${ASTAP_CLI_SOURCE:-}"
+ASTAP_PRIMARY_PATH="${ASTAP_PRIMARY_PATH:-/usr/local/bin/astap_cli}"
+ASTAP_ALT_PATH="${ASTAP_ALT_PATH:-/usr/bin/astap}"
 
 BUILD_NUMBER="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-$(date +%s)}}"
 RELEASE_DATE="$(date +%d%m%Y)"
@@ -1193,6 +1213,111 @@ install_built_packages() {
   log "Installed ${#unique_debs[@]} package(s)"
 }
 
+setup_framingassistant_cache() {
+  log "Setting up Offline Sky Map Cache (FramingAssistantCache)"
+
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  local zip_path="$tmp_dir/FramingAssistantCache_Full.zip"
+  local unzip_dir="$tmp_dir/unzipped"
+
+  mkdir -p "$FRAMINGASSISTANT_CACHE_ROOT"
+
+  if ! curl -L --fail --retry 3 --retry-delay 5 -o "$zip_path" "$FRAMINGASSISTANT_CACHE_URL"; then
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  rm -rf "$FRAMINGASSISTANT_CACHE_DIR"
+  mkdir -p "$FRAMINGASSISTANT_CACHE_DIR"
+  unzip -q "$zip_path" -d "$unzip_dir"
+
+  if [[ -d "$unzip_dir/FramingAssistantCache" ]]; then
+    rsync -a "$unzip_dir/FramingAssistantCache/" "$FRAMINGASSISTANT_CACHE_DIR/"
+  elif [[ -d "$unzip_dir/framingassistantcache" ]]; then
+    rsync -a "$unzip_dir/framingassistantcache/" "$FRAMINGASSISTANT_CACHE_DIR/"
+  else
+    rsync -a "$unzip_dir/" "$FRAMINGASSISTANT_CACHE_DIR/"
+  fi
+
+  run_as_root chown -R "$TARGET_USER:$TARGET_USER" "$FRAMINGASSISTANT_CACHE_DIR" || true
+  rm -rf "$tmp_dir"
+
+  log "FramingAssistant cache installed at: $FRAMINGASSISTANT_CACHE_DIR"
+}
+
+setup_astap() {
+  log "Setting up ASTAP"
+
+  run_as_root apt-get update
+  run_as_root apt-get install -y astap || true
+
+  if command -v astap >/dev/null 2>&1; then
+    log "ASTAP available at: $(command -v astap)"
+    warn "ASTAP star database files are still required and must be installed separately"
+    return 0
+  fi
+
+  if [[ -x "$ASTAP_PRIMARY_PATH" || -x "$ASTAP_ALT_PATH" ]]; then
+    log "ASTAP CLI already present"
+    return 0
+  fi
+
+  if [[ -n "$ASTAP_CLI_SOURCE" ]]; then
+    if [[ ! -f "$ASTAP_CLI_SOURCE" ]]; then
+      warn "ASTAP_CLI_SOURCE does not exist: $ASTAP_CLI_SOURCE"
+      return 1
+    fi
+
+    run_as_root install -m 755 "$ASTAP_CLI_SOURCE" "$ASTAP_PRIMARY_PATH"
+    run_as_root ln -sf "$ASTAP_PRIMARY_PATH" "$ASTAP_ALT_PATH"
+    "$ASTAP_PRIMARY_PATH" -h >/dev/null 2>&1 || true
+
+    log "ASTAP CLI installed at: $ASTAP_PRIMARY_PATH"
+    warn "ASTAP star database files are still required and must be installed separately"
+    return 0
+  fi
+
+  warn "ASTAP not found in apt and ASTAP_CLI_SOURCE is not set"
+  warn "Set ASTAP_CLI_SOURCE to a local astap_cli binary to install manually"
+  return 1
+}
+
+setup_runtime_prerequisites() {
+  if ! is_truthy "$SETUP_RUNTIME_PREREQS"; then
+    log "Skipping runtime prerequisites setup"
+    return
+  fi
+
+  log "Applying runtime prerequisites from BUILD_PINS.md"
+
+  local runtime_errors=0
+
+  if is_truthy "$SETUP_FRAMINGASSISTANT_CACHE"; then
+    if ! setup_framingassistant_cache; then
+      warn "Failed to set up FramingAssistant cache"
+      runtime_errors=$((runtime_errors + 1))
+    fi
+  fi
+
+  if is_truthy "$SETUP_ASTAP"; then
+    if ! setup_astap; then
+      warn "Failed to set up ASTAP"
+      runtime_errors=$((runtime_errors + 1))
+    fi
+  fi
+
+  if [[ "$runtime_errors" -gt 0 ]] && is_truthy "$RUNTIME_SETUP_STRICT"; then
+    fail "Runtime prerequisite setup failed with $runtime_errors error(s)"
+  fi
+
+  if [[ "$runtime_errors" -gt 0 ]]; then
+    warn "Runtime setup completed with $runtime_errors warning(s)"
+  else
+    log "Runtime prerequisites setup completed"
+  fi
+}
+
 print_summary() {
   log "Build and install completed"
   echo
@@ -1237,6 +1362,7 @@ main() {
   build_phd2_package
   create_firmware_bundle
   install_built_packages
+  setup_runtime_prerequisites
 
   print_summary
 }
