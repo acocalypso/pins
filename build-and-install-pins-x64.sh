@@ -505,10 +505,18 @@ build_and_stage_opencvsharp_extern() {
   local cmake_prefix
   cmake_prefix="$opencv_install_dir"
 
+  local extern_cmakelists="$opencvsharp_root/src/OpenCvSharpExtern/CMakeLists.txt"
+  [[ -f "$extern_cmakelists" ]] || fail "OpenCvSharpExtern CMakeLists not found: $extern_cmakelists"
+  if ! grep -q 'find_package(Eigen3' "$extern_cmakelists"; then
+    # OpenCV 4.11 exported targets can reference Eigen3::Eigen; ensure it exists.
+    sed -i 's/find_package(OpenCV REQUIRED)/find_package(Eigen3 REQUIRED)\nfind_package(OpenCV REQUIRED)/' "$extern_cmakelists"
+  fi
+
   cmake -S "$opencvsharp_root/src" -B "$extern_build_dir" \
     -D CMAKE_BUILD_TYPE=Release \
     -DOpenCV_DIR:PATH="$opencv_cmake_dir" \
     -DOpenCV_ROOT:PATH="$opencv_install_dir" \
+    -DEigen3_DIR:PATH="/usr/share/eigen3/cmake" \
     -DCMAKE_PREFIX_PATH:PATH="$cmake_prefix"
 
   local resolved_opencv_dir
