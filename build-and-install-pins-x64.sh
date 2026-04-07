@@ -287,7 +287,7 @@ build_and_stage_opencvsharp_extern() {
     log "Using OpenCvSharp default branch: $clone_branch"
   fi
 
-  git clone --recursive --branch "$clone_branch" "$OPENCVSHARP_REPO_URL" "$OPENCVSHARP_WORKDIR"
+  git clone --depth 1 --branch "$clone_branch" "$OPENCVSHARP_REPO_URL" "$OPENCVSHARP_WORKDIR"
 
   local opencv_src="$OPENCVSHARP_WORKDIR/opencv-src-${OPENCVSHARP_OPENCV_VERSION}"
   local opencv_contrib_src="$OPENCVSHARP_WORKDIR/opencv-contrib-src-${OPENCVSHARP_OPENCV_VERSION}"
@@ -296,7 +296,6 @@ build_and_stage_opencvsharp_extern() {
   local opencv_install_dir="$OPENCVSHARP_WORKDIR/opencv_artifacts"
 
   rm -rf "$opencv_src" "$opencv_contrib_src" "$opencv_build_dir"
-  mkdir -p "$opencv_src" "$opencv_contrib_src"
 
   local opencv_tar="$OPENCVSHARP_WORKDIR/opencv-${OPENCVSHARP_OPENCV_VERSION}.tar.gz"
   local opencv_contrib_tar="$OPENCVSHARP_WORKDIR/opencv_contrib-${OPENCVSHARP_OPENCV_VERSION}.tar.gz"
