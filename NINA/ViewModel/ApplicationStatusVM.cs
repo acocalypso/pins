@@ -63,6 +63,10 @@ namespace NINA.ViewModel {
         private readonly ConcurrentDictionary<string, bool> _activeSources = new();
 
         public void StatusUpdate(ApplicationStatus status) {
+            if (status?.Source == null) {
+                return;
+            }
+
             // Broadcast via SignalR immediately on the calling thread.
             // Do NOT put this inside BeginInvoke — the WPF dispatcher is not pumped in the
             // headless server so those callbacks would queue up and never (or very tardily) fire.

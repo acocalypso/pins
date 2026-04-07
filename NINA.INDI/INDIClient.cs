@@ -401,8 +401,8 @@ namespace NINA.INDI {
                 // Device list
                 var devices = new Dictionary<string, INDIDeviceInfo>();
 
-                // Empty string means no indi driver to be loaded
-                if (driver != string.Empty) {
+                // Empty string or null means no indi driver to be loaded
+                if (!string.IsNullOrEmpty(driver)) {
                     // If driver is not yet loaded, load it, but unload any other drivers of the same interface
                     if (!_loadedDrivers.ContainsKey(driver)) {
                         // Unload any other driver already serving this interface

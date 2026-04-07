@@ -23,6 +23,7 @@ This fork is not affiliated with the original N.I.N.A. authors. Please see [N.I.
 PI.N.S. supports a wide range of astronomy equipment. Here is a list of tested devices:
 
 ### 📷 **Cameras**
+- QHY (some users report timing issues)
 - ToupTek
 - ZWO
 
@@ -45,7 +46,10 @@ PI.N.S. supports a wide range of astronomy equipment. Here is a list of tested d
 
 ### 🔭 **Mounts**
 - 10Micron
+- iOptron
 - OnStep
+- SkyWatcher
+- ZWO
 
 ### 🌟 **Flat Panels**
 - Gemini
