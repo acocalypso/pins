@@ -335,7 +335,19 @@ update_submodules_except_external() {
   git lfs install
 
   local excluded_path="NINA/External"
-  while read -r _ path; do
+  while IFS= read -r key; do
+    local path
+    path="$(git config -f .gitmodules --get "$key" || true)"
+    # Normalize CRLF and trim whitespace to avoid empty/invalid pathspecs.
+    path="${path//$'\r'/}"
+    path="${path#${path%%[![:space:]]*}}"
+    path="${path%${path##*[![:space:]]}}"
+
+    if [[ -z "$path" ]]; then
+      warn "Skipping submodule entry with empty path for key: $key"
+      continue
+    fi
+
     if [[ "$path" == "$excluded_path" ]]; then
       log "Skipping submodule $path"
       continue
@@ -348,7 +360,7 @@ update_submodules_except_external() {
 
     warn "Remote update failed for $path; falling back to pinned commit"
     git submodule update --init --recursive "$path"
-  done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$')
+  done < <(git config -f .gitmodules --name-only --get-regexp '^submodule\..*\.path$' || true)
 }
 
 clone_repo_fresh() {
