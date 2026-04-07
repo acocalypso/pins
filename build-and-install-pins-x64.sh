@@ -100,7 +100,7 @@ PHD2_INDI_VERSION="${PHD2_INDI_VERSION:-2.1.9}"
 PHD2_OPENCV_VERSION="${PHD2_OPENCV_VERSION:-4.11.0}"
 
 OPENCVSHARP_REPO_URL="${OPENCVSHARP_REPO_URL:-https://github.com/shimat/opencvsharp.git}"
-OPENCVSHARP_BRANCH="${OPENCVSHARP_BRANCH:-master}"
+OPENCVSHARP_BRANCH="${OPENCVSHARP_BRANCH:-main}"
 OPENCVSHARP_WORKDIR="${OPENCVSHARP_WORKDIR:-artifacts/src/opencvsharp}"
 
 SETUP_RUNTIME_PREREQS="${SETUP_RUNTIME_PREREQS:-true}"
@@ -277,7 +277,16 @@ build_and_stage_opencvsharp_extern() {
 
   rm -rf "$OPENCVSHARP_WORKDIR"
   mkdir -p "$(dirname "$OPENCVSHARP_WORKDIR")"
-  git clone --recursive --depth 1 --branch "$OPENCVSHARP_BRANCH" "$OPENCVSHARP_REPO_URL" "$OPENCVSHARP_WORKDIR"
+
+  local clone_branch="$OPENCVSHARP_BRANCH"
+  if ! git ls-remote --exit-code --heads "$OPENCVSHARP_REPO_URL" "$clone_branch" >/dev/null 2>&1; then
+    warn "OpenCvSharp branch '$clone_branch' not found, resolving remote default branch"
+    clone_branch="$(git ls-remote --symref "$OPENCVSHARP_REPO_URL" HEAD 2>/dev/null | awk '/^ref:/ { sub("refs/heads/", "", $2); print $2; exit }')"
+    [[ -n "$clone_branch" ]] || fail "Could not determine default branch for $OPENCVSHARP_REPO_URL"
+    log "Using OpenCvSharp default branch: $clone_branch"
+  fi
+
+  git clone --recursive --depth 1 --branch "$clone_branch" "$OPENCVSHARP_REPO_URL" "$OPENCVSHARP_WORKDIR"
 
   local cmake_prefix
   cmake_prefix="/usr/local;/usr"
