@@ -66,6 +66,11 @@ PLUGIN_FAILURES_FILE="${PLUGIN_FAILURES_FILE:-artifacts/plugin-build-failures.lo
 INDI_VERSION="${INDI_VERSION:-2.1.9}"
 INDI_DEB_ROOT="${INDI_DEB_ROOT:-artifacts/indi-debroot}"
 
+PHD2_REPO_URL="${PHD2_REPO_URL:-https://github.com/acocalypso/phd2.git}"
+PHD2_BRANCH="${PHD2_BRANCH:-master}"
+PHD2_INDI_VERSION="${PHD2_INDI_VERSION:-2.1.9}"
+PHD2_OPENCV_VERSION="${PHD2_OPENCV_VERSION:-4.11.0}"
+
 BUILD_NUMBER="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-$(date +%s)}}"
 RELEASE_DATE="$(date +%d%m%Y)"
 RELEASE_VERSION="v${RELEASE_DATE}-${BUILD_NUMBER}"
@@ -96,34 +101,50 @@ install_build_prerequisites() {
     apt-transport-https \
     autoconf \
     autoconf-archive \
+    automake \
     build-essential \
     ca-certificates \
     cdbs \
     cmake \
     curl \
+    debhelper \
+    devscripts \
     default-jre-headless \
     dkms \
     dpkg-dev \
+    equivs \
     fakeroot \
     fxload \
+    gettext \
     git \
     git-lfs \
     gnupg \
+    libavdevice-dev \
     libboost-regex-dev \
+    libboost-all-dev \
     libcfitsio-dev \
+    libczmq-dev \
     libcurl4-gnutls-dev \
     libdc1394-dev \
+    libeigen3-dev \
     libev-dev \
     libfftw3-dev \
+    libftdi1-dev \
     libftdi-dev \
     libgphoto2-dev \
     libgps-dev \
     libgsl-dev \
+    libgtest-dev \
+    libgmock-dev \
+    libhidapi-dev \
     libicu-dev \
     libjpeg-dev \
     libjsoncpp-dev \
     libkrb5-dev \
+    liblimesuite-dev \
     libnova-dev \
+    libopencv-dev \
+    libpng-dev \
     libraw-dev \
     librtlsdr-dev \
     libssl-dev \
@@ -133,12 +154,19 @@ install_build_prerequisites() {
     libudev-dev \
     libusb-1.0-0-dev \
     libusb-dev \
+    libv4l-dev \
+    libwxgtk3.2-dev \
+    libx11-dev \
     libxisf-dev \
+    libzmq3-dev \
     ninja-build \
+    nlohmann-json3-dev \
     pkg-config \
     rsync \
     unzip \
     wget \
+    wx-common \
+    wx3.2-i18n \
     zip \
     zlib1g-dev
 }
@@ -992,6 +1020,138 @@ build_indi_debian_packages() {
   log "Built INDI packages"
 }
 
+build_phd2_package() {
+  log "Building PHD2 Debian package for $DEB_ARCH"
+
+  local phd2_src="artifacts/src/phd2"
+  rm -rf "$phd2_src"
+  mkdir -p "$(dirname "$phd2_src")"
+  git clone --branch "$PHD2_BRANCH" --single-branch "$PHD2_REPO_URL" "$phd2_src"
+
+  # The workflow enables source repositories before running mk-build-deps.
+  run_as_root bash -lc "set -euo pipefail; \
+    if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
+      sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources; \
+    elif [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+      sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/debian.sources; \
+    elif [ -f /etc/apt/sources.list ]; then \
+      sed -i '/^deb /p; s/^deb /deb-src /' /etc/apt/sources.list; \
+    fi"
+  run_as_root apt-get update
+
+  local projects_home
+  projects_home="${HOME}/Projects"
+  mkdir -p "$projects_home" "$projects_home/build"
+
+  local indi_core_src="$projects_home/indi-core"
+  local indi_core_build="$projects_home/build/indi-core"
+  rm -rf "$indi_core_src" "$indi_core_build"
+  git clone --depth 1 --branch "v$PHD2_INDI_VERSION" https://github.com/indilib/indi.git "$indi_core_src"
+  cmake -S "$indi_core_src" -B "$indi_core_build" \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=Release
+  cmake --build "$indi_core_build" --parallel "$(nproc)"
+  run_as_root cmake --install "$indi_core_build"
+  run_as_root ldconfig
+
+  local equivs_dir="/tmp/libindi-dev-equivs"
+  rm -rf "$equivs_dir"
+  mkdir -p "$equivs_dir"
+  cat > "$equivs_dir/control" <<EOF
+Section: misc
+Priority: optional
+Standards-Version: 4.7.0
+
+Package: libindi-dev
+Version: ${PHD2_INDI_VERSION}
+Maintainer: Local Builder <builder@local>
+Architecture: all
+Description: Dummy libindi-dev package (local build)
+ Dummy package to satisfy Build-Depends when INDI is built from source.
+EOF
+  (
+    cd "$equivs_dir"
+    equivs-build control
+  )
+  run_as_root dpkg -i "$equivs_dir/libindi-dev_${PHD2_INDI_VERSION}_all.deb"
+
+  (
+    cd "$phd2_src"
+    run_as_root mk-build-deps --install --remove \
+      --tool "apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends -y" \
+      debian/control
+  )
+
+  local opencv_tar="opencv-${PHD2_OPENCV_VERSION}.tar.gz"
+  rm -f "$opencv_tar"
+  rm -rf "opencv-${PHD2_OPENCV_VERSION}"
+  curl -fL --retry 5 --retry-delay 5 \
+    "https://codeload.github.com/opencv/opencv/tar.gz/refs/tags/${PHD2_OPENCV_VERSION}" \
+    -o "$opencv_tar"
+  tar -xzf "$opencv_tar"
+  cmake -S "opencv-${PHD2_OPENCV_VERSION}" -B "opencv-${PHD2_OPENCV_VERSION}/build" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr/local \
+    -DBUILD_LIST=core,imgproc,highgui,videoio,imgcodecs \
+    -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_EXAMPLES=OFF \
+    -DWITH_FFMPEG=ON -DWITH_GSTREAMER=OFF -DWITH_OPENCL=OFF \
+    -DWITH_IPP=OFF -DWITH_TBB=OFF
+  cmake --build "opencv-${PHD2_OPENCV_VERSION}/build" --parallel 3
+  run_as_root cmake --install "opencv-${PHD2_OPENCV_VERSION}/build"
+  run_as_root ldconfig
+
+  local indi_3p_src="$projects_home/indi-3rdparty"
+  local indi_3p_build="$projects_home/build/indi-3rdparty"
+  rm -rf "$indi_3p_src" "$indi_3p_build"
+  git clone --depth 1 --branch "v$PHD2_INDI_VERSION" https://github.com/indilib/indi-3rdparty.git "$indi_3p_src"
+  cmake -S "$indi_3p_src" -B "$indi_3p_build" \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=Release
+  cmake --build "$indi_3p_build" --parallel 4
+  run_as_root cmake --install "$indi_3p_build"
+  run_as_root ldconfig
+
+  (
+    cd "$phd2_src"
+
+    local orig_version
+    orig_version="$(sed -n '1s/^.*(\([^)]*\)).*/\1/p' debian/changelog)"
+    [[ -n "$orig_version" ]] || fail "Unable to parse PHD2 debian/changelog version"
+
+    local base_version
+    base_version="$(printf '%s' "$orig_version" | sed -E 's/-[A-Za-z0-9.+~]+$//')"
+    local new_version
+    new_version="${base_version}-$((30 + BUILD_NUMBER))"
+
+    export DEBEMAIL="builder@local"
+    export DEBFULLNAME="Local Builder"
+    dch --noauto-nmu -v "$new_version" "Local x64 build ${BUILD_NUMBER}"
+
+    export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+    export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH:-}"
+    export CMAKE_PREFIX_PATH="/usr/local:${CMAKE_PREFIX_PATH:-}"
+    export OpenCV_DIR="/usr/local/lib/cmake/opencv4"
+    export DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)"
+
+    dpkg-buildpackage -b -us -uc -a "$DEB_ARCH"
+  )
+
+  mkdir -p artifacts
+  find artifacts/src -maxdepth 3 -type f -name '*.deb' -path '*/phd2*' -exec cp -f {} artifacts/ \;
+
+  local phd2_deb
+  phd2_deb="$(find artifacts -maxdepth 1 -type f -name 'phd2_*_*.deb' ! -name '*dbgsym*' | sort | tail -n 1 || true)"
+  [[ -n "$phd2_deb" ]] || fail "Failed to locate built PHD2 .deb artifact"
+
+  dpkg-deb -c "$phd2_deb" | tee /tmp/phd2-deb-contents.txt >/dev/null
+  grep -q './etc/systemd/system/phd2.service' /tmp/phd2-deb-contents.txt || fail "phd2.service missing inside package"
+
+  sha256sum "$phd2_deb" > "$phd2_deb.sha256"
+  record_built_deb "$phd2_deb"
+
+  log "Built PHD2 package: $phd2_deb"
+}
+
 create_firmware_bundle() {
   log "Creating firmware bundle zip"
 
@@ -1074,6 +1234,7 @@ main() {
   build_wandereretasdk_package
   build_plugins
   build_indi_debian_packages
+  build_phd2_package
   create_firmware_bundle
   install_built_packages
 
