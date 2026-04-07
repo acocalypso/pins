@@ -78,6 +78,7 @@ PINS_REPO_BRANCH="${PINS_REPO_BRANCH:-develop}"
 PINS_WORKDIR="${PINS_WORKDIR:-$TARGET_HOME/pins-build-src}"
 AUTO_CLONE_PINS_REPO="${AUTO_CLONE_PINS_REPO:-true}"
 AUTO_INSTALL_BOOTSTRAP_TOOLS="${AUTO_INSTALL_BOOTSTRAP_TOOLS:-true}"
+REUSE_SUCCESSFUL_BUILD="${REUSE_SUCCESSFUL_BUILD:-true}"
 
 INSTALL_DIRECTORY="${INSTALL_DIRECTORY:-$TARGET_HOME/pins}"
 PUBLISH_DIRECTORY="${PUBLISH_DIRECTORY:-artifacts/publish}"
@@ -134,9 +135,158 @@ CORE_EXCLUDES_FILE=""
 
 BUILT_DEBS=()
 
+STATE_DIR="artifacts/cache"
+BUILD_STATE_FILE="$STATE_DIR/build-state.env"
+BUILD_ARTIFACT_MANIFEST="$STATE_DIR/last-successful-debs.txt"
+CURRENT_SOURCE_FINGERPRINT=""
+
 record_built_deb() {
   local deb_path="$1"
   BUILT_DEBS+=("$deb_path")
+}
+
+get_remote_sha() {
+  local repo_url="$1"
+  local ref="${2:-}"
+  local sha=""
+
+  if [[ -n "$ref" ]]; then
+    sha="$(git ls-remote --heads "$repo_url" "$ref" 2>/dev/null | awk 'NR==1 { print $1 }')"
+    if [[ -z "$sha" ]]; then
+      sha="$(git ls-remote "$repo_url" "refs/heads/$ref" 2>/dev/null | awk 'NR==1 { print $1 }')"
+    fi
+  else
+    sha="$(git ls-remote "$repo_url" HEAD 2>/dev/null | awk 'NR==1 { print $1 }')"
+  fi
+
+  echo "$sha"
+}
+
+compute_source_fingerprint() {
+  local pins_head
+  pins_head="$(git rev-parse HEAD 2>/dev/null || true)"
+  [[ -n "$pins_head" ]] || fail "Could not resolve local pins git HEAD"
+
+  local unresolved=0
+  local inputs=()
+
+  inputs+=("pins-local:$pins_head")
+  inputs+=("pins-branch:$PINS_REPO_BRANCH")
+  inputs+=("runtime:$TARGET_RUNTIME")
+  inputs+=("arch:$DEB_ARCH")
+  inputs+=("opencvsharp-opencv:$OPENCVSHARP_OPENCV_VERSION")
+  inputs+=("phd2-indi:$PHD2_INDI_VERSION")
+  inputs+=("indi:$INDI_VERSION")
+
+  local tracked_sources=(
+    "opencvsharp|$OPENCVSHARP_REPO_URL|$OPENCVSHARP_BRANCH"
+    "phd2|$PHD2_REPO_URL|$PHD2_BRANCH"
+    "touch-plugin|https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars|develop"
+    "joko|https://github.com/nitr57/joko.nina.plugins|"
+    "ninaapi|https://github.com/nitr57/ninaAPI|"
+    "phd2tools|https://github.com/nitr57/nina.plugin.phd2tools|"
+    "orbuculum|https://github.com/nitr57/nina.plugin.orbuculum|"
+    "polaralignment|https://github.com/nitr57/nina.plugin.polaralignment|"
+    "livestack|https://github.com/nitr57/nina.plugin.livestack|"
+    "tenmicron|https://github.com/nitr57/NINA.Joko.Plugin.TenMicron|"
+    "pins-plugin|https://github.com/nitr57/pins.plugin|"
+    "pinsdaemon|https://github.com/Touch-N-Stars/pinsdaemon|"
+    "wandereretasdk|https://github.com/nitr57/WandererETASDK|"
+    "touch-frontend|https://github.com/Touch-N-Stars/Touch-N-Stars|develop"
+  )
+
+  local item
+  for item in "${tracked_sources[@]}"; do
+    IFS='|' read -r name url ref <<< "$item"
+    local sha
+    sha="$(get_remote_sha "$url" "$ref")"
+    if [[ -z "$sha" ]]; then
+      unresolved=1
+      sha="UNRESOLVED"
+      warn "Could not resolve remote SHA for $name ($url ${ref:+@$ref})"
+    fi
+    inputs+=("$name:$sha")
+  done
+
+  if [[ "$unresolved" -ne 0 ]]; then
+    # Force rebuild when source freshness cannot be verified reliably.
+    inputs+=("unresolved-remotes:force-rebuild-$(date +%s)")
+  fi
+
+  CURRENT_SOURCE_FINGERPRINT="$(printf '%s\n' "${inputs[@]}" | sha256sum | awk '{print $1}')"
+  [[ -n "$CURRENT_SOURCE_FINGERPRINT" ]] || fail "Failed to compute source fingerprint"
+
+  log "Source fingerprint: $CURRENT_SOURCE_FINGERPRINT"
+}
+
+load_previous_build_state() {
+  PREV_SOURCE_FINGERPRINT=""
+
+  if [[ ! -f "$BUILD_STATE_FILE" ]]; then
+    return
+  fi
+
+  set +u
+  # shellcheck disable=SC1090
+  source "$BUILD_STATE_FILE"
+  set -u
+
+  PREV_SOURCE_FINGERPRINT="${SOURCE_FINGERPRINT:-}"
+}
+
+try_reuse_successful_build() {
+  if ! is_truthy "$REUSE_SUCCESSFUL_BUILD"; then
+    return 1
+  fi
+
+  if [[ -z "${PREV_SOURCE_FINGERPRINT:-}" ]]; then
+    return 1
+  fi
+
+  if [[ "$PREV_SOURCE_FINGERPRINT" != "$CURRENT_SOURCE_FINGERPRINT" ]]; then
+    return 1
+  fi
+
+  if [[ ! -f "$BUILD_ARTIFACT_MANIFEST" ]]; then
+    return 1
+  fi
+
+  mapfile -t previous_debs < "$BUILD_ARTIFACT_MANIFEST"
+  if [[ ${#previous_debs[@]} -eq 0 ]]; then
+    return 1
+  fi
+
+  local deb
+  for deb in "${previous_debs[@]}"; do
+    [[ -n "$deb" ]] || continue
+    if [[ ! -f "$deb" ]]; then
+      return 1
+    fi
+  done
+
+  BUILT_DEBS=()
+  for deb in "${previous_debs[@]}"; do
+    [[ -n "$deb" ]] && BUILT_DEBS+=("$deb")
+  done
+
+  log "No source updates detected since last successful build; reusing existing artifacts"
+  return 0
+}
+
+save_successful_build_state() {
+  mkdir -p "$STATE_DIR"
+
+  mapfile -t unique_debs < <(printf '%s\n' "${BUILT_DEBS[@]}" | awk 'NF && !seen[$0]++')
+  if [[ ${#unique_debs[@]} -eq 0 ]]; then
+    return
+  fi
+
+  printf '%s\n' "${unique_debs[@]}" > "$BUILD_ARTIFACT_MANIFEST"
+
+  {
+    echo "SOURCE_FINGERPRINT=$CURRENT_SOURCE_FINGERPRINT"
+    echo "SAVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$BUILD_STATE_FILE"
 }
 
 install_bootstrap_tools_if_needed() {
@@ -1546,6 +1696,15 @@ main() {
 
   ensure_repo_root
 
+  compute_source_fingerprint
+  load_previous_build_state
+  if try_reuse_successful_build; then
+    install_built_packages
+    setup_runtime_prerequisites
+    print_summary
+    return
+  fi
+
   install_build_prerequisites
   install_dotnet_10
   install_node_22
@@ -1568,6 +1727,7 @@ main() {
   create_firmware_bundle
   install_built_packages
   setup_runtime_prerequisites
+  save_successful_build_state
 
   print_summary
 }
