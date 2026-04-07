@@ -94,6 +94,7 @@ PLUGIN_FAILURES_FILE="${PLUGIN_FAILURES_FILE:-artifacts/plugin-build-failures.lo
 
 INDI_VERSION="${INDI_VERSION:-2.1.9}"
 INDI_DEB_ROOT="${INDI_DEB_ROOT:-artifacts/indi-debroot}"
+INDI_ENABLE_XISF="${INDI_ENABLE_XISF:-false}"
 
 PHD2_REPO_URL="${PHD2_REPO_URL:-https://github.com/acocalypso/phd2.git}"
 PHD2_BRANCH="${PHD2_BRANCH:-master}"
@@ -415,7 +416,6 @@ install_build_prerequisites() {
     libv4l-dev \
     libwxgtk3.2-dev \
     libx11-dev \
-    libxisf-dev \
     libzmq3-dev \
     libwebp-dev \
     ninja-build \
@@ -1112,6 +1112,16 @@ build_indi_debian_packages() {
 
   git clone --branch "v$INDI_VERSION" --depth 1 https://github.com/indilib/indi.git "$indi_src"
 
+  local indi_xisf_args=()
+  if ! is_truthy "$INDI_ENABLE_XISF"; then
+    # LibXISF in distro repos can be older than what INDI expects; disable optional XISF support by default.
+    indi_xisf_args+=(
+      -DCMAKE_DISABLE_FIND_PACKAGE_LibXISF=TRUE
+      -DINDI_WITH_XISF=OFF
+      -DWITH_XISF=OFF
+    )
+  fi
+
   cmake -S "$indi_src" -B "$indi_src/build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
@@ -1124,7 +1134,8 @@ build_indi_debian_packages() {
     -DINDI_BUILD_UNITTESTS=OFF \
     -DINDI_BUILD_INTEGTESTS=OFF \
     -DINDI_BUILD_EXAMPLES=OFF \
-    -DINDI_BUILD_STATIC=OFF
+    -DINDI_BUILD_STATIC=OFF \
+    "${indi_xisf_args[@]}"
 
   cmake --build "$indi_src/build" --parallel "$(nproc)"
 
