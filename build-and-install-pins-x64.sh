@@ -104,6 +104,7 @@ OPENCVSHARP_REPO_URL="${OPENCVSHARP_REPO_URL:-https://github.com/shimat/opencvsh
 OPENCVSHARP_BRANCH="${OPENCVSHARP_BRANCH:-main}"
 OPENCVSHARP_WORKDIR="${OPENCVSHARP_WORKDIR:-artifacts/src/opencvsharp}"
 OPENCVSHARP_OPENCV_VERSION="${OPENCVSHARP_OPENCV_VERSION:-4.11.0}"
+OPENCVSHARP_RUNTIME_PACKAGE="${OPENCVSHARP_RUNTIME_PACKAGE:-OpenCvSharp4.official.runtime.linux-x64}"
 
 SETUP_RUNTIME_PREREQS="${SETUP_RUNTIME_PREREQS:-true}"
 SETUP_FRAMINGASSISTANT_CACHE="${SETUP_FRAMINGASSISTANT_CACHE:-true}"
@@ -179,7 +180,6 @@ compute_source_fingerprint() {
   inputs+=("indi:$INDI_VERSION")
 
   local tracked_sources=(
-    "opencvsharp|$OPENCVSHARP_REPO_URL|$OPENCVSHARP_BRANCH"
     "phd2|$PHD2_REPO_URL|$PHD2_BRANCH"
     "touch-plugin|https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars|develop"
     "joko|https://github.com/nitr57/joko.nina.plugins|"
@@ -423,122 +423,38 @@ install_build_prerequisites() {
     zlib1g-dev
 }
 
-build_and_stage_opencvsharp_extern() {
-  log "Building OpenCvSharpExtern from source"
+stage_opencvsharp_runtime_from_nuget() {
+  log "Staging OpenCvSharp Linux runtime from NuGet"
 
-  rm -rf "$OPENCVSHARP_WORKDIR"
-  mkdir -p "$(dirname "$OPENCVSHARP_WORKDIR")"
+  [[ "$TARGET_RUNTIME" == "linux-x64" ]] || {
+    warn "Skipping OpenCvSharp runtime staging for TARGET_RUNTIME=$TARGET_RUNTIME"
+    return
+  }
 
-  local clone_branch="$OPENCVSHARP_BRANCH"
-  if ! git ls-remote --exit-code --heads "$OPENCVSHARP_REPO_URL" "$clone_branch" >/dev/null 2>&1; then
-    warn "OpenCvSharp branch '$clone_branch' not found, resolving remote default branch"
-    clone_branch="$(git ls-remote --symref "$OPENCVSHARP_REPO_URL" HEAD 2>/dev/null | awk '/^ref:/ { sub("refs/heads/", "", $2); print $2; exit }')"
-    [[ -n "$clone_branch" ]] || fail "Could not determine default branch for $OPENCVSHARP_REPO_URL"
-    log "Using OpenCvSharp default branch: $clone_branch"
+  local runtime_version
+  runtime_version="$(sed -n 's/.*OpenCvSharp4\.official\.runtime\.\$(RuntimeIdentifier)" Version="\([^"]*\)".*/\1/p' NINA/NINA.csproj | head -n 1)"
+  [[ -n "$runtime_version" ]] || fail "Could not parse OpenCvSharp runtime package version from NINA/NINA.csproj"
+
+  local nuget_global_packages
+  nuget_global_packages="$(dotnet nuget locals global-packages --list | sed -n 's/^global-packages: //p' | head -n 1)"
+  [[ -n "$nuget_global_packages" ]] || fail "Could not determine NuGet global-packages path"
+
+  local package_root="$nuget_global_packages/${OPENCVSHARP_RUNTIME_PACKAGE,,}/$runtime_version"
+  local package_so="$package_root/runtimes/linux-x64/native/libOpenCvSharpExtern.so"
+
+  if [[ ! -f "$package_so" ]]; then
+    log "OpenCvSharp runtime package not found in cache, restoring NINA/NINA.csproj for $TARGET_RUNTIME"
+    dotnet restore NINA/NINA.csproj -r "$TARGET_RUNTIME"
   fi
 
-  git clone --depth 1 --branch "$clone_branch" "$OPENCVSHARP_REPO_URL" "$OPENCVSHARP_WORKDIR"
-
-  local opencvsharp_root
-  opencvsharp_root="$(cd "$OPENCVSHARP_WORKDIR" && pwd)"
-
-  local opencv_src="$opencvsharp_root/opencv-src-${OPENCVSHARP_OPENCV_VERSION}"
-  local opencv_contrib_src="$opencvsharp_root/opencv-contrib-src-${OPENCVSHARP_OPENCV_VERSION}"
-  local opencv_contrib_modules="$opencv_contrib_src/modules"
-  local opencv_build_dir="$opencvsharp_root/opencv-build-${OPENCVSHARP_OPENCV_VERSION}"
-  local opencv_install_dir="$opencvsharp_root/opencv_artifacts"
-
-  rm -rf "$opencv_src" "$opencv_contrib_src" "$opencv_build_dir"
-
-  local opencv_tar="$opencvsharp_root/opencv-${OPENCVSHARP_OPENCV_VERSION}.tar.gz"
-  local opencv_contrib_tar="$opencvsharp_root/opencv_contrib-${OPENCVSHARP_OPENCV_VERSION}.tar.gz"
-
-  curl -fL --retry 5 --retry-delay 5 \
-    "https://codeload.github.com/opencv/opencv/tar.gz/refs/tags/${OPENCVSHARP_OPENCV_VERSION}" \
-    -o "$opencv_tar"
-  curl -fL --retry 5 --retry-delay 5 \
-    "https://codeload.github.com/opencv/opencv_contrib/tar.gz/refs/tags/${OPENCVSHARP_OPENCV_VERSION}" \
-    -o "$opencv_contrib_tar"
-
-  tar -xzf "$opencv_tar" -C "$opencvsharp_root"
-  tar -xzf "$opencv_contrib_tar" -C "$opencvsharp_root"
-
-  local extracted_opencv_dir="$opencvsharp_root/opencv-${OPENCVSHARP_OPENCV_VERSION}"
-  local extracted_opencv_contrib_dir="$opencvsharp_root/opencv_contrib-${OPENCVSHARP_OPENCV_VERSION}"
-  [[ -d "$extracted_opencv_dir" ]] || fail "Failed to extract OpenCV ${OPENCVSHARP_OPENCV_VERSION}"
-  [[ -d "$extracted_opencv_contrib_dir" ]] || fail "Failed to extract OpenCV contrib ${OPENCVSHARP_OPENCV_VERSION}"
-
-  mv "$extracted_opencv_dir" "$opencv_src"
-  mv "$extracted_opencv_contrib_dir" "$opencv_contrib_src"
-
-  [[ -d "$opencv_contrib_modules" ]] || fail "OpenCV contrib modules directory missing: $opencv_contrib_modules"
-
-  local opencv_cache_args=()
-  if [[ -f "$opencvsharp_root/cmake/opencv_build_options.cmake" ]]; then
-    opencv_cache_args=(-C "$opencvsharp_root/cmake/opencv_build_options.cmake")
-  fi
-
-  cmake "${opencv_cache_args[@]}" \
-    -S "$opencv_src" \
-    -B "$opencv_build_dir" \
-    -D CMAKE_BUILD_TYPE=Release \
-    -D OPENCV_EXTRA_MODULES_PATH="$opencv_contrib_modules" \
-    -D OPENCV_ENABLE_NONFREE=ON \
-    -D BUILD_opencv_xfeatures2d=ON \
-    -D CMAKE_INSTALL_PREFIX="$opencv_install_dir"
-
-  cmake --build "$opencv_build_dir" --parallel "$(nproc)"
-  cmake --install "$opencv_build_dir"
-
-  local xfeatures2d_header="$opencv_install_dir/include/opencv4/opencv2/xfeatures2d.hpp"
-  [[ -f "$xfeatures2d_header" ]] || fail "OpenCV 4.11 build missing xfeatures2d header at $xfeatures2d_header"
-
-  local opencv_cmake_dir
-  opencv_cmake_dir="$(find "$opencv_install_dir" -type f -name 'OpenCVConfig.cmake' -exec dirname {} \; | head -n 1 || true)"
-  [[ -n "$opencv_cmake_dir" ]] || fail "Could not locate OpenCVConfig.cmake under $opencv_install_dir"
-  opencv_cmake_dir="$(cd "$opencv_cmake_dir" && pwd)"
-  log "Using OpenCV CMake package directory: $opencv_cmake_dir"
-
-  local extern_build_dir="$opencvsharp_root/src/build"
-  rm -rf "$extern_build_dir"
-
-  local cmake_prefix
-  cmake_prefix="$opencv_install_dir"
-
-  local extern_cmakelists="$opencvsharp_root/src/OpenCvSharpExtern/CMakeLists.txt"
-  [[ -f "$extern_cmakelists" ]] || fail "OpenCvSharpExtern CMakeLists not found: $extern_cmakelists"
-  if ! grep -q 'find_package(Eigen3' "$extern_cmakelists"; then
-    # OpenCV 4.11 exported targets can reference Eigen3::Eigen; ensure it exists.
-    sed -i 's/find_package(OpenCV REQUIRED)/find_package(Eigen3 REQUIRED)\nfind_package(OpenCV REQUIRED)/' "$extern_cmakelists"
-  fi
-
-  cmake -S "$opencvsharp_root/src" -B "$extern_build_dir" \
-    -D CMAKE_BUILD_TYPE=Release \
-    -DOpenCV_DIR:PATH="$opencv_cmake_dir" \
-    -DOpenCV_ROOT:PATH="$opencv_install_dir" \
-    -DEigen3_DIR:PATH="/usr/share/eigen3/cmake" \
-    -DCMAKE_PREFIX_PATH:PATH="$cmake_prefix"
-
-  local resolved_opencv_dir
-  resolved_opencv_dir="$(grep -E '^OpenCV_DIR:PATH=' "$extern_build_dir/CMakeCache.txt" | sed -E 's/^OpenCV_DIR:PATH=//' || true)"
-  if [[ "$resolved_opencv_dir" != "$opencv_cmake_dir" ]]; then
-    fail "OpenCvSharpExtern resolved OpenCV_DIR='$resolved_opencv_dir' (expected '$opencv_cmake_dir')"
-  fi
-
-  cmake --build "$extern_build_dir" --parallel "$(nproc)"
-
-  local built_so
-  built_so="$(find "$extern_build_dir" -type f -name 'libOpenCvSharpExtern.so' | head -n 1 || true)"
-  if [[ -z "$built_so" || ! -f "$built_so" ]]; then
-    fail "libOpenCvSharpExtern.so not found after OpenCvSharp build"
-  fi
+  [[ -f "$package_so" ]] || fail "OpenCvSharp runtime library not found: $package_so"
 
   local stage_dir="NINA/External/$TARGET_RUNTIME"
   mkdir -p "$stage_dir"
-  cp -f "$built_so" "$stage_dir/libOpenCvSharpExtern.so"
+  cp -f "$package_so" "$stage_dir/libOpenCvSharpExtern.so"
   chmod 755 "$stage_dir/libOpenCvSharpExtern.so"
 
-  log "Staged OpenCvSharpExtern native library at: $stage_dir/libOpenCvSharpExtern.so"
+  log "Staged OpenCvSharp runtime library at: $stage_dir/libOpenCvSharpExtern.so"
 }
 
 install_dotnet_10() {
@@ -773,7 +689,7 @@ build_core_pins_package() {
     fi
     chmod 755 "$opencv_target"
   else
-    warn "OpenCvSharp native library not found in publish output; continuing without OpenCvSharpExtern.so shim"
+    fail "OpenCvSharp native library not found in publish output (expected libOpenCvSharpExtern.so)"
   fi
 
   rm -rf "$PACKAGE_ROOT"
@@ -1737,7 +1653,7 @@ main() {
 
   build_and_install_libgpiod
   populate_external_bundle
-  build_and_stage_opencvsharp_extern
+  stage_opencvsharp_runtime_from_nuget
 
   determine_versions
   build_core_pins_package
