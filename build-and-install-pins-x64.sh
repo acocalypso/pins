@@ -3,7 +3,11 @@ set -Eeuo pipefail
 
 IFS=$'\n\t'
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+  ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+  ROOT_DIR="$(pwd)"
+fi
 cd "$ROOT_DIR"
 
 log() {
@@ -29,14 +33,25 @@ is_truthy() {
 run_as_root() {
   if [[ "${EUID}" -eq 0 ]]; then
     "$@"
-  else
+  elif command -v sudo >/dev/null 2>&1; then
     sudo "$@"
+  else
+    fail "This script requires root privileges (run as root or install sudo)"
   fi
 }
 
 require_file() {
   local file_path="$1"
   [[ -f "$file_path" ]] || fail "Required file not found: $file_path"
+}
+
+has_required_repo_layout() {
+  [[ -f "CommonAssemblyInfo.cs" ]] &&
+  [[ -f "NINA/NINA.csproj" ]] &&
+  [[ -f "System.Windows.Compat/System.Windows.Compat.csproj" ]] &&
+  [[ -f "packaging/debian/postinst" ]] &&
+  [[ -f "packaging/debian/prerm" ]] &&
+  [[ -f "packaging/systemd/pins.service" ]]
 }
 
 check_required_repo_layout() {
@@ -57,6 +72,12 @@ TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6 || true)"
 if [[ -z "$TARGET_HOME" ]]; then
   TARGET_HOME="/home/$TARGET_USER"
 fi
+
+PINS_REPO_URL="${PINS_REPO_URL:-https://github.com/acocalypso/pins.git}"
+PINS_REPO_BRANCH="${PINS_REPO_BRANCH:-develop}"
+PINS_WORKDIR="${PINS_WORKDIR:-$TARGET_HOME/pins-build-src}"
+AUTO_CLONE_PINS_REPO="${AUTO_CLONE_PINS_REPO:-true}"
+AUTO_INSTALL_BOOTSTRAP_TOOLS="${AUTO_INSTALL_BOOTSTRAP_TOOLS:-true}"
 
 INSTALL_DIRECTORY="${INSTALL_DIRECTORY:-$TARGET_HOME/pins}"
 PUBLISH_DIRECTORY="${PUBLISH_DIRECTORY:-artifacts/publish}"
@@ -111,6 +132,60 @@ BUILT_DEBS=()
 record_built_deb() {
   local deb_path="$1"
   BUILT_DEBS+=("$deb_path")
+}
+
+install_bootstrap_tools_if_needed() {
+  local missing=()
+
+  command -v git >/dev/null 2>&1 || missing+=("git")
+  command -v curl >/dev/null 2>&1 || missing+=("curl")
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    return
+  fi
+
+  if ! is_truthy "$AUTO_INSTALL_BOOTSTRAP_TOOLS"; then
+    fail "Missing bootstrap tools: ${missing[*]}. Set AUTO_INSTALL_BOOTSTRAP_TOOLS=true or install them manually."
+  fi
+
+  command -v apt-get >/dev/null 2>&1 || fail "apt-get is required to install missing bootstrap tools"
+
+  log "Installing missing bootstrap tools: ${missing[*]}"
+  run_as_root apt-get update
+  run_as_root apt-get install -y --no-install-recommends ca-certificates curl git
+}
+
+ensure_repo_root() {
+  if has_required_repo_layout; then
+    return
+  fi
+
+  if ! is_truthy "$AUTO_CLONE_PINS_REPO"; then
+    fail "Not running in a pins repository checkout, and AUTO_CLONE_PINS_REPO is disabled"
+  fi
+
+  install_bootstrap_tools_if_needed
+
+  log "Repository layout not found in current directory, bootstrapping source checkout"
+
+  if [[ -d "$PINS_WORKDIR/.git" ]]; then
+    log "Using existing repository at $PINS_WORKDIR"
+    cd "$PINS_WORKDIR"
+    git fetch origin "$PINS_REPO_BRANCH"
+    git checkout "$PINS_REPO_BRANCH"
+    git pull --ff-only origin "$PINS_REPO_BRANCH"
+  else
+    if [[ -e "$PINS_WORKDIR" ]]; then
+      fail "PINS_WORKDIR exists but is not a git checkout: $PINS_WORKDIR"
+    fi
+
+    mkdir -p "$(dirname "$PINS_WORKDIR")"
+    git clone --branch "$PINS_REPO_BRANCH" --single-branch "$PINS_REPO_URL" "$PINS_WORKDIR"
+    cd "$PINS_WORKDIR"
+  fi
+
+  ROOT_DIR="$PWD"
+  check_required_repo_layout
 }
 
 install_build_prerequisites() {
@@ -1340,7 +1415,7 @@ main() {
     warn "Host architecture is $(dpkg --print-architecture), but DEB_ARCH is $DEB_ARCH"
   fi
 
-  check_required_repo_layout
+  ensure_repo_root
 
   install_build_prerequisites
   install_dotnet_10
