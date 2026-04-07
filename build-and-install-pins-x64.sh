@@ -439,16 +439,19 @@ build_and_stage_opencvsharp_extern() {
 
   git clone --depth 1 --branch "$clone_branch" "$OPENCVSHARP_REPO_URL" "$OPENCVSHARP_WORKDIR"
 
-  local opencv_src="$OPENCVSHARP_WORKDIR/opencv-src-${OPENCVSHARP_OPENCV_VERSION}"
-  local opencv_contrib_src="$OPENCVSHARP_WORKDIR/opencv-contrib-src-${OPENCVSHARP_OPENCV_VERSION}"
+  local opencvsharp_root
+  opencvsharp_root="$(cd "$OPENCVSHARP_WORKDIR" && pwd)"
+
+  local opencv_src="$opencvsharp_root/opencv-src-${OPENCVSHARP_OPENCV_VERSION}"
+  local opencv_contrib_src="$opencvsharp_root/opencv-contrib-src-${OPENCVSHARP_OPENCV_VERSION}"
   local opencv_contrib_modules="$opencv_contrib_src/modules"
-  local opencv_build_dir="$OPENCVSHARP_WORKDIR/opencv-build-${OPENCVSHARP_OPENCV_VERSION}"
-  local opencv_install_dir="$OPENCVSHARP_WORKDIR/opencv_artifacts"
+  local opencv_build_dir="$opencvsharp_root/opencv-build-${OPENCVSHARP_OPENCV_VERSION}"
+  local opencv_install_dir="$opencvsharp_root/opencv_artifacts"
 
   rm -rf "$opencv_src" "$opencv_contrib_src" "$opencv_build_dir"
 
-  local opencv_tar="$OPENCVSHARP_WORKDIR/opencv-${OPENCVSHARP_OPENCV_VERSION}.tar.gz"
-  local opencv_contrib_tar="$OPENCVSHARP_WORKDIR/opencv_contrib-${OPENCVSHARP_OPENCV_VERSION}.tar.gz"
+  local opencv_tar="$opencvsharp_root/opencv-${OPENCVSHARP_OPENCV_VERSION}.tar.gz"
+  local opencv_contrib_tar="$opencvsharp_root/opencv_contrib-${OPENCVSHARP_OPENCV_VERSION}.tar.gz"
 
   curl -fL --retry 5 --retry-delay 5 \
     "https://codeload.github.com/opencv/opencv/tar.gz/refs/tags/${OPENCVSHARP_OPENCV_VERSION}" \
@@ -457,11 +460,11 @@ build_and_stage_opencvsharp_extern() {
     "https://codeload.github.com/opencv/opencv_contrib/tar.gz/refs/tags/${OPENCVSHARP_OPENCV_VERSION}" \
     -o "$opencv_contrib_tar"
 
-  tar -xzf "$opencv_tar" -C "$OPENCVSHARP_WORKDIR"
-  tar -xzf "$opencv_contrib_tar" -C "$OPENCVSHARP_WORKDIR"
+  tar -xzf "$opencv_tar" -C "$opencvsharp_root"
+  tar -xzf "$opencv_contrib_tar" -C "$opencvsharp_root"
 
-  local extracted_opencv_dir="$OPENCVSHARP_WORKDIR/opencv-${OPENCVSHARP_OPENCV_VERSION}"
-  local extracted_opencv_contrib_dir="$OPENCVSHARP_WORKDIR/opencv_contrib-${OPENCVSHARP_OPENCV_VERSION}"
+  local extracted_opencv_dir="$opencvsharp_root/opencv-${OPENCVSHARP_OPENCV_VERSION}"
+  local extracted_opencv_contrib_dir="$opencvsharp_root/opencv_contrib-${OPENCVSHARP_OPENCV_VERSION}"
   [[ -d "$extracted_opencv_dir" ]] || fail "Failed to extract OpenCV ${OPENCVSHARP_OPENCV_VERSION}"
   [[ -d "$extracted_opencv_contrib_dir" ]] || fail "Failed to extract OpenCV contrib ${OPENCVSHARP_OPENCV_VERSION}"
 
@@ -471,8 +474,8 @@ build_and_stage_opencvsharp_extern() {
   [[ -d "$opencv_contrib_modules" ]] || fail "OpenCV contrib modules directory missing: $opencv_contrib_modules"
 
   local opencv_cache_args=()
-  if [[ -f "$OPENCVSHARP_WORKDIR/cmake/opencv_build_options.cmake" ]]; then
-    opencv_cache_args=(-C "$OPENCVSHARP_WORKDIR/cmake/opencv_build_options.cmake")
+  if [[ -f "$opencvsharp_root/cmake/opencv_build_options.cmake" ]]; then
+    opencv_cache_args=(-C "$opencvsharp_root/cmake/opencv_build_options.cmake")
   fi
 
   cmake "${opencv_cache_args[@]}" \
@@ -493,20 +496,31 @@ build_and_stage_opencvsharp_extern() {
   local opencv_cmake_dir
   opencv_cmake_dir="$(find "$opencv_install_dir" -type f -name 'OpenCVConfig.cmake' -exec dirname {} \; | head -n 1 || true)"
   [[ -n "$opencv_cmake_dir" ]] || fail "Could not locate OpenCVConfig.cmake under $opencv_install_dir"
+  opencv_cmake_dir="$(cd "$opencv_cmake_dir" && pwd)"
   log "Using OpenCV CMake package directory: $opencv_cmake_dir"
 
+  local extern_build_dir="$opencvsharp_root/src/build"
+  rm -rf "$extern_build_dir"
+
   local cmake_prefix
-  cmake_prefix="$opencv_install_dir;/usr/local;/usr"
+  cmake_prefix="$opencv_install_dir"
 
-  cmake -S "$OPENCVSHARP_WORKDIR/src" -B "$OPENCVSHARP_WORKDIR/src/build" \
+  cmake -S "$opencvsharp_root/src" -B "$extern_build_dir" \
     -D CMAKE_BUILD_TYPE=Release \
-    -D OpenCV_DIR="$opencv_cmake_dir" \
-    -D CMAKE_PREFIX_PATH="$cmake_prefix"
+    -DOpenCV_DIR:PATH="$opencv_cmake_dir" \
+    -DOpenCV_ROOT:PATH="$opencv_install_dir" \
+    -DCMAKE_PREFIX_PATH:PATH="$cmake_prefix"
 
-  cmake --build "$OPENCVSHARP_WORKDIR/src/build" --parallel "$(nproc)"
+  local resolved_opencv_dir
+  resolved_opencv_dir="$(grep -E '^OpenCV_DIR:PATH=' "$extern_build_dir/CMakeCache.txt" | sed -E 's/^OpenCV_DIR:PATH=//' || true)"
+  if [[ "$resolved_opencv_dir" != "$opencv_cmake_dir" ]]; then
+    fail "OpenCvSharpExtern resolved OpenCV_DIR='$resolved_opencv_dir' (expected '$opencv_cmake_dir')"
+  fi
+
+  cmake --build "$extern_build_dir" --parallel "$(nproc)"
 
   local built_so
-  built_so="$(find "$OPENCVSHARP_WORKDIR/src/build" -type f -name 'libOpenCvSharpExtern.so' | head -n 1 || true)"
+  built_so="$(find "$extern_build_dir" -type f -name 'libOpenCvSharpExtern.so' | head -n 1 || true)"
   if [[ -z "$built_so" || ! -f "$built_so" ]]; then
     fail "libOpenCvSharpExtern.so not found after OpenCvSharp build"
   fi
