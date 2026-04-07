@@ -286,10 +286,33 @@ build_and_stage_opencvsharp_extern() {
     log "Using OpenCvSharp default branch: $clone_branch"
   fi
 
-  git clone --recursive --depth 1 --branch "$clone_branch" "$OPENCVSHARP_REPO_URL" "$OPENCVSHARP_WORKDIR"
+  git clone --recursive --branch "$clone_branch" "$OPENCVSHARP_REPO_URL" "$OPENCVSHARP_WORKDIR"
+
+  local opencv_src="$OPENCVSHARP_WORKDIR/opencv"
+  local opencv_contrib_modules="$OPENCVSHARP_WORKDIR/opencv_contrib/modules"
+  local opencv_build_dir="$OPENCVSHARP_WORKDIR/opencv/build"
+  local opencv_install_dir="$OPENCVSHARP_WORKDIR/opencv_artifacts"
+
+  [[ -d "$opencv_src" ]] || fail "OpenCvSharp submodule 'opencv' was not cloned"
+  [[ -d "$opencv_contrib_modules" ]] || fail "OpenCvSharp submodule 'opencv_contrib' was not cloned"
+
+  local opencv_cache_args=()
+  if [[ -f "$OPENCVSHARP_WORKDIR/cmake/opencv_build_options.cmake" ]]; then
+    opencv_cache_args=(-C "$OPENCVSHARP_WORKDIR/cmake/opencv_build_options.cmake")
+  fi
+
+  cmake "${opencv_cache_args[@]}" \
+    -S "$opencv_src" \
+    -B "$opencv_build_dir" \
+    -D CMAKE_BUILD_TYPE=Release \
+    -D OPENCV_EXTRA_MODULES_PATH="$opencv_contrib_modules" \
+    -D CMAKE_INSTALL_PREFIX="$opencv_install_dir"
+
+  cmake --build "$opencv_build_dir" --parallel "$(nproc)"
+  cmake --install "$opencv_build_dir"
 
   local cmake_prefix
-  cmake_prefix="/usr/local;/usr"
+  cmake_prefix="$opencv_install_dir;/usr/local;/usr"
 
   cmake -S "$OPENCVSHARP_WORKDIR/src" -B "$OPENCVSHARP_WORKDIR/src/build" \
     -D CMAKE_BUILD_TYPE=Release \
