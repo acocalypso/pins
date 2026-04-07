@@ -99,11 +99,9 @@ PHD2_BRANCH="${PHD2_BRANCH:-master}"
 PHD2_INDI_VERSION="${PHD2_INDI_VERSION:-2.1.9}"
 PHD2_OPENCV_VERSION="${PHD2_OPENCV_VERSION:-4.11.0}"
 
-BUILD_OPENCVSHARP_FROM_SOURCE="${BUILD_OPENCVSHARP_FROM_SOURCE:-true}"
 OPENCVSHARP_REPO_URL="${OPENCVSHARP_REPO_URL:-https://github.com/shimat/opencvsharp.git}"
 OPENCVSHARP_BRANCH="${OPENCVSHARP_BRANCH:-master}"
 OPENCVSHARP_WORKDIR="${OPENCVSHARP_WORKDIR:-artifacts/src/opencvsharp}"
-OPENCVSHARP_STRICT="${OPENCVSHARP_STRICT:-true}"
 
 SETUP_RUNTIME_PREREQS="${SETUP_RUNTIME_PREREQS:-true}"
 SETUP_FRAMINGASSISTANT_CACHE="${SETUP_FRAMINGASSISTANT_CACHE:-true}"
@@ -275,11 +273,6 @@ install_build_prerequisites() {
 }
 
 build_and_stage_opencvsharp_extern() {
-  if ! is_truthy "$BUILD_OPENCVSHARP_FROM_SOURCE"; then
-    log "Skipping OpenCvSharp source build"
-    return
-  fi
-
   log "Building OpenCvSharpExtern from source"
 
   rm -rf "$OPENCVSHARP_WORKDIR"
@@ -289,32 +282,16 @@ build_and_stage_opencvsharp_extern() {
   local cmake_prefix
   cmake_prefix="/usr/local;/usr"
 
-  if ! cmake -S "$OPENCVSHARP_WORKDIR/src" -B "$OPENCVSHARP_WORKDIR/src/build" \
+  cmake -S "$OPENCVSHARP_WORKDIR/src" -B "$OPENCVSHARP_WORKDIR/src/build" \
     -D CMAKE_BUILD_TYPE=Release \
-    -D CMAKE_PREFIX_PATH="$cmake_prefix"; then
-    if is_truthy "$OPENCVSHARP_STRICT"; then
-      fail "Failed to configure OpenCvSharpExtern build"
-    fi
-    warn "Failed to configure OpenCvSharpExtern build; continuing"
-    return
-  fi
+    -D CMAKE_PREFIX_PATH="$cmake_prefix"
 
-  if ! cmake --build "$OPENCVSHARP_WORKDIR/src/build" --parallel "$(nproc)"; then
-    if is_truthy "$OPENCVSHARP_STRICT"; then
-      fail "Failed to build OpenCvSharpExtern"
-    fi
-    warn "Failed to build OpenCvSharpExtern; continuing"
-    return
-  fi
+  cmake --build "$OPENCVSHARP_WORKDIR/src/build" --parallel "$(nproc)"
 
   local built_so
   built_so="$(find "$OPENCVSHARP_WORKDIR/src/build" -type f -name 'libOpenCvSharpExtern.so' | head -n 1 || true)"
   if [[ -z "$built_so" || ! -f "$built_so" ]]; then
-    if is_truthy "$OPENCVSHARP_STRICT"; then
-      fail "libOpenCvSharpExtern.so not found after OpenCvSharp build"
-    fi
-    warn "libOpenCvSharpExtern.so not found after OpenCvSharp build; continuing"
-    return
+    fail "libOpenCvSharpExtern.so not found after OpenCvSharp build"
   fi
 
   local stage_dir="NINA/External/$TARGET_RUNTIME"
