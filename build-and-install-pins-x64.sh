@@ -99,6 +99,12 @@ PHD2_BRANCH="${PHD2_BRANCH:-master}"
 PHD2_INDI_VERSION="${PHD2_INDI_VERSION:-2.1.9}"
 PHD2_OPENCV_VERSION="${PHD2_OPENCV_VERSION:-4.11.0}"
 
+BUILD_OPENCVSHARP_FROM_SOURCE="${BUILD_OPENCVSHARP_FROM_SOURCE:-true}"
+OPENCVSHARP_REPO_URL="${OPENCVSHARP_REPO_URL:-https://github.com/shimat/opencvsharp.git}"
+OPENCVSHARP_BRANCH="${OPENCVSHARP_BRANCH:-master}"
+OPENCVSHARP_WORKDIR="${OPENCVSHARP_WORKDIR:-artifacts/src/opencvsharp}"
+OPENCVSHARP_STRICT="${OPENCVSHARP_STRICT:-true}"
+
 SETUP_RUNTIME_PREREQS="${SETUP_RUNTIME_PREREQS:-true}"
 SETUP_FRAMINGASSISTANT_CACHE="${SETUP_FRAMINGASSISTANT_CACHE:-true}"
 SETUP_ASTAP="${SETUP_ASTAP:-true}"
@@ -243,6 +249,7 @@ install_build_prerequisites() {
     libraw-dev \
     librtlsdr-dev \
     libssl-dev \
+    libtesseract-dev \
     libtheora-dev \
     libtiff-dev \
     libtool \
@@ -254,6 +261,7 @@ install_build_prerequisites() {
     libx11-dev \
     libxisf-dev \
     libzmq3-dev \
+    libwebp-dev \
     ninja-build \
     nlohmann-json3-dev \
     pkg-config \
@@ -264,6 +272,57 @@ install_build_prerequisites() {
     wx3.2-i18n \
     zip \
     zlib1g-dev
+}
+
+build_and_stage_opencvsharp_extern() {
+  if ! is_truthy "$BUILD_OPENCVSHARP_FROM_SOURCE"; then
+    log "Skipping OpenCvSharp source build"
+    return
+  fi
+
+  log "Building OpenCvSharpExtern from source"
+
+  rm -rf "$OPENCVSHARP_WORKDIR"
+  mkdir -p "$(dirname "$OPENCVSHARP_WORKDIR")"
+  git clone --recursive --depth 1 --branch "$OPENCVSHARP_BRANCH" "$OPENCVSHARP_REPO_URL" "$OPENCVSHARP_WORKDIR"
+
+  local cmake_prefix
+  cmake_prefix="/usr/local;/usr"
+
+  if ! cmake -S "$OPENCVSHARP_WORKDIR/src" -B "$OPENCVSHARP_WORKDIR/src/build" \
+    -D CMAKE_BUILD_TYPE=Release \
+    -D CMAKE_PREFIX_PATH="$cmake_prefix"; then
+    if is_truthy "$OPENCVSHARP_STRICT"; then
+      fail "Failed to configure OpenCvSharpExtern build"
+    fi
+    warn "Failed to configure OpenCvSharpExtern build; continuing"
+    return
+  fi
+
+  if ! cmake --build "$OPENCVSHARP_WORKDIR/src/build" --parallel "$(nproc)"; then
+    if is_truthy "$OPENCVSHARP_STRICT"; then
+      fail "Failed to build OpenCvSharpExtern"
+    fi
+    warn "Failed to build OpenCvSharpExtern; continuing"
+    return
+  fi
+
+  local built_so
+  built_so="$(find "$OPENCVSHARP_WORKDIR/src/build" -type f -name 'libOpenCvSharpExtern.so' | head -n 1 || true)"
+  if [[ -z "$built_so" || ! -f "$built_so" ]]; then
+    if is_truthy "$OPENCVSHARP_STRICT"; then
+      fail "libOpenCvSharpExtern.so not found after OpenCvSharp build"
+    fi
+    warn "libOpenCvSharpExtern.so not found after OpenCvSharp build; continuing"
+    return
+  fi
+
+  local stage_dir="NINA/External/$TARGET_RUNTIME"
+  mkdir -p "$stage_dir"
+  cp -f "$built_so" "$stage_dir/libOpenCvSharpExtern.so"
+  chmod 755 "$stage_dir/libOpenCvSharpExtern.so"
+
+  log "Staged OpenCvSharpExtern native library at: $stage_dir/libOpenCvSharpExtern.so"
 }
 
 install_dotnet_10() {
@@ -479,12 +538,26 @@ build_core_pins_package() {
   mkdir -p "$publish_root/External"
   rsync -a "NINA/External/" "$publish_root/External/"
 
-  local opencv_so="$publish_root/External/$TARGET_RUNTIME/libOpenCvSharpExtern.so"
-  if [[ -f "$opencv_so" ]]; then
-    cp -f "$opencv_so" "$publish_root/OpenCvSharpExtern.so"
-    chmod 755 "$publish_root/OpenCvSharpExtern.so"
+  local opencv_target="$publish_root/OpenCvSharpExtern.so"
+  local expected_opencv_so="$publish_root/External/$TARGET_RUNTIME/libOpenCvSharpExtern.so"
+  local source_opencv_so=""
+
+  if [[ -f "$opencv_target" ]]; then
+    source_opencv_so="$opencv_target"
+  elif [[ -f "$expected_opencv_so" ]]; then
+    source_opencv_so="$expected_opencv_so"
   else
-    warn "Expected OpenCvSharp native library not found at: $opencv_so"
+    source_opencv_so="$(find "$publish_root" -type f -name 'libOpenCvSharpExtern.so' | head -n 1 || true)"
+  fi
+
+  if [[ -n "$source_opencv_so" && -f "$source_opencv_so" ]]; then
+    if [[ "$source_opencv_so" != "$opencv_target" ]]; then
+      cp -f "$source_opencv_so" "$opencv_target"
+      log "Using OpenCvSharp native library from: $source_opencv_so"
+    fi
+    chmod 755 "$opencv_target"
+  else
+    warn "OpenCvSharp native library not found in publish output; continuing without OpenCvSharpExtern.so shim"
   fi
 
   rm -rf "$PACKAGE_ROOT"
@@ -1439,6 +1512,7 @@ main() {
 
   build_and_install_libgpiod
   populate_external_bundle
+  build_and_stage_opencvsharp_extern
 
   determine_versions
   build_core_pins_package
