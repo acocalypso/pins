@@ -337,9 +337,13 @@ build_and_stage_opencvsharp_extern() {
   cmake --build "$opencv_build_dir" --parallel "$(nproc)"
   cmake --install "$opencv_build_dir"
 
+  local xfeatures2d_header="$opencv_install_dir/include/opencv4/opencv2/xfeatures2d.hpp"
+  [[ -f "$xfeatures2d_header" ]] || fail "OpenCV 4.11 build missing xfeatures2d header at $xfeatures2d_header"
+
   local opencv_cmake_dir
-  opencv_cmake_dir="$(find "$opencv_install_dir" -type d -path '*/opencv4' | head -n 1 || true)"
-  [[ -n "$opencv_cmake_dir" ]] || fail "Could not locate OpenCV CMake package directory under $opencv_install_dir"
+  opencv_cmake_dir="$(find "$opencv_install_dir" -type f -name 'OpenCVConfig.cmake' -exec dirname {} \; | head -n 1 || true)"
+  [[ -n "$opencv_cmake_dir" ]] || fail "Could not locate OpenCVConfig.cmake under $opencv_install_dir"
+  log "Using OpenCV CMake package directory: $opencv_cmake_dir"
 
   local cmake_prefix
   cmake_prefix="$opencv_install_dir;/usr/local;/usr"
