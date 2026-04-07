@@ -179,6 +179,13 @@ compute_source_fingerprint() {
   inputs+=("phd2-indi:$PHD2_INDI_VERSION")
   inputs+=("indi:$INDI_VERSION")
 
+  local script_path="$ROOT_DIR/build-and-install-pins-x64.sh"
+  if [[ -f "$script_path" ]]; then
+    local script_hash
+    script_hash="$(sha256sum "$script_path" | awk '{print $1}')"
+    inputs+=("script:$script_hash")
+  fi
+
   local tracked_sources=(
     "phd2|$PHD2_REPO_URL|$PHD2_BRANCH"
     "touch-plugin|https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars|develop"
