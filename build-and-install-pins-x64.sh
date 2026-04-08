@@ -95,6 +95,11 @@ PLUGIN_FAILURES_FILE="${PLUGIN_FAILURES_FILE:-artifacts/plugin-build-failures.lo
 INDI_VERSION="${INDI_VERSION:-2.1.9}"
 INDI_DEB_ROOT="${INDI_DEB_ROOT:-artifacts/indi-debroot}"
 INDI_ENABLE_XISF="${INDI_ENABLE_XISF:-true}"
+LIBXISF_AUTO_UPGRADE_IF_OLD="${LIBXISF_AUTO_UPGRADE_IF_OLD:-true}"
+LIBXISF_REPO_URL="${LIBXISF_REPO_URL:-https://github.com/joxda/libXISF.git}"
+LIBXISF_BRANCH="${LIBXISF_BRANCH:-master}"
+LIBXISF_WORKDIR="${LIBXISF_WORKDIR:-artifacts/src/libxisf}"
+LIBXISF_INSTALL_PREFIX="${LIBXISF_INSTALL_PREFIX:-/usr/local}"
 
 PHD2_REPO_URL="${PHD2_REPO_URL:-https://github.com/acocalypso/phd2.git}"
 PHD2_BRANCH="${PHD2_BRANCH:-master}"
@@ -422,6 +427,7 @@ install_build_prerequisites() {
     libwxgtk3.2-dev \
     libx11-dev \
     libxisf-dev \
+    libzstd-dev \
     libzmq3-dev \
     libwebp-dev \
     ninja-build \
@@ -624,6 +630,134 @@ ensure_opencv_required_version() {
   fi
 
   log "OpenCV $final_version is ready"
+}
+
+activate_local_libxisf_environment() {
+  local multiarch
+  multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)"
+
+  local local_pkg_paths=()
+  local_pkg_paths+=("$LIBXISF_INSTALL_PREFIX/lib/pkgconfig")
+  local_pkg_paths+=("$LIBXISF_INSTALL_PREFIX/lib64/pkgconfig")
+  if [[ -n "$multiarch" ]]; then
+    local_pkg_paths+=("$LIBXISF_INSTALL_PREFIX/lib/$multiarch/pkgconfig")
+  fi
+
+  local existing_pkg_path="${PKG_CONFIG_PATH:-}"
+  local combined_pkg_path="$existing_pkg_path"
+  local pkg_path
+  for pkg_path in "${local_pkg_paths[@]}"; do
+    if [[ -d "$pkg_path" ]]; then
+      combined_pkg_path="$pkg_path${combined_pkg_path:+:$combined_pkg_path}"
+    fi
+  done
+  if [[ -n "$combined_pkg_path" ]]; then
+    export PKG_CONFIG_PATH="$combined_pkg_path"
+  fi
+
+  local local_lib_paths=()
+  local_lib_paths+=("$LIBXISF_INSTALL_PREFIX/lib")
+  local_lib_paths+=("$LIBXISF_INSTALL_PREFIX/lib64")
+  if [[ -n "$multiarch" ]]; then
+    local_lib_paths+=("$LIBXISF_INSTALL_PREFIX/lib/$multiarch")
+  fi
+
+  local existing_ld="${LD_LIBRARY_PATH:-}"
+  local combined_ld="$existing_ld"
+  local lib_path
+  for lib_path in "${local_lib_paths[@]}"; do
+    if [[ -d "$lib_path" ]]; then
+      combined_ld="$lib_path${combined_ld:+:$combined_ld}"
+    fi
+  done
+  if [[ -n "$combined_ld" ]]; then
+    export LD_LIBRARY_PATH="$combined_ld"
+  fi
+
+  export CMAKE_PREFIX_PATH="$LIBXISF_INSTALL_PREFIX:${CMAKE_PREFIX_PATH:-}"
+  export CMAKE_INCLUDE_PATH="$LIBXISF_INSTALL_PREFIX/include:${CMAKE_INCLUDE_PATH:-}"
+
+  local local_cmake_library_path="${LIBXISF_INSTALL_PREFIX}/lib"
+  if [[ -n "$multiarch" ]]; then
+    local_cmake_library_path="$local_cmake_library_path:${LIBXISF_INSTALL_PREFIX}/lib/$multiarch"
+  fi
+  local_cmake_library_path="$local_cmake_library_path:${LIBXISF_INSTALL_PREFIX}/lib64"
+  export CMAKE_LIBRARY_PATH="$local_cmake_library_path:${CMAKE_LIBRARY_PATH:-}"
+}
+
+get_libxisf_header_candidate() {
+  local candidate_paths=()
+  candidate_paths+=("$LIBXISF_INSTALL_PREFIX/include/libxisf.h")
+  candidate_paths+=("/usr/local/include/libxisf.h")
+  candidate_paths+=("/usr/include/libxisf.h")
+
+  local header
+  for header in "${candidate_paths[@]}"; do
+    if [[ -f "$header" ]]; then
+      echo "$header"
+      return
+    fi
+  done
+}
+
+libxisf_supports_required_api() {
+  local header
+  header="$(get_libxisf_header_candidate || true)"
+  [[ -n "$header" && -f "$header" ]] || return 1
+
+  grep -q 'CompressionCodecSupported' "$header" || return 1
+  grep -q 'ZSTD' "$header" || return 1
+}
+
+build_and_install_libxisf() {
+  log "Building LibXISF from source"
+
+  rm -rf "$LIBXISF_WORKDIR"
+  mkdir -p "$(dirname "$LIBXISF_WORKDIR")"
+
+  git clone --depth 1 --branch "$LIBXISF_BRANCH" "$LIBXISF_REPO_URL" "$LIBXISF_WORKDIR"
+
+  cmake -S "$LIBXISF_WORKDIR" -B "$LIBXISF_WORKDIR/build" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$LIBXISF_INSTALL_PREFIX" \
+    -DUSE_BUNDLED_LIBS=ON \
+    -DBUILD_SHARED_LIBS=ON
+
+  cmake --build "$LIBXISF_WORKDIR/build" --parallel "$(nproc)"
+  run_as_root cmake --install "$LIBXISF_WORKDIR/build"
+  run_as_root ldconfig
+
+  activate_local_libxisf_environment
+}
+
+ensure_modern_libxisf_if_enabled() {
+  if ! is_truthy "$INDI_ENABLE_XISF"; then
+    return
+  fi
+
+  activate_local_libxisf_environment
+
+  if libxisf_supports_required_api; then
+    local detected_header
+    detected_header="$(get_libxisf_header_candidate || true)"
+    log "LibXISF API is compatible: $detected_header"
+    return
+  fi
+
+  if ! is_truthy "$LIBXISF_AUTO_UPGRADE_IF_OLD"; then
+    fail "LibXISF is too old for INDI XISF support; set LIBXISF_AUTO_UPGRADE_IF_OLD=true or disable XISF"
+  fi
+
+  warn "Detected LibXISF without required ZSTD API; upgrading from source"
+  build_and_install_libxisf
+
+  if ! libxisf_supports_required_api; then
+    fail "LibXISF source upgrade completed but required API is still missing"
+  fi
+
+  local upgraded_header
+  upgraded_header="$(get_libxisf_header_candidate || true)"
+  log "LibXISF upgraded and validated: $upgraded_header"
 }
 
 stage_opencvsharp_runtime_from_nuget() {
@@ -1302,6 +1436,8 @@ build_plugins() {
 build_indi_debian_packages() {
   log "Building INDI Debian packages"
 
+  ensure_modern_libxisf_if_enabled
+
   local indi_src="artifacts/src/indi"
   rm -rf "$indi_src"
   mkdir -p "$(dirname "$indi_src")"
@@ -1548,6 +1684,8 @@ build_indi_debian_packages() {
 
 build_phd2_package() {
   log "Building PHD2 Debian package for $DEB_ARCH"
+
+  ensure_modern_libxisf_if_enabled
 
   local phd2_src="artifacts/src/phd2"
   rm -rf "$phd2_src"
@@ -1843,6 +1981,7 @@ main() {
 
   install_build_prerequisites
   ensure_opencv_required_version
+  ensure_modern_libxisf_if_enabled
   install_dotnet_10
   install_node_22
   print_tool_versions
