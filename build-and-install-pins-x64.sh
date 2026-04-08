@@ -105,6 +105,7 @@ PHD2_REPO_URL="${PHD2_REPO_URL:-https://github.com/acocalypso/phd2.git}"
 PHD2_BRANCH="${PHD2_BRANCH:-master}"
 PHD2_INDI_VERSION="${PHD2_INDI_VERSION:-2.1.9}"
 PHD2_OPENCV_VERSION="${PHD2_OPENCV_VERSION:-4.11.0}"
+PHD2_AUTOSTART_SERVICE="${PHD2_AUTOSTART_SERVICE:-false}"
 OPENCV_REQUIRED_VERSION="${OPENCV_REQUIRED_VERSION:-$PHD2_OPENCV_VERSION}"
 OPENCV_SOURCE_ROOT="${OPENCV_SOURCE_ROOT:-artifacts/src/opencv}"
 OPENCV_INSTALL_PREFIX="${OPENCV_INSTALL_PREFIX:-/usr/local}"
@@ -1693,6 +1694,35 @@ build_indi_debian_packages() {
   log "Built INDI packages"
 }
 
+configure_phd2_service_file() {
+  local service_file="$1"
+  [[ -f "$service_file" ]] || return
+
+  sed -i \
+    -e "s|^User=.*|User=$TARGET_USER|" \
+    -e "s|^Group=.*|Group=$TARGET_USER|" \
+    -e "s|^Environment=DISPLAY=.*|Environment=DISPLAY=:0|" \
+    -e "s|^Environment=XAUTHORITY=.*|Environment=XAUTHORITY=$TARGET_HOME/.Xauthority|" \
+    -e "s|^Environment=HOME=.*|Environment=HOME=$TARGET_HOME|" \
+    -e "s|^WorkingDirectory=.*|WorkingDirectory=$TARGET_HOME|" \
+    -e "s|^Restart=.*|Restart=on-failure|" \
+    -e "s|/home/pi|$TARGET_HOME|g" \
+    "$service_file"
+
+  local tmp_service
+  tmp_service="$(mktemp)"
+  awk -v home="$TARGET_HOME" '
+    /^ConditionPathExists=\/tmp\/\.X11-unix\/X0$/ { next }
+    /^ConditionPathExists=.*\.Xauthority$/ { next }
+    { print }
+    $0 ~ /^After=.*graphical\.target/ {
+      print "ConditionPathExists=/tmp/.X11-unix/X0"
+      print "ConditionPathExists=" home "/.Xauthority"
+    }
+  ' "$service_file" > "$tmp_service"
+  mv "$tmp_service" "$service_file"
+}
+
 build_phd2_package() {
   log "Building PHD2 Debian package for $DEB_ARCH"
 
@@ -1702,6 +1732,17 @@ build_phd2_package() {
   rm -rf "$phd2_src"
   mkdir -p "$(dirname "$phd2_src")"
   git clone --branch "$PHD2_BRANCH" --single-branch "$PHD2_REPO_URL" "$phd2_src"
+
+  local phd2_service_candidates=(
+    "$phd2_src/debian/phd2.service"
+    "$phd2_src/debian/systemd/phd2.service"
+  )
+  local phd2_service_src
+  for phd2_service_src in "${phd2_service_candidates[@]}"; do
+    if [[ -f "$phd2_service_src" ]]; then
+      configure_phd2_service_file "$phd2_service_src"
+    fi
+  done
 
   # The workflow enables source repositories before running mk-build-deps.
   run_as_root bash -lc "set -euo pipefail; \
@@ -1848,6 +1889,35 @@ install_built_packages() {
   run_as_root dpkg -i "${unique_debs[@]}" || true
   run_as_root apt-get -f install -y
   run_as_root dpkg -i "${unique_debs[@]}"
+
+  local nina_data_dir="$TARGET_HOME/.local/share/NINA"
+  local nina_config_dir="$TARGET_HOME/.config/NINA"
+  run_as_root mkdir -p "$nina_data_dir" "$nina_config_dir"
+  run_as_root chown -R "$TARGET_USER:$TARGET_USER" "$nina_data_dir" "$nina_config_dir"
+
+  local phd2_service_path="/etc/systemd/system/phd2.service"
+  if [[ -f "$phd2_service_path" ]]; then
+    local tmp_phd2_service
+    tmp_phd2_service="$(mktemp)"
+    cp "$phd2_service_path" "$tmp_phd2_service"
+    configure_phd2_service_file "$tmp_phd2_service"
+    run_as_root install -m 644 "$tmp_phd2_service" "$phd2_service_path"
+    rm -f "$tmp_phd2_service"
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    run_as_root systemctl daemon-reload || true
+    if systemctl cat phd2.service >/dev/null 2>&1; then
+      if is_truthy "$PHD2_AUTOSTART_SERVICE"; then
+        run_as_root systemctl enable phd2.service >/dev/null 2>&1 || true
+        run_as_root systemctl restart phd2.service || true
+      else
+        run_as_root systemctl disable --now phd2.service >/dev/null 2>&1 || true
+        log "PHD2 service auto-start disabled (set PHD2_AUTOSTART_SERVICE=true to enable)"
+      fi
+    fi
+    run_as_root systemctl restart pins.service || true
+  fi
 
   log "Installed ${#unique_debs[@]} package(s)"
 }
