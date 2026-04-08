@@ -100,6 +100,11 @@ PHD2_REPO_URL="${PHD2_REPO_URL:-https://github.com/acocalypso/phd2.git}"
 PHD2_BRANCH="${PHD2_BRANCH:-master}"
 PHD2_INDI_VERSION="${PHD2_INDI_VERSION:-2.1.9}"
 PHD2_OPENCV_VERSION="${PHD2_OPENCV_VERSION:-4.11.0}"
+OPENCV_REQUIRED_VERSION="${OPENCV_REQUIRED_VERSION:-$PHD2_OPENCV_VERSION}"
+OPENCV_SOURCE_ROOT="${OPENCV_SOURCE_ROOT:-artifacts/src/opencv}"
+OPENCV_INSTALL_PREFIX="${OPENCV_INSTALL_PREFIX:-/usr/local}"
+OPENCV_EXTRA_MODULES="${OPENCV_EXTRA_MODULES:-true}"
+OPENCV_REQUIRE_LOCAL_PKGCONFIG="${OPENCV_REQUIRE_LOCAL_PKGCONFIG:-true}"
 
 OPENCVSHARP_REPO_URL="${OPENCVSHARP_REPO_URL:-https://github.com/shimat/opencvsharp.git}"
 OPENCVSHARP_BRANCH="${OPENCVSHARP_BRANCH:-main}"
@@ -428,6 +433,196 @@ install_build_prerequisites() {
     wx3.2-i18n \
     zip \
     zlib1g-dev
+}
+
+get_opencv_version() {
+  local version=""
+
+  if [[ -x "$OPENCV_INSTALL_PREFIX/bin/opencv_version" ]]; then
+    version="$($OPENCV_INSTALL_PREFIX/bin/opencv_version 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$version" ]] && command -v pkg-config >/dev/null 2>&1; then
+    local local_pkg_paths=()
+    local multiarch
+    multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)"
+
+    local_pkg_paths+=("$OPENCV_INSTALL_PREFIX/lib/pkgconfig")
+    local_pkg_paths+=("$OPENCV_INSTALL_PREFIX/lib64/pkgconfig")
+    if [[ -n "$multiarch" ]]; then
+      local_pkg_paths+=("$OPENCV_INSTALL_PREFIX/lib/$multiarch/pkgconfig")
+    fi
+
+    local local_pkg_path
+    local_pkg_path="$(IFS=:; echo "${local_pkg_paths[*]}")"
+
+    if PKG_CONFIG_PATH="$local_pkg_path:${PKG_CONFIG_PATH:-}" pkg-config --exists opencv4; then
+      version="$(PKG_CONFIG_PATH="$local_pkg_path:${PKG_CONFIG_PATH:-}" pkg-config --modversion opencv4 2>/dev/null || true)"
+    fi
+  fi
+
+  if [[ -z "$version" ]] && command -v pkg-config >/dev/null 2>&1 && pkg-config --exists opencv4; then
+    version="$(pkg-config --modversion opencv4 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$version" ]]; then
+    if command -v opencv_version >/dev/null 2>&1; then
+      version="$(opencv_version 2>/dev/null || true)"
+    fi
+  fi
+
+  echo "$version"
+}
+
+get_local_opencv_pkgconfig_version() {
+  if ! command -v pkg-config >/dev/null 2>&1; then
+    return
+  fi
+
+  local multiarch
+  multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)"
+
+  local local_pkg_paths=()
+  local_pkg_paths+=("$OPENCV_INSTALL_PREFIX/lib/pkgconfig")
+  local_pkg_paths+=("$OPENCV_INSTALL_PREFIX/lib64/pkgconfig")
+  if [[ -n "$multiarch" ]]; then
+    local_pkg_paths+=("$OPENCV_INSTALL_PREFIX/lib/$multiarch/pkgconfig")
+  fi
+
+  local local_pkg_path
+  local_pkg_path="$(IFS=:; echo "${local_pkg_paths[*]}")"
+
+  if PKG_CONFIG_LIBDIR="$local_pkg_path" pkg-config --exists opencv4; then
+    PKG_CONFIG_LIBDIR="$local_pkg_path" pkg-config --modversion opencv4 2>/dev/null || true
+  fi
+}
+
+opencv_matches_required_version() {
+  local installed="$1"
+  [[ -n "$installed" ]] || return 1
+
+  local required_major_minor
+  required_major_minor="$(echo "$OPENCV_REQUIRED_VERSION" | awk -F. '{print $1"."$2}')"
+
+  [[ "$installed" == "$OPENCV_REQUIRED_VERSION" || "$installed" == "$required_major_minor"* ]]
+}
+
+activate_opencv_environment() {
+  local multiarch
+  multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)"
+
+  local local_pkg_paths=()
+  local_pkg_paths+=("$OPENCV_INSTALL_PREFIX/lib/pkgconfig")
+  local_pkg_paths+=("$OPENCV_INSTALL_PREFIX/lib64/pkgconfig")
+  if [[ -n "$multiarch" ]]; then
+    local_pkg_paths+=("$OPENCV_INSTALL_PREFIX/lib/$multiarch/pkgconfig")
+  fi
+
+  local existing_pkg_path="${PKG_CONFIG_PATH:-}"
+  local combined_pkg_path="$existing_pkg_path"
+  local pkg_path
+  for pkg_path in "${local_pkg_paths[@]}"; do
+    if [[ -d "$pkg_path" ]]; then
+      combined_pkg_path="$pkg_path${combined_pkg_path:+:$combined_pkg_path}"
+    fi
+  done
+  if [[ -n "$combined_pkg_path" ]]; then
+    export PKG_CONFIG_PATH="$combined_pkg_path"
+  fi
+
+  local opencv_cmake_dir="$OPENCV_INSTALL_PREFIX/lib/cmake/opencv4"
+  if [[ -d "$opencv_cmake_dir" ]]; then
+    export OpenCV_DIR="$opencv_cmake_dir"
+    export CMAKE_PREFIX_PATH="$OPENCV_INSTALL_PREFIX:${CMAKE_PREFIX_PATH:-}"
+  fi
+
+  export PATH="$OPENCV_INSTALL_PREFIX/bin:${PATH:-}"
+  export LD_LIBRARY_PATH="$OPENCV_INSTALL_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+}
+
+build_and_install_opencv_required_version() {
+  log "Building OpenCV $OPENCV_REQUIRED_VERSION from source"
+
+  local opencv_src_root="$OPENCV_SOURCE_ROOT"
+  local opencv_zip="$opencv_src_root/opencv-${OPENCV_REQUIRED_VERSION}.zip"
+  local opencv_contrib_zip="$opencv_src_root/opencv_contrib-${OPENCV_REQUIRED_VERSION}.zip"
+  local opencv_src_dir="$opencv_src_root/opencv-${OPENCV_REQUIRED_VERSION}"
+  local opencv_contrib_dir="$opencv_src_root/opencv_contrib-${OPENCV_REQUIRED_VERSION}"
+  local opencv_build_dir="$opencv_src_root/build-${OPENCV_REQUIRED_VERSION}"
+
+  rm -rf "$opencv_src_root"
+  mkdir -p "$opencv_src_root"
+
+  wget -O "$opencv_zip" "https://github.com/opencv/opencv/archive/refs/tags/${OPENCV_REQUIRED_VERSION}.zip"
+  unzip -q "$opencv_zip" -d "$opencv_src_root"
+
+  local cmake_args=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_PREFIX="$OPENCV_INSTALL_PREFIX"
+    -DOPENCV_GENERATE_PKGCONFIG=ON
+  )
+
+  if is_truthy "$OPENCV_EXTRA_MODULES"; then
+    wget -O "$opencv_contrib_zip" "https://github.com/opencv/opencv_contrib/archive/refs/tags/${OPENCV_REQUIRED_VERSION}.zip"
+    unzip -q "$opencv_contrib_zip" -d "$opencv_src_root"
+    cmake_args+=("-DOPENCV_EXTRA_MODULES_PATH=$opencv_contrib_dir/modules")
+  fi
+
+  mkdir -p "$opencv_build_dir"
+  cmake -S "$opencv_src_dir" -B "$opencv_build_dir" "${cmake_args[@]}"
+  cmake --build "$opencv_build_dir" --parallel "$(nproc)"
+  run_as_root cmake --install "$opencv_build_dir"
+  run_as_root ldconfig
+}
+
+ensure_opencv_required_version() {
+  local installed
+  installed="$(get_opencv_version)"
+  local local_pkg_version
+  local_pkg_version="$(get_local_opencv_pkgconfig_version)"
+
+  local local_pkg_ok="true"
+  if is_truthy "$OPENCV_REQUIRE_LOCAL_PKGCONFIG"; then
+    if ! opencv_matches_required_version "$local_pkg_version"; then
+      local_pkg_ok="false"
+    fi
+  fi
+
+  if opencv_matches_required_version "$installed" && [[ "$local_pkg_ok" == "true" ]]; then
+    log "OpenCV version $installed already available"
+    activate_opencv_environment
+    return
+  fi
+
+  if [[ -n "$installed" ]]; then
+    warn "Detected OpenCV version $installed, but required is $OPENCV_REQUIRED_VERSION"
+  else
+    warn "No usable OpenCV installation detected"
+  fi
+
+  if is_truthy "$OPENCV_REQUIRE_LOCAL_PKGCONFIG"; then
+    if [[ -n "$local_pkg_version" ]]; then
+      warn "Local pkg-config reports OpenCV $local_pkg_version; expected $OPENCV_REQUIRED_VERSION"
+    else
+      warn "Local pkg-config metadata for opencv4 not found under $OPENCV_INSTALL_PREFIX"
+    fi
+  fi
+
+  build_and_install_opencv_required_version
+
+  activate_opencv_environment
+
+  local final_version
+  final_version="$(get_opencv_version)"
+  opencv_matches_required_version "$final_version" || fail "OpenCV version check failed after install. Found '$final_version', expected '$OPENCV_REQUIRED_VERSION'"
+
+  if is_truthy "$OPENCV_REQUIRE_LOCAL_PKGCONFIG"; then
+    local final_local_pkg_version
+    final_local_pkg_version="$(get_local_opencv_pkgconfig_version)"
+    opencv_matches_required_version "$final_local_pkg_version" || fail "OpenCV local pkg-config check failed after install. Found '$final_local_pkg_version', expected '$OPENCV_REQUIRED_VERSION'"
+  fi
+
+  log "OpenCV $final_version is ready"
 }
 
 stage_opencvsharp_runtime_from_nuget() {
@@ -1412,23 +1607,7 @@ EOF
       debian/control
   )
 
-  local opencv_tar="opencv-${PHD2_OPENCV_VERSION}.tar.gz"
-  rm -f "$opencv_tar"
-  rm -rf "opencv-${PHD2_OPENCV_VERSION}"
-  curl -fL --retry 5 --retry-delay 5 \
-    "https://codeload.github.com/opencv/opencv/tar.gz/refs/tags/${PHD2_OPENCV_VERSION}" \
-    -o "$opencv_tar"
-  tar -xzf "$opencv_tar"
-  cmake -S "opencv-${PHD2_OPENCV_VERSION}" -B "opencv-${PHD2_OPENCV_VERSION}/build" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/usr/local \
-    -DBUILD_LIST=core,imgproc,highgui,videoio,imgcodecs \
-    -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_EXAMPLES=OFF \
-    -DWITH_FFMPEG=ON -DWITH_GSTREAMER=OFF -DWITH_OPENCL=OFF \
-    -DWITH_IPP=OFF -DWITH_TBB=OFF
-  cmake --build "opencv-${PHD2_OPENCV_VERSION}/build" --parallel 3
-  run_as_root cmake --install "opencv-${PHD2_OPENCV_VERSION}/build"
-  run_as_root ldconfig
+  ensure_opencv_required_version
 
   local indi_3p_src="$projects_home/indi-3rdparty"
   local indi_3p_build="$projects_home/build/indi-3rdparty"
@@ -1457,10 +1636,10 @@ EOF
     export DEBFULLNAME="Local Builder"
     dch --noauto-nmu -v "$new_version" "Local x64 build ${BUILD_NUMBER}"
 
-    export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-    export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH:-}"
-    export CMAKE_PREFIX_PATH="/usr/local:${CMAKE_PREFIX_PATH:-}"
-    export OpenCV_DIR="/usr/local/lib/cmake/opencv4"
+    export PKG_CONFIG_PATH="$OPENCV_INSTALL_PREFIX/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+    export LD_LIBRARY_PATH="$OPENCV_INSTALL_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+    export CMAKE_PREFIX_PATH="$OPENCV_INSTALL_PREFIX:${CMAKE_PREFIX_PATH:-}"
+    export OpenCV_DIR="$OPENCV_INSTALL_PREFIX/lib/cmake/opencv4"
     export DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)"
 
     dpkg-buildpackage -b -us -uc -a "$DEB_ARCH"
@@ -1662,6 +1841,7 @@ main() {
   fi
 
   install_build_prerequisites
+  ensure_opencv_required_version
   install_dotnet_10
   install_node_22
   print_tool_versions
