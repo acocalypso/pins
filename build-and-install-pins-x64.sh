@@ -94,7 +94,7 @@ PLUGIN_FAILURES_FILE="${PLUGIN_FAILURES_FILE:-artifacts/plugin-build-failures.lo
 
 INDI_VERSION="${INDI_VERSION:-2.1.9}"
 INDI_DEB_ROOT="${INDI_DEB_ROOT:-artifacts/indi-debroot}"
-INDI_ENABLE_XISF="${INDI_ENABLE_XISF:-false}"
+INDI_ENABLE_XISF="${INDI_ENABLE_XISF:-true}"
 
 PHD2_REPO_URL="${PHD2_REPO_URL:-https://github.com/acocalypso/phd2.git}"
 PHD2_BRANCH="${PHD2_BRANCH:-master}"
@@ -421,6 +421,7 @@ install_build_prerequisites() {
     libv4l-dev \
     libwxgtk3.2-dev \
     libx11-dev \
+    libxisf-dev \
     libzmq3-dev \
     libwebp-dev \
     ninja-build \
