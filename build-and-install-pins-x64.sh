@@ -121,6 +121,7 @@ SETUP_RUNTIME_PREREQS="${SETUP_RUNTIME_PREREQS:-true}"
 SETUP_FRAMINGASSISTANT_CACHE="${SETUP_FRAMINGASSISTANT_CACHE:-true}"
 SETUP_ASTAP="${SETUP_ASTAP:-true}"
 RUNTIME_SETUP_STRICT="${RUNTIME_SETUP_STRICT:-false}"
+CREATE_FIRMWARE_BUNDLE="${CREATE_FIRMWARE_BUNDLE:-false}"
 
 FRAMINGASSISTANT_CACHE_URL="${FRAMINGASSISTANT_CACHE_URL:-https://nighttime-imaging.eu/downloads/Setup/Releases/FramingAssistantCache_Full.zip}"
 FRAMINGASSISTANT_CACHE_ROOT="${FRAMINGASSISTANT_CACHE_ROOT:-$TARGET_HOME/.local/share/NINA}"
@@ -154,7 +155,17 @@ CURRENT_SOURCE_FINGERPRINT=""
 
 record_built_deb() {
   local deb_path="$1"
-  BUILT_DEBS+=("$deb_path")
+  local normalized_path=""
+
+  if [[ "$deb_path" = /* ]]; then
+    normalized_path="$deb_path"
+  elif command -v realpath >/dev/null 2>&1; then
+    normalized_path="$(realpath -m "$deb_path")"
+  else
+    normalized_path="$(cd "$(dirname "$deb_path")" && pwd)/$(basename "$deb_path")"
+  fi
+
+  BUILT_DEBS+=("$normalized_path")
 }
 
 get_remote_sha() {
@@ -2000,7 +2011,11 @@ main() {
   build_plugins
   build_indi_debian_packages
   build_phd2_package
-  create_firmware_bundle
+  if is_truthy "$CREATE_FIRMWARE_BUNDLE"; then
+    create_firmware_bundle
+  else
+    log "Skipping firmware bundle zip creation"
+  fi
   install_built_packages
   setup_runtime_prerequisites
   save_successful_build_state
