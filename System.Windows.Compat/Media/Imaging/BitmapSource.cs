@@ -136,6 +136,7 @@ namespace System.Windows.Media.Imaging {
 
             // Copy the Mat data directly to the byte array
             System.Runtime.InteropServices.Marshal.Copy(_mat.Data, pixels, offset, dataSize);
+            GC.KeepAlive(this);
         }
 
         public void CopyPixels(ushort[] pixels, int stride, int offset) {
@@ -153,6 +154,7 @@ namespace System.Windows.Media.Imaging {
             byte[] bytes = new byte[byteCount];
             System.Runtime.InteropServices.Marshal.Copy(_mat.Data, bytes, 0, byteCount);
             System.Buffer.BlockCopy(bytes, 0, pixels, offset * sizeof(ushort), byteCount);
+            GC.KeepAlive(this);
         }
 
         public void CopyPixels(Array pixels, int stride, int offset) {
@@ -198,6 +200,9 @@ namespace System.Windows.Media.Imaging {
                     }
                 }
             }
+            // Prevent the GC from collecting this BitmapSource (and its _mat) while
+            // native pointers extracted from _mat.Data are still in use above.
+            GC.KeepAlive(this);
         }
 
         public static BitmapSource Create(int pixelWidth, int pixelHeight, double dpiX, double dpiY,
