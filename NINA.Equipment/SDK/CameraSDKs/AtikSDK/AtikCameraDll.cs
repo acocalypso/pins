@@ -372,13 +372,13 @@ namespace NINA.Equipment.SDK.CameraSDKs.AtikSDK {
 
         public static string DriverVersion {
             get {
-                return DllLoader.DllVersion("Atik/" + DLLNAME).ProductVersion;
+                return DllLoader.DllVersion("Atik/" + DLLNAME)?.ProductVersion ?? string.Empty;
             }
         }
 
         public static string DriverName {
             get {
-                return DllLoader.DllVersion("Atik/" + DLLNAME).ProductName;
+                return DllLoader.DllVersion("Atik/" + DLLNAME)?.ProductName ?? string.Empty;
             }
         }
 
@@ -768,7 +768,7 @@ namespace NINA.Equipment.SDK.CameraSDKs.AtikSDK {
         /// </summary>
         /// <param name="deviceNr"></param>
         /// <returns></returns>
-        [DllImport(DLLNAME, EntryPoint = "ArtemisEFWIsPresent", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+        [DllImport(DLLNAME, EntryPoint = "ArtemisEFWIsPresent", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern bool ArtemisEfwIsPresent(int deviceId);
 
         /// <summary>
