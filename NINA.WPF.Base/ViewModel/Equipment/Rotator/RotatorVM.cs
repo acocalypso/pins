@@ -122,7 +122,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Rotator {
         public void Sync(float skyAngle) {
             try {
                 if (RotatorInfo.Connected) {
-                    Logger.Info($"Syncing Rotator to Sky Angle {skyAngle}Â°");
+                    Logger.Info($"Syncing Rotator to Sky Angle {skyAngle}°");
                     var from = Rotator.Position;
                     Rotator.Sync(skyAngle);
                     RotatorInfo.Position = Rotator.Position;
@@ -158,7 +158,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Rotator {
                         }
                     );
 
-                    Logger.Debug($"Move rotator to {adjustedTargetPosition}Â°");
+                    Logger.Debug($"Move rotator to {adjustedTargetPosition}°");
                     var anyCTS = CancellationTokenSource.CreateLinkedTokenSource(_moveCts.Token, ct);
                     using (anyCTS.Token.Register(() => Rotator?.Halt())) {
                         await Rotator.MoveAbsolute(adjustedTargetPosition, anyCTS.Token);
@@ -212,7 +212,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Rotator {
                         }
                     );
 
-                    Logger.Debug($"Move rotator mechanical to {adjustedTargetPosition}Â°");
+                    Logger.Debug($"Move rotator mechanical to {adjustedTargetPosition}°");
                     var anyCTS = CancellationTokenSource.CreateLinkedTokenSource(_moveCts.Token, ct);
                     using (anyCTS.Token.Register(() => Rotator?.Halt())) {
                         await Rotator.MoveAbsoluteMechanical(adjustedTargetPosition, anyCTS.Token);

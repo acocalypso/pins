@@ -33,6 +33,8 @@ namespace NINA.View.Equipment {
         public override DataTemplate SelectTemplate(object item, DependencyObject container) {
             if (item is ASIFilterWheel) {
                 return Zwo;
+            } else if (item is PlayerOneFilterWheel) {
+                return PlayerOne;
             } else if (item is OasisFilterWheel) {
                 return Oasis;
             } else if (item is ToupTekAlikeFilterWheel) {

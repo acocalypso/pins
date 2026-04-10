@@ -167,11 +167,11 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Focuser {
                 if (lastFocusedTemperature == -1000) {
                     delta = 0;
                     deltaInt = 0;
-                    Logger.Info($"Moving Focuser By Temperature - Slope {slope} * ( DeltaT ) Â°C (relative mode) - lastTemperature initialized to {temperature}");
+                    Logger.Info($"Moving Focuser By Temperature - Slope {slope} * ( DeltaT ) °C (relative mode) - lastTemperature initialized to {temperature}");
                 } else {
                     delta = lastRoundoff + (temperature - lastFocusedTemperature) * slope;
                     deltaInt = (int)Math.Round(delta);
-                    Logger.Info($"Moving Focuser By Temperature - LastRoundoff {lastRoundoff} + Slope {slope} * ( Temperature {temperature} - PrevTemperature {lastFocusedTemperature} ) Â°C (relative mode) = Delta {delta} / DeltaInt {deltaInt}");
+                    Logger.Info($"Moving Focuser By Temperature - LastRoundoff {lastRoundoff} + Slope {slope} * ( Temperature {temperature} - PrevTemperature {lastFocusedTemperature} ) °C (relative mode) = Delta {delta} / DeltaInt {deltaInt}");
                 }
                 int pos = Position;
                 var result = await MoveFocuserInternal(pos + deltaInt, ct);

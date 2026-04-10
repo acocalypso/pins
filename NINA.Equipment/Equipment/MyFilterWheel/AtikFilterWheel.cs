@@ -42,7 +42,7 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
 
         public override bool Connected => AtikCameraDll.IsConnectedEfw(filterWheelDevice);
 
-        public override string Description => "Native Atik " + AtikCameraDll.GetConnectedArtemisEfwType(filterWheelDevice).ToString() + " (Serial Nr " + AtikCameraDll.GetArtemisEfwSerial(filterWheelDeviceId) + ")";
+        public override string Description => "Native Atik " + AtikCameraDll.GetArtemisEfwType(filterWheelDeviceId).ToString() + " (Serial Nr " + AtikCameraDll.GetArtemisEfwSerial(filterWheelDeviceId) + ")";
 
         public override Task<bool> Connect(CancellationToken token) {
             filterWheelDevice = AtikCameraDll.ConnectEfw(filterWheelDeviceId);

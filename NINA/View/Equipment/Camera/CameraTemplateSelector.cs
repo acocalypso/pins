@@ -41,6 +41,10 @@ namespace NINA.View.Equipment {
                 return Touptek;
             } else if (item is QHYCamera) {
                 return QhyCcd;
+            } else if (item is GPCamera) {
+                return Canon;
+            } else if (item is AtikCamera) {
+                return Atik;
             } else if (item is ASICamera) {
                 return Zwo;
             } else if (item is SVBonyCamera) {

@@ -272,6 +272,9 @@ namespace NINA.ViewModel {
             this.usbDeviceWatcher.DeviceRemoved -= UsbDeviceWatcher_DeviceRemoved;
             usbDeviceWatcher.Stop();
             AsyncContext.Run(DisconnectEquipment);
+            try {
+                NINA.Equipment.SDK.CameraSDKs.AtikSDK.AtikCameraDll.Shutdown();
+            } catch (Exception) { }
         }
 
         public async Task DisconnectEquipment() {
