@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright � 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -85,18 +85,14 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FlatDevice {
                 }
 
                 /* Alpaca */
-                try
-                {
+                try {
                     var alpacaInteraction = new AlpacaInteraction(profileService);
                     var alpacaCoverCalibrators = await alpacaInteraction.GetCoverCalibrators(default);
-                    foreach (IFlatDevice fd in alpacaCoverCalibrators)
-                    {
+                    foreach (IFlatDevice fd in alpacaCoverCalibrators) {
                         devices.Add(fd);
                     }
                     Logger.Info($"Found {alpacaCoverCalibrators?.Count} Alpaca Cover Calibrators");
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     Logger.Error(ex);
                 }
 
