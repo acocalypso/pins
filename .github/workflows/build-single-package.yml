@@ -323,9 +323,6 @@ jobs:
             {
               echo '#!/bin/sh'
               echo 'set -e'
-              echo 'if command -v systemctl >/dev/null 2>&1; then'
-              echo '  systemctl restart pins.service || true'
-              echo 'fi'
               echo 'exit 0'
             } > "$control_dir/postinst"
             chmod 755 "$control_dir/postinst"
@@ -536,9 +533,6 @@ jobs:
               echo "chown pi:pi $(dirname ${PLUGINS_INSTALL_BASE}) || true"
               echo "chown pi:pi ${PLUGINS_INSTALL_BASE} || true"
               echo "chown -R pi:pi \"${PLUGINS_INSTALL_BASE}/${install_folder}\" || true"
-              echo 'if command -v systemctl >/dev/null 2>&1; then'
-              echo '  systemctl restart pins.service || true'
-              echo 'fi'
               echo 'exit 0'
             } > "$control_dir/postinst"
             chmod 755 "$control_dir/postinst"
