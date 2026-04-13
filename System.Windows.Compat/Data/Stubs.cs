@@ -906,3 +906,21 @@ namespace System.Windows.Media {
         public ResourceDictionaryLocation ThemeDictionaryLocation { get; }
     }
 }
+
+namespace System.Windows.Markup {
+    /// <summary>
+    /// Stub for WPF's XmlnsDefinitionAttribute, which maps XML namespaces to CLR namespaces.
+    /// Not functional on Linux — exists only to allow the assembly to compile.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true)]
+    public sealed class XmlnsDefinitionAttribute : Attribute {
+        public XmlnsDefinitionAttribute(string xmlNamespace, string clrNamespace) {
+            XmlNamespace = xmlNamespace;
+            ClrNamespace = clrNamespace;
+        }
+
+        public string XmlNamespace { get; }
+        public string ClrNamespace { get; }
+        public string AssemblyName { get; set; }
+    }
+}
