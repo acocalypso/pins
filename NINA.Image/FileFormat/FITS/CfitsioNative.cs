@@ -114,7 +114,7 @@ namespace NINA.Image.FileFormat.FITS {
         // int CFITS_API ffopen(fitsfile **fptr, const char *filename, int iomode, int *status);
         [DllImport(DLLNAME, EntryPoint = "ffopen", CallingConvention = CallingConvention.Cdecl)]
         public static extern int fits_open_file(out IntPtr fptr, string filename, IOMODE iomode, out int status);
-        
+
         [DllImport(DLLNAME, EntryPoint = "ffdkopn", CallingConvention = CallingConvention.Cdecl)]
         public static extern int fits_open_diskfile(out nint fptr, [MarshalAs(UnmanagedType.LPStr)] string filename, IOMODE iomode, out int status);
 
@@ -155,7 +155,7 @@ namespace NINA.Image.FileFormat.FITS {
         public static extern int fits_read_pix(
             IntPtr fptr,
             DATATYPE datatype,
-            long[] firstpix,
+            CLong[] firstpix,
             long nelem,
             IntPtr nulval,
             IntPtr array,
@@ -379,9 +379,9 @@ namespace NINA.Image.FileFormat.FITS {
         }
 
         public static T[] read_pixels<T>(IntPtr fptr, int naxes, int nelem) where T : unmanaged {
-            var firstpix = new long[naxes];
+            var firstpix = new CLong[naxes];
             for (int i = 0; i < naxes; i++) {
-                firstpix[i] = 1;
+                firstpix[i] = new(1);
             }
 
             var datatype = GetDataType(typeof(T));
