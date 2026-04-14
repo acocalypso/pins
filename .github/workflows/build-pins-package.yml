@@ -128,32 +128,88 @@ jobs:
           git clone https://github.com/nitr57/pins.plugin "NINA.Plugins/pins.plugin"
 
 
-      - name: Populate NINA/External from zip bundle
+      - name: Populate NINA/External from repository clone
         shell: bash
         run: |
           set -euo pipefail
 
-          url="http://cloud.astro-narren.de/public.php/dav/files/7tEAZoEpCMCYyeX/?accept=zip"
-          tmp_dir="$(mktemp -d)"
-          zip_path="$tmp_dir/external.zip"
-          unzip_dir="$tmp_dir/unzipped"
+          rm -rf NINA/External
+          git clone --depth 1 --branch main https://github.com/nitr57/pins.external NINA/External
+          pushd NINA/External >/dev/null
+          git lfs pull || true
+          popd >/dev/null
 
-          echo "Downloading External bundle from: $url"
-          curl -L --fail --retry 3 --retry-delay 5 -o "$zip_path" "$url"
+          target_runtime="${{ env.TARGET_RUNTIME }}"
 
-          rm -rf "NINA/External"
-          mkdir -p "NINA/External"
-          unzip -q "$zip_path" -d "$unzip_dir"
-
-          if [ ! -d "$unzip_dir/external" ]; then
-            echo "Downloaded zip did not contain top-level folder 'external'" >&2
-            echo "Top-level entries:" >&2
-            (cd "$unzip_dir" && find . -mindepth 1 -maxdepth 2 -print | head -n 50) >&2
+          if [ ! -d "NINA/External/${target_runtime}" ]; then
+            echo "NINA/External/${target_runtime} not found after repository clone" >&2
             exit 1
           fi
 
-          rsync -a "$unzip_dir/external/" "NINA/External/"
-          echo "External bundle extracted into NINA/External"
+          # Rebuild NOVAS and sync generated files into the existing external layout.
+          pushd NOVAS31 >/dev/null
+          make clean || true
+          make
+          popd >/dev/null
+
+          mkdir -p "NINA/External/${target_runtime}/NOVAS"
+          cp -f NOVAS31/libnovas_c.so "NINA/External/${target_runtime}/NOVAS/libnovas_c.so"
+          cp -f NOVAS31/cio_ra.bin "NINA/External/${target_runtime}/NOVAS/cio_ra.bin"
+
+          if [ ! -f "NINA/External/JPLEPH" ]; then
+            echo "NINA/External/JPLEPH not found" >&2
+            exit 1
+          fi
+
+          # SOFA makefile builds static lib by default, so build a shared object explicitly.
+          pushd SOFA/SOFA/src >/dev/null
+          make clean || true
+          make
+          rm -f ./*.o libsofa_c.so
+          for src in ./*.c; do
+            if [ "$(basename "$src")" = "t_sofa_c.c" ]; then
+              continue
+            fi
+            gcc -fPIC -O2 -c "$src"
+          done
+          gcc -shared -o libsofa_c.so ./*.o -lm
+          popd >/dev/null
+
+          mkdir -p "NINA/External/${target_runtime}/SOFA"
+          cp -f SOFA/SOFA/src/libsofa_c.so "NINA/External/${target_runtime}/SOFA/libsofa_c.so"
+
+          build_external_cmake_sdk() {
+            local repo_url="$1"
+            local repo_dir="$2"
+            local output_lib="$3"
+            local target_subdir="$4"
+
+            rm -rf "$repo_dir"
+            git clone --depth 1 "$repo_url" "$repo_dir"
+
+            pushd "$repo_dir" >/dev/null
+            mkdir -p build
+            cd build
+            cmake ..
+            make -j"$(nproc)"
+            popd >/dev/null
+
+            local built_lib
+            built_lib=$(find "$repo_dir/build" -type f -name "$output_lib" | head -n 1 || true)
+            if [ -z "$built_lib" ]; then
+              echo "Failed to locate ${output_lib} under ${repo_dir}/build" >&2
+              exit 1
+            fi
+
+            mkdir -p "NINA/External/${target_runtime}/${target_subdir}"
+            cp -f "$built_lib" "NINA/External/${target_runtime}/${target_subdir}/${output_lib}"
+          }
+
+          build_external_cmake_sdk "https://github.com/nitr57/WandererCoverSDK.git" "WandererCoverSDK" "libWandererCoverSDK.so" "Wanderer"
+          build_external_cmake_sdk "https://github.com/nitr57/WandererRotatorSDK.git" "WandererRotatorSDK" "libWandererRotatorSDK.so" "Wanderer"
+          build_external_cmake_sdk "https://github.com/nitr57/NitecrawlerSDK.git" "NitecrawlerSDK" "libNitecrawlerSDK.so" "Nitecrawler"
+
+          echo "External bundle populated from repository clone into NINA/External"
 
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v4

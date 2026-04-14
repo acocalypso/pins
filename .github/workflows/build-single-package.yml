@@ -124,23 +124,79 @@ jobs:
           ldconfig
           cd ..
 
-          url="http://cloud.astro-narren.de/public.php/dav/files/7tEAZoEpCMCYyeX/?accept=zip"
-          tmp_dir="$(mktemp -d)"
-          zip_path="$tmp_dir/external.zip"
-          unzip_dir="$tmp_dir/unzipped"
-
-          curl -L --fail --retry 3 --retry-delay 5 -o "$zip_path" "$url"
-
           rm -rf NINA/External
-          mkdir -p NINA/External
-          unzip -q "$zip_path" -d "$unzip_dir"
+          git clone --depth 1 --branch main https://github.com/nitr57/pins.external NINA/External
+          pushd NINA/External >/dev/null
+          git lfs pull || true
+          popd >/dev/null
 
-          if [ ! -d "$unzip_dir/external" ]; then
-            echo "Downloaded zip did not contain top-level folder 'external'" >&2
+          if [ ! -d "NINA/External/${TARGET_RUNTIME}" ]; then
+            echo "NINA/External/${TARGET_RUNTIME} not found after repository clone" >&2
             exit 1
           fi
 
-          rsync -a "$unzip_dir/external/" NINA/External/
+          # Rebuild NOVAS and sync generated files into the existing external layout.
+          pushd NOVAS31 >/dev/null
+          make clean || true
+          make
+          popd >/dev/null
+
+          mkdir -p "NINA/External/${TARGET_RUNTIME}/NOVAS"
+          cp -f NOVAS31/libnovas_c.so "NINA/External/${TARGET_RUNTIME}/NOVAS/libnovas_c.so"
+          cp -f NOVAS31/cio_ra.bin "NINA/External/${TARGET_RUNTIME}/NOVAS/cio_ra.bin"
+
+          if [ ! -f "NINA/External/JPLEPH" ]; then
+            echo "NINA/External/JPLEPH not found" >&2
+            exit 1
+          fi
+
+          # SOFA makefile builds static lib by default, so build a shared object explicitly.
+          pushd SOFA/SOFA/src >/dev/null
+          make clean || true
+          make
+          rm -f ./*.o libsofa_c.so
+          for src in ./*.c; do
+            if [ "$(basename "$src")" = "t_sofa_c.c" ]; then
+              continue
+            fi
+            gcc -fPIC -O2 -c "$src"
+          done
+          gcc -shared -o libsofa_c.so ./*.o -lm
+          popd >/dev/null
+
+          mkdir -p "NINA/External/${TARGET_RUNTIME}/SOFA"
+          cp -f SOFA/SOFA/src/libsofa_c.so "NINA/External/${TARGET_RUNTIME}/SOFA/libsofa_c.so"
+
+          build_external_cmake_sdk() {
+            local repo_url="$1"
+            local repo_dir="$2"
+            local output_lib="$3"
+            local target_subdir="$4"
+
+            rm -rf "$repo_dir"
+            git clone --depth 1 "$repo_url" "$repo_dir"
+
+            pushd "$repo_dir" >/dev/null
+            mkdir -p build
+            cd build
+            cmake ..
+            make -j"$(nproc)"
+            popd >/dev/null
+
+            local built_lib
+            built_lib=$(find "$repo_dir/build" -type f -name "$output_lib" | head -n 1 || true)
+            if [ -z "$built_lib" ]; then
+              echo "Failed to locate ${output_lib} under ${repo_dir}/build" >&2
+              exit 1
+            fi
+
+            mkdir -p "NINA/External/${TARGET_RUNTIME}/${target_subdir}"
+            cp -f "$built_lib" "NINA/External/${TARGET_RUNTIME}/${target_subdir}/${output_lib}"
+          }
+
+          build_external_cmake_sdk "https://github.com/nitr57/WandererCoverSDK.git" "WandererCoverSDK" "libWandererCoverSDK.so" "Wanderer"
+          build_external_cmake_sdk "https://github.com/nitr57/WandererRotatorSDK.git" "WandererRotatorSDK" "libWandererRotatorSDK.so" "Wanderer"
+          build_external_cmake_sdk "https://github.com/nitr57/NitecrawlerSDK.git" "NitecrawlerSDK" "libNitecrawlerSDK.so" "Nitecrawler"
 
           dotnet restore NINA/NINA.csproj -r "${TARGET_RUNTIME}"
           dotnet restore System.Windows.Compat/System.Windows.Compat.csproj
@@ -278,36 +334,44 @@ jobs:
             echo "artifacts/${filename}" >> artifacts/release-files.txt
           }
 
-          build_wandereretasdk_package() {
+          build_cmake_sdk_package() {
+            local repo_url="$1"
+            local repo_dir="$2"
+            local deb_package="$3"
+            local package_description="$4"
+
             local sdk_version
             sdk_version=$(get_core_version)
 
-            rm -rf WandererETASDK
-            git clone https://github.com/nitr57/WandererETASDK WandererETASDK
+            rm -rf "$repo_dir"
+            git clone --depth 1 "$repo_url" "$repo_dir"
 
-            pushd WandererETASDK >/dev/null
+            pushd "$repo_dir" >/dev/null
             mkdir -p build
             cd build
             cmake ..
             make -j"$(nproc)"
             popd >/dev/null
 
-            deb_package="pins-wandereretasdk"
-            deb_root="artifacts/wandereretasdk-debroot"
+            local deb_root
+            deb_root="artifacts/${deb_package}-debroot"
+            local install_root
             install_root="$deb_root/usr/lib"
+            local control_dir
             control_dir="$deb_root/DEBIAN"
 
             rm -rf "$deb_root"
             mkdir -p "$install_root" "$control_dir"
 
-            mapfile -t lib_files < <(find WandererETASDK/build -type f \( -name 'lib*.so' -o -name 'lib*.so.*' \))
+            mapfile -t lib_files < <(find "$repo_dir/build" -type f \( -name 'lib*.so' -o -name 'lib*.so.*' \))
             if [ ${#lib_files[@]} -eq 0 ]; then
-              echo "No shared library files found under WandererETASDK/build" >&2
+              echo "No shared library files found under ${repo_dir}/build" >&2
               return 1
             fi
 
             cp -a "${lib_files[@]}" "$install_root/"
 
+            local installed_size
             installed_size=$(du -sk "$deb_root/usr" | cut -f1)
             {
               echo "Package: ${deb_package}"
@@ -317,7 +381,7 @@ jobs:
               echo "Architecture: ${DEB_ARCH}"
               echo "Maintainer: PINS Team"
               echo "Installed-Size: ${installed_size}"
-              echo "Description: WandererETA SDK shared library package"
+              echo "Description: ${package_description}"
             } > "$control_dir/control"
 
             {
@@ -327,12 +391,45 @@ jobs:
             } > "$control_dir/postinst"
             chmod 755 "$control_dir/postinst"
 
+            local deb_path
             deb_path="artifacts/${deb_package}_${sdk_version}_${DEB_ARCH}_${RELEASE_DATE}.deb"
             dpkg-deb --root-owner-group --build "$deb_root" "$deb_path"
             sha256sum "$deb_path" > "$deb_path.sha256"
 
             echo "$deb_path" >> artifacts/release-files.txt
             echo "$deb_path.sha256" >> artifacts/release-files.txt
+          }
+
+          build_wanderercoversdk_package() {
+            build_cmake_sdk_package \
+              "https://github.com/nitr57/WandererCoverSDK.git" \
+              "WandererCoverSDK" \
+              "pins-wanderercoversdk" \
+              "WandererCover SDK shared library package"
+          }
+
+          build_wandererrotatorsdk_package() {
+            build_cmake_sdk_package \
+              "https://github.com/nitr57/WandererRotatorSDK.git" \
+              "WandererRotatorSDK" \
+              "pins-wandererrotatorsdk" \
+              "WandererRotator SDK shared library package"
+          }
+
+          build_nitecrawlersdk_package() {
+            build_cmake_sdk_package \
+              "https://github.com/nitr57/NitecrawlerSDK.git" \
+              "NitecrawlerSDK" \
+              "pins-nitecrawlersdk" \
+              "Nitecrawler SDK shared library package"
+          }
+
+          build_wandereretasdk_package() {
+            build_cmake_sdk_package \
+              "https://github.com/nitr57/WandererETASDK.git" \
+              "WandererETASDK" \
+              "pins-wandereretasdk" \
+              "WandererETA SDK shared library package"
           }
 
           clone_selected_plugin_repo() {
@@ -554,6 +651,15 @@ jobs:
               ;;
             pins-wandereretasdk)
               build_wandereretasdk_package
+              ;;
+            pins-wanderercoversdk)
+              build_wanderercoversdk_package
+              ;;
+            pins-wandererrotatorsdk)
+              build_wandererrotatorsdk_package
+              ;;
+            pins-nitecrawlersdk)
+              build_nitecrawlersdk_package
               ;;
             plugin-joko)
               clone_selected_plugin_repo

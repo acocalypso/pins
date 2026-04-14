@@ -1,0 +1,10 @@
+name: Build package pins-wandererrotatorsdk
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-single-package.yml
+    with:
+      package_key: pins-wandererrotatorsdk
