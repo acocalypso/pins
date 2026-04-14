@@ -178,37 +178,6 @@ jobs:
           mkdir -p "NINA/External/${target_runtime}/SOFA"
           cp -f SOFA/SOFA/src/libsofa_c.so "NINA/External/${target_runtime}/SOFA/libsofa_c.so"
 
-          build_external_cmake_sdk() {
-            local repo_url="$1"
-            local repo_dir="$2"
-            local output_lib="$3"
-            local target_subdir="$4"
-
-            rm -rf "$repo_dir"
-            git clone --depth 1 "$repo_url" "$repo_dir"
-
-            pushd "$repo_dir" >/dev/null
-            mkdir -p build
-            cd build
-            cmake ..
-            make -j"$(nproc)"
-            popd >/dev/null
-
-            local built_lib
-            built_lib=$(find "$repo_dir/build" -type f -name "$output_lib" | head -n 1 || true)
-            if [ -z "$built_lib" ]; then
-              echo "Failed to locate ${output_lib} under ${repo_dir}/build" >&2
-              exit 1
-            fi
-
-            mkdir -p "NINA/External/${target_runtime}/${target_subdir}"
-            cp -f "$built_lib" "NINA/External/${target_runtime}/${target_subdir}/${output_lib}"
-          }
-
-          build_external_cmake_sdk "https://github.com/nitr57/WandererCoverSDK.git" "WandererCoverSDK" "libWandererCoverSDK.so" "Wanderer"
-          build_external_cmake_sdk "https://github.com/nitr57/WandererRotatorSDK.git" "WandererRotatorSDK" "libWandererRotatorSDK.so" "Wanderer"
-          build_external_cmake_sdk "https://github.com/nitr57/NitecrawlerSDK.git" "NitecrawlerSDK" "libNitecrawlerSDK.so" "Nitecrawler"
-
           echo "External bundle populated from repository clone into NINA/External"
 
       - name: Setup .NET 10 SDK
