@@ -130,6 +130,9 @@ jobs:
           git lfs pull || true
           popd >/dev/null
 
+          jpleph_url="https://github.com/isbeorn/nina.external/raw/refs/heads/master/JPLEPH"
+          curl -L --fail --retry 3 --retry-delay 5 -o "NINA/External/JPLEPH" "$jpleph_url"
+
           if [ ! -d "NINA/External/${TARGET_RUNTIME}" ]; then
             echo "NINA/External/${TARGET_RUNTIME} not found after repository clone" >&2
             exit 1
