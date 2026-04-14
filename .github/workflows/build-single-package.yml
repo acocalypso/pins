@@ -167,6 +167,9 @@ jobs:
           mkdir -p "NINA/External/${TARGET_RUNTIME}/SOFA"
           cp -f SOFA/SOFA/src/libsofa_c.so "NINA/External/${TARGET_RUNTIME}/SOFA/libsofa_c.so"
 
+          # Keep only NOVAS and SOFA under the runtime-specific external folder.
+          find "NINA/External/${TARGET_RUNTIME}" -mindepth 1 -maxdepth 1 ! -name 'NOVAS' ! -name 'SOFA' -exec rm -rf {} +
+
           dotnet restore NINA/NINA.csproj -r "${TARGET_RUNTIME}"
           dotnet restore System.Windows.Compat/System.Windows.Compat.csproj
           dotnet build System.Windows.Compat/System.Windows.Compat.csproj -c "${BUILD_CONFIGURATION}" --no-restore

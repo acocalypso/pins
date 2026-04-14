@@ -178,6 +178,9 @@ jobs:
           mkdir -p "NINA/External/${target_runtime}/SOFA"
           cp -f SOFA/SOFA/src/libsofa_c.so "NINA/External/${target_runtime}/SOFA/libsofa_c.so"
 
+          # Keep only NOVAS and SOFA under the runtime-specific external folder.
+          find "NINA/External/${target_runtime}" -mindepth 1 -maxdepth 1 ! -name 'NOVAS' ! -name 'SOFA' -exec rm -rf {} +
+
           echo "External bundle populated from repository clone into NINA/External"
 
       - name: Setup .NET 10 SDK
