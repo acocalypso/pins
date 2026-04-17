@@ -433,6 +433,9 @@ jobs:
               plugin-phd2tools)
                 git clone https://github.com/nitr57/nina.plugin.phd2tools NINA.Plugins/nina.plugin.phd2tools
                 ;;
+              plugin-nightsummary)
+                git clone https://github.com/nitr57/nina.plugin.nightsummary NINA.Plugins/nina.plugin.nightsummary
+                ;;
               plugin-polaralignment)
                 git clone https://github.com/nitr57/nina.plugin.polaralignment NINA.Plugins/PolarAlignment
                 ;;
@@ -662,6 +665,10 @@ jobs:
             plugin-phd2tools)
               clone_selected_plugin_repo
               build_plugin_package "NINA.Plugins/nina.plugin.phd2tools/nina.plugin.phd2tools.csproj" "Phd2 Tools" "pins-plugin-phd2tools" "^\s*\[assembly:\s*AssemblyVersion" "no" "no"
+              ;;
+            plugin-nightsummary)
+              clone_selected_plugin_repo
+              build_plugin_package "NINA.Plugins/nina.plugin.nightsummary/NINA.Plugin.NightSummary/NINA.Plugin.NightSummary.csproj" "NINA.Plugin.NightSummary" "pins-plugin-nightsummary" "" "no" "no"
               ;;
             plugin-polaralignment)
               clone_selected_plugin_repo
