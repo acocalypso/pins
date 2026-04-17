@@ -107,6 +107,16 @@ namespace System.Windows.Media.Imaging {
                 }
             }
         }
+
+        public JpegBitmapDecoder(Stream stream, BitmapCreateOptions createOptions, BitmapCacheOption cacheOption) {
+            byte[] data = new byte[stream.Length - stream.Position];
+            stream.Read(data, 0, data.Length);
+            Mat mat = Cv2.ImDecode(data, ImreadModes.Unchanged);
+            if (mat != null && !mat.Empty()) {
+                var frame = new BitmapFrame(mat);
+                Frames.Add(frame);
+            }
+        }
     }
 
     /// <summary>

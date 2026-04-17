@@ -43,6 +43,7 @@ namespace System.Windows.Media {
         public static Color LightGreen => Color.FromRgb(144, 238, 144);
         public static Color YellowGreen => Color.FromRgb(154, 205, 50);
         public static Color LightBlue => Color.FromRgb(173, 216, 230);
+        public static Color Salmon => Color.FromRgb(250, 128, 114);
     }
 
     public abstract class ImageSource : IDisposable {
@@ -298,6 +299,8 @@ namespace System.Windows.Media {
         public static SolidColorBrush Purple { get; } = new SolidColorBrush(Colors.Purple);
         public static SolidColorBrush Pink { get; } = new SolidColorBrush(Colors.Pink);
         public static SolidColorBrush Brown { get; } = new SolidColorBrush(Colors.Brown);
+        public static SolidColorBrush LightGreen { get; } = new SolidColorBrush(Colors.LightGreen);
+        public static SolidColorBrush Salmon { get; } = new SolidColorBrush(Colors.Salmon);
     }
 
     public static class PixelFormats {
