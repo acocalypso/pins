@@ -287,6 +287,7 @@ jobs:
             cp scripts/wifi-scan.py build/usr/local/bin/
             cp scripts/install-firmware.sh build/usr/local/bin/
             cp scripts/install-indi-package.sh build/usr/local/bin/
+            cp scripts/ensure-required-packages.sh build/usr/local/bin/
 
             cp scripts/hotspot.sh build/home/pi/pins-scripts/
             cp scripts/90-pins-wifi-recovery build/etc/NetworkManager/dispatcher.d/
