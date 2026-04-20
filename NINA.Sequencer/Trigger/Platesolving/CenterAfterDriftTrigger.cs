@@ -44,21 +44,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using NINA.Core.Locale;
-using NINA.WPF.Base.ViewModel;
-using NINA.Astrometry;
-using NINA.Sequencer.SequenceItem.Platesolving;
-using NINA.Core.Utility;
-using System.IO;
-using NINA.Core.Utility.Notification;
-using NINA.Sequencer.Utility;
-using NINA.WPF.Base.Interfaces.Mediator;
-using NINA.Core.Enum;
-using NINA.PlateSolving;
-using NINA.Core.Utility.WindowService;
-using NINA.Image.Interfaces;
-using NINA.Equipment.Interfaces;
-using NINA.Sequencer.Interfaces;
 using NINA.Sequencer.Logic;
 using NINA.Sequencer.Generators;
 
@@ -129,7 +114,7 @@ namespace NINA.Sequencer.Trigger.Platesolving {
         [JsonProperty]
         public InputCoordinates Coordinates { get; set; }
 
-        [IsExpression (Default = 10, Range = [0, 60, ExpressionRange.MIN_EXCLUSIVE], HasValidator = true)]
+        [IsExpression (Default = 10, Range = [0, ExpressionRange.NO_MAXIMUM, ExpressionRange.MIN_EXCLUSIVE], HasValidator = true)]
         public partial double DistanceArcMinutes { get; set; }
 
         partial void DistanceArcMinutesExpressionValidator(Expression expr) {

@@ -111,12 +111,15 @@ namespace NINA.Sequencer.SequenceItem.Platesolving {
             if (Inherited) {
                 var contextCoordinates = ItemUtility.RetrieveContextCoordinates(this.Parent);
                 if (contextCoordinates != null) {
-                    Coordinates.Coordinates = contextCoordinates.Coordinates;
+                    ApplyInheritedCoordinates(contextCoordinates);
                 }
             }
 
             progress?.Report(new ApplicationStatus() { Status = Loc.Instance["LblSlew"] });
-            await telescopeMediator.SlewToCoordinatesAsync(Coordinates.Coordinates, token);            
+            bool slewSuccessful = await telescopeMediator.SlewToCoordinatesAsync(Coordinates.Coordinates, token);
+            if (!slewSuccessful) {
+                throw new SequenceEntityFailedException(Loc.Instance["LblSlewFailed"]);
+            }
 
             var domeInfo = domeMediator.GetInfo();
             if (domeInfo.Connected && domeInfo.CanSetAzimuth && !domeFollower.IsFollowing) {

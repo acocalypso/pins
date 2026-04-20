@@ -29,7 +29,11 @@ This allows you to safely return to a stable release if needed.
 - Fixed excessive debug logging after disconnecting the OpenMeteo weather client
 - The native star detector now rejects stars whose refined centroid falls on any edge of the detection rectangle, preventing truncated stars from biasing autofocus measurements
 - Fixed "Slew To Alt/Az" sequence instruction incorrectly using SlewToCoordinatesAsync instead of SlewToAltAzAsync
-- 
+- Trained flat exposure settings now update the exact matching filter, binning, gain, and offset entry instead of accidentally reusing a nearby fallback match.
+- FITS headers now write observer site latitude, longitude, and site name correctly when those values are present.
+- XISF metadata import now reads Bayer offsets, focal ratio, target coordinates, and wind speed/gust units correctly.
+- Manual rotator moves now clean up their moving state correctly when the rotation prompt is cancelled.
+
 ## Improvements
 - **Autofocus after HFR Increase Trigger**
     - new Trend per Filter checkbox to consider HFR Trend per filter (default) or across all filters to earlier trigger autofocus runs when imaging with continues filter loops 
@@ -47,6 +51,8 @@ This allows you to safely return to a stable release if needed.
     - The native star detector now measures HFR from a centroid-refined curve of growth instead of using a first-moment approximation
     - Local star background estimation now uses a robust sigma-clipped median to reduce bias from nearby stars and outliers
     - Native FWHM and eccentricity measurements are now calculated and exposed alongside HFR
+    - The image history panel now offers FWHM and eccentricity as selectable metrics
+    - The image statistics and image history panels can display FWHM, HFR and HFR deviation in either pixels or arcseconds, based on the active profile's camera pixel size and telescope focal length
 
 ## Behavioral Changes
 - Unparking the mount no longer automatically starts sidereal tracking. Tracking will begin automatically during a slew to a target, as usual.

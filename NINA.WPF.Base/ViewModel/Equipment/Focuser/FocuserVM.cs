@@ -356,6 +356,8 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Focuser {
                         profileService.ActiveProfile.FocuserSettings.LastDeviceName = Focuser.DisplayName;
                         profileService.ActiveProfile.FocuserSettings.Reverse = this.Focuser.Reverse;
 
+                        BroadcastFocuserInfo();
+
                         await (Connected?.InvokeAsync(this, new EventArgs()) ?? Task.CompletedTask);
                         Logger.Info($"Successfully connected Focuser. Id: {Focuser.Id} Name: {Focuser.Name} DisplayName: {Focuser.DisplayName} Driver Version: {Focuser.DriverVersion}");
 
