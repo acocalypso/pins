@@ -421,6 +421,9 @@ jobs:
               plugin-joko)
                 git clone https://github.com/nitr57/joko.nina.plugins NINA.Plugins/joko.nina.plugins
                 ;;
+              plugin-orbitals)
+                git clone https://github.com/nitr57/NINA.Joko.Plugin.Orbitals NINA.Plugins/NINA.Joko.Plugin.Orbitals
+                ;;
               plugin-tenmicron)
                 git clone https://github.com/nitr57/NINA.Joko.Plugin.TenMicron NINA.Plugins/NINA.Joko.Plugin.TenMicron
                 ;;
@@ -654,6 +657,10 @@ jobs:
             plugin-joko)
               clone_selected_plugin_repo
               build_plugin_package "NINA.Plugins/joko.nina.plugins/Joko.NINA.Plugins/Joko.NINA.Plugins.HocusFocus/Joko.NINA.Plugins.HocusFocus.csproj" "joko.nina.plugins" "pins-plugin-joko" "" "no" "no"
+              ;;
+            plugin-orbitals)
+              clone_selected_plugin_repo
+              build_plugin_package "NINA.Plugins/NINA.Joko.Plugin.Orbitals/NINA.Joko.Plugin.Orbitals/NINA.Joko.Plugin.Orbitals.csproj" "Orbitals" "pins-plugin-orbitals" "^\s*\[assembly:\s*AssemblyVersion" "no" "no"
               ;;
             plugin-tenmicron)
               clone_selected_plugin_repo
