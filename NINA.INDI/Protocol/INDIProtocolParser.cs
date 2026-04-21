@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2025 Nico Trost <nico.trost57@gmail.com> and the PI.N.S. contributors
+    Copyright © 2025-2026 Nico Trost <nico.trost57@gmail.com> and the PI.N.S. contributors
 
     This file is part of PI 'N' Stars.
 
@@ -179,6 +179,41 @@ namespace NINA.INDI.Protocol {
                 var text = prop.Texts.FirstOrDefault(t => t.Name == name);
                 if (text != null) {
                     text.Value = oneText.Value.Replace("\r", "").Replace("\n", "").Trim();
+                }
+            }
+        }
+
+        public static INDILightProperty ParseDefLightVector(XElement element) {
+            var prop = new INDILightProperty {
+                DeviceName = element.Attribute("device")?.Value ?? string.Empty,
+                Name = element.Attribute("name")?.Value ?? string.Empty,
+                Label = element.Attribute("label")?.Value ?? string.Empty,
+                Group = element.Attribute("group")?.Value ?? string.Empty,
+                State = ParseState(element.Attribute("state")?.Value ?? "Idle"),
+                Permission = PropertyPermission.ReadOnly,
+                Timestamp = element.Attribute("timestamp")?.Value ?? string.Empty
+            };
+
+            foreach (var defLight in element.Elements("defLight")) {
+                prop.Lights.Add(new INDILight {
+                    Name = defLight.Attribute("name")?.Value ?? string.Empty,
+                    Label = defLight.Attribute("label")?.Value ?? string.Empty,
+                    State = ParseState(defLight.Value.Replace("\r", "").Replace("\n", "").Trim())
+                });
+            }
+
+            return prop;
+        }
+
+        public static void UpdateLightProperty(INDILightProperty prop, XElement element) {
+            prop.State = ParseState(element.Attribute("state")?.Value ?? "Idle");
+            prop.Timestamp = element.Attribute("timestamp")?.Value ?? string.Empty;
+
+            foreach (var oneLight in element.Elements("oneLight")) {
+                var name = oneLight.Attribute("name")?.Value ?? string.Empty;
+                var light = prop.Lights.FirstOrDefault(l => l.Name == name);
+                if (light != null) {
+                    light.State = ParseState(oneLight.Value.Replace("\r", "").Replace("\n", "").Trim());
                 }
             }
         }

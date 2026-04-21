@@ -1,9 +1,9 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2025 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright © 2025-2026 Nico Trost <nico.trost57@gmail.com> and the PI.N.S. contributors
 
-    This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
+    This file is part of PI 'N' Stars.
 
     This Source Code Form is subject to the terms of the Mozilla Public
     License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -29,6 +29,8 @@ using NINA.Equipment.Equipment.MyFilterWheel;
 using NINA.Equipment.Equipment.MyFlatDevice;
 using NINA.Equipment.Equipment.MyWeatherData;
 using NINA.Equipment.Equipment.MySwitch;
+using NINA.Equipment.Equipment.MySafetyMonitor;
+using NINA.Equipment.Equipment.MyDome;
 
 namespace NINA.Equipment.Utility {
 
@@ -51,7 +53,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.FocuserSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.FOCUSER_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.FOCUSER_INTERFACE, driver, "Focuser")) {
                 IndiFocuser focuser = new(device, profileService);
                 l.Add(focuser);
             }
@@ -69,7 +71,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.TelescopeSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.TELESCOPE_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.TELESCOPE_INTERFACE, driver, "Telescope")) {
                 IndiTelescope telescope = new(device, profileService);
                 l.Add(telescope);
             }
@@ -87,7 +89,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.RotatorSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.ROTATOR_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.ROTATOR_INTERFACE, driver, "Rotator")) {
                 IndiRotator rotator = new(device, profileService);
                 l.Add(rotator);
             }
@@ -105,7 +107,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.FilterWheelSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.FILTER_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.FILTER_INTERFACE, driver, "FilterWheel")) {
                 IndiFilterWheel filterWheel = new(device, profileService);
                 l.Add(filterWheel);
             }
@@ -123,7 +125,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.FlatDeviceSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.LIGHTBOX_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.LIGHTBOX_INTERFACE, driver, "FlatDevice")) {
                 IndiFlatDevice flatDevice = new(device, profileService);
                 l.Add(flatDevice);
             }
@@ -141,7 +143,7 @@ namespace NINA.Equipment.Utility {
             string driver = profileService.ActiveProfile.WeatherDataSettings.IndiDriver;
 
             // Query devices for this driver
-            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.WEATHER_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.WEATHER_INTERFACE, driver, "WeatherData")) {
                 IndiWeatherData weatherData = new(device, profileService);
                 l.Add(weatherData);
             }
@@ -157,8 +159,44 @@ namespace NINA.Equipment.Utility {
 
             string driver = profileService.ActiveProfile.SwitchSettings.IndiDriver;
 
-            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.AUX_INTERFACE, driver)) {
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.AUX_INTERFACE, driver, "Switch")) {
                 l.Add(new IndiSwitchHub(device, profileService));
+            }
+            return l;
+        }
+
+        public async Task<List<ISafetyMonitor>> GetSafetyMonitors() {
+            var l = new List<ISafetyMonitor>();
+            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
+                Logger.Debug("INDI server not ready - skipping INDI safety monitor enumeration");
+                return l;
+            }
+
+            // Fetch the INDI driver that is supposed to be used from profile
+            string driver = profileService.ActiveProfile.SafetyMonitorSettings.IndiDriver;
+
+            // Query devices for this driver (safety monitors use the WEATHER_INTERFACE in INDI)
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.WEATHER_INTERFACE, driver, "SafetyMonitor")) {
+                IndiSafetyMonitor safetyMonitor = new(device, profileService);
+                l.Add(safetyMonitor);
+            }
+            return l;
+        }
+
+        public async Task<List<IDome>> GetDomes() {
+            var l = new List<IDome>();
+            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
+                Logger.Debug("INDI server not ready - skipping INDI dome enumeration");
+                return l;
+            }
+
+            // Fetch the INDI driver that is supposed to be used from profile
+            string driver = profileService.ActiveProfile.DomeSettings.IndiDriver;
+
+            // Query devices for this driver
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.DOME_INTERFACE, driver, "Dome")) {
+                IndiDome dome = new(device, profileService);
+                l.Add(dome);
             }
             return l;
         }

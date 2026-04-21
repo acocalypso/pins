@@ -1041,6 +1041,20 @@ namespace NINA.INDI.Devices
         {
         }
 
+        public virtual void OnLightPropertyUpdated(INDILightProperty p)
+        {
+        }
+
+        public INDILightProperty GetLightProperty(string propertyName)
+        {
+            return GetProperty(propertyName) as INDILightProperty;
+        }
+
+        public PropertyState? GetLightPropertyState(string propertyName)
+        {
+            return GetLightProperty(propertyName)?.State;
+        }
+
         private string _connectionMode;
         private bool _autoSearch;
         private string _address;

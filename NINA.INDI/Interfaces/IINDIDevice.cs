@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2025 Nico Trost <nico.trost57@gmail.com> and the PI.N.S. contributors
+    Copyright © 2025-2026 Nico Trost <nico.trost57@gmail.com> and the PI.N.S. contributors
 
     This file is part of PI 'N' Stars.
 
@@ -12,6 +12,7 @@
 
 #endregion "copyright"
 
+using NINA.INDI.Enums;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,6 +36,9 @@ namespace NINA.INDI.Interfaces {
 
         /// <summary>Returns the value of a switch element in a named INDI switch property, or null if not available.</summary>
         bool? GetSwitchPropertyValue(string propertyName, string elementName);
+
+        /// <summary>Returns the overall state of a named INDI light property, or null if not available.</summary>
+        PropertyState? GetLightPropertyState(string propertyName);
 
         IList<string> SupportedActions { get; }
         string Action(string actionName, string actionParameters);

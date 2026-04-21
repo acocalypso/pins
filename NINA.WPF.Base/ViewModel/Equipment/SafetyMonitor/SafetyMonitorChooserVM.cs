@@ -64,6 +64,18 @@ namespace NINA.WPF.Base.ViewModel.Equipment.SafetyMonitor {
                     Logger.Error(ex);
                 }
 
+                /* INDI */
+                try {
+                    var indiInteraction = new INDIInteraction(profileService);
+                    var indiSafetyMonitors = await indiInteraction.GetSafetyMonitors();
+                    foreach (ISafetyMonitor safetyMonitor in indiSafetyMonitors) {
+                        devices.Add(safetyMonitor);
+                    }
+                    Logger.Info($"Found {indiSafetyMonitors?.Count} INDI Safety Monitors");
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
                 devices.Add(new SafetyMonitorSimulator());
 
                 DetermineSelectedDevice(devices, profileService.ActiveProfile.SafetyMonitorSettings.Id, profileService.ActiveProfile.SafetyMonitorSettings.LastDeviceName);

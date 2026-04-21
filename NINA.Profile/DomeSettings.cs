@@ -42,6 +42,12 @@ namespace NINA.Profile {
             SettleTimeSeconds = 1;
             SyncSlewDomeWhenMountSlews = false;
             SynchronizeDuringMountSlew = false;
+            indiConnectionMode = "CONNECTION_SERIAL";
+            indiPort = "/dev/ttyUSB0";
+            indiBaudRate = 9600;
+            indiAutoSearch = true;
+            indiAddress = "localhost";
+            indiDriver = "None";
         }
 
         private string id = string.Empty;
@@ -338,6 +344,78 @@ namespace NINA.Profile {
             set {
                 if (settleTimeSeconds != value) {
                     settleTimeSeconds = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private string indiConnectionMode;
+        [DataMember]
+        public string IndiConnectionMode {
+            get => indiConnectionMode;
+            set {
+                if (indiConnectionMode != value) {
+                    indiConnectionMode = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private string indiPort;
+        [DataMember]
+        public string IndiPort {
+            get => indiPort;
+            set {
+                if (indiPort != value) {
+                    indiPort = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private int indiBaudRate;
+        [DataMember]
+        public int IndiBaudRate {
+            get => indiBaudRate;
+            set {
+                if (indiBaudRate != value) {
+                    indiBaudRate = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private string indiDriver;
+        [DataMember]
+        public string IndiDriver {
+            get => indiDriver;
+            set {
+                if (indiDriver != value) {
+                    indiDriver = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private bool indiAutoSearch;
+        [DataMember]
+        public bool IndiAutoSearch {
+            get => indiAutoSearch;
+            set {
+                if (indiAutoSearch != value) {
+                    indiAutoSearch = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private string indiAddress;
+        [DataMember]
+        public string IndiAddress {
+            get => indiAddress;
+            set {
+                if (indiAddress != value) {
+                    indiAddress = value;
                     RaisePropertyChanged();
                 }
             }
