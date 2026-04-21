@@ -434,6 +434,9 @@ jobs:
               plugin-phd2tools)
                 git clone https://github.com/nitr57/nina.plugin.phd2tools NINA.Plugins/nina.plugin.phd2tools
                 ;;
+              plugin-groundstation)
+                git clone https://github.com/nitr57/nina-ground-station NINA.Plugins/nina-ground-station
+                ;;
               plugin-alpaca)
                 git clone https://github.com/nitr57/nina.plugin.alpaca NINA.Plugins/nina.plugin.alpaca
                 ;;
@@ -669,6 +672,10 @@ jobs:
             plugin-phd2tools)
               clone_selected_plugin_repo
               build_plugin_package "NINA.Plugins/nina.plugin.phd2tools/nina.plugin.phd2tools.csproj" "Phd2 Tools" "pins-plugin-phd2tools" "^\s*\[assembly:\s*AssemblyVersion" "no" "no"
+              ;;
+            plugin-groundstation)
+              clone_selected_plugin_repo
+              build_plugin_package "NINA.Plugins/nina-ground-station/Ground Station.csproj" "GroundStation" "pins-plugin-groundstation" "^\s*\[assembly:\s*AssemblyVersion" "no" "no"
               ;;
             plugin-alpaca)
               clone_selected_plugin_repo
