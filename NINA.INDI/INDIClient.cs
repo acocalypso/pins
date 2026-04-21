@@ -79,6 +79,12 @@ namespace NINA.INDI {
         // (telescope + focuser). The driver process is only stopped when ALL interfaces are removed.
         private readonly Dictionary<string, HashSet<DeviceInterface>> _loadedDrivers = [];
 
+        // Maps NINA device-type category name (e.g. "WeatherData", "SafetyMonitor") to the
+        // driver that was last loaded for that category.  Eviction during a rescan only touches
+        // the driver previously loaded for the SAME category, so two categories that share an
+        // INDI interface flag (e.g. WEATHER_INTERFACE) never evict each other's drivers.
+        private readonly Dictionary<string, string> _lastDriverPerCategory = [];
+
         public INDIClient(int port) {
             if (port < 1 || port > 65535) {
                 throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 1 and 65535.");
@@ -158,8 +164,11 @@ namespace NINA.INDI {
         }
 
         private async Task<bool> LoadDriver(string driverName, DeviceInterface deviceInterface, TimeSpan? loadTimeout = null, CancellationToken ct = default) {
-            // Unload the currently loaded driver for the selected interface
-            UnloadDriver(deviceInterface);
+            // Eviction of the previous driver for this category is already handled by
+            // GetDevices (by driver name, scoped to the NINA device-type category).
+            // Do NOT call UnloadDriver(deviceInterface) here — that would blindly evict
+            // drivers for OTHER categories that share the same interface flag (e.g.
+            // WeatherData and SafetyMonitor both use WEATHER_INTERFACE).
 
             // We explicitly allow empty string to NOT load any driver
             if (string.IsNullOrEmpty(driverName) || driverName.Equals("None")) {
@@ -391,7 +400,7 @@ namespace NINA.INDI {
             }
         }
 
-        public async Task<IReadOnlyList<INDIDeviceInfo>> GetDevices(DeviceInterface deviceInterface, string driver, CancellationToken ct = default) {
+        public async Task<IReadOnlyList<INDIDeviceInfo>> GetDevices(DeviceInterface deviceInterface, string driver, string deviceTypeCategory = null, CancellationToken ct = default) {
             // Serialize GetDevices calls to prevent concurrent driver load/unload operations
             await _getDriversSemaphore.WaitAsync(ct);
             try {
@@ -403,11 +412,19 @@ namespace NINA.INDI {
 
                 // Empty string or null means no indi driver to be loaded
                 if (!string.IsNullOrEmpty(driver)) {
-                    // If driver is not yet loaded, load it, but unload any other drivers of the same interface
+                    // If driver is not yet loaded, load it — but only evict the driver that
+                    // was previously loaded for THIS specific NINA device-type category.
+                    // This prevents a SafetyMonitor rescan from evicting a WeatherData driver
+                    // even though both share WEATHER_INTERFACE.
                     if (!_loadedDrivers.ContainsKey(driver)) {
-                        // Unload any other driver already serving this interface
-                        foreach (var drv in _loadedDrivers.Where(d => d.Value.Contains(deviceInterface)).ToList()) {
-                            UnloadDriver(drv.Key);
+                        if (deviceTypeCategory != null
+                            && _lastDriverPerCategory.TryGetValue(deviceTypeCategory, out string oldDriver)
+                            && oldDriver != driver) {
+                            Logger.Info($"Evicting previous {deviceTypeCategory} driver '{oldDriver}' before loading '{driver}'");
+                            UnloadDriver(oldDriver);
+                        }
+                        if (deviceTypeCategory != null) {
+                            _lastDriverPerCategory[deviceTypeCategory] = driver;
                         }
 
                         ct.ThrowIfCancellationRequested();
@@ -717,6 +734,17 @@ namespace NINA.INDI {
                             }
                             break;
                         }
+                    case "defLightVector": {
+                            property = INDIProtocolParser.ParseDefLightVector(element);
+                            if (_registeredDevices.TryGetValue(deviceName, out var defLightDevices)) {
+                                foreach (var deviceInstance in defLightDevices) {
+                                    deviceInstance.AddProperty(property);
+                                    if (property is INDILightProperty lp)
+                                        deviceInstance.OnLightPropertyUpdated(lp);
+                                }
+                            }
+                            break;
+                        }
                     case "setBLOBVector": {
                             // Update the property on the first registered device (all share the same object)
                             // then notify all devices.
@@ -725,6 +753,16 @@ namespace NINA.INDI {
                                     INDIProtocolParser.UpdateBlobProperty(bp, element);
                                     foreach (var deviceInstance in setBlobDevices)
                                         deviceInstance.OnBlobPropertyUpdated(bp);
+                                }
+                            }
+                            break;
+                        }
+                    case "setLightVector": {
+                            if (_registeredDevices.TryGetValue(deviceName, out var setLightDevices) && setLightDevices.Count > 0) {
+                                if (setLightDevices[0].GetProperty(propertyName) is INDILightProperty lp) {
+                                    INDIProtocolParser.UpdateLightProperty(lp, element);
+                                    foreach (var deviceInstance in setLightDevices)
+                                        deviceInstance.OnLightPropertyUpdated(lp);
                                 }
                             }
                             break;

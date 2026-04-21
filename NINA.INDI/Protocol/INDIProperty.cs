@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2025 Nico Trost <nico.trost57@gmail.com> and the PI.N.S. contributors
+    Copyright © 2025-2026 Nico Trost <nico.trost57@gmail.com> and the PI.N.S. contributors
 
     This file is part of PI 'N' Stars.
 
@@ -121,5 +121,20 @@ namespace NINA.INDI.Protocol {
         public string Label { get; set; } = string.Empty;
         public byte[] Data { get; set; } = [];
         public string Format { get; set; } = string.Empty;
+    }
+
+    public class INDILightProperty : INDIProperty {
+        public List<INDILight> Lights { get; set; } = new();
+
+        public override XElement ToXml() {
+            // Light properties are read-only in INDI; sending is not supported.
+            throw new NotImplementedException("Light properties are read-only and cannot be sent");
+        }
+    }
+
+    public class INDILight {
+        public string Name { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public PropertyState State { get; set; }
     }
 }
