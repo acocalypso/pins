@@ -2478,6 +2478,9 @@ HFR calculada: {2}
   <data name="LblPlateSolveFailedDelayTooltip" xml:space="preserve">
     <value>Intervalo, en minutos, entre dos intentos de resolución de campo (platesolve)</value>
   </data>
+  <data name="LblCenteringFailedAfterMaxAttempts" xml:space="preserve">
+    <value>El centrado falló después de {0} intentos de corrección</value>
+  </data>
   <data name="LblPlateSolveImage" xml:space="preserve">
     <value>Resolución de Campo (platesolve) de la imagen actual</value>
   </data>
@@ -2931,6 +2934,9 @@ Esta plantilla se usará al inicio para iniciar la secuencia en vez de la que ha
   </data>
   <data name="LblSlew" xml:space="preserve">
     <value>Ir a</value>
+  </data>
+  <data name="LblSlewFailed" xml:space="preserve">
+    <value>Ha fallado el desplazamiento</value>
   </data>
   <data name="LblSlewCenter" xml:space="preserve">
     <value>Desplazar y centrar</value>
@@ -6832,6 +6838,9 @@ Aumenta el tiempo mínimo de exposición o espera hasta que sea más brillante.<
   <data name="LblShowHistogram" xml:space="preserve">
     <value>Mostrar histograma</value>
   </data>
+  <data name="LblShowStarMeasurementsInArcseconds" xml:space="preserve">
+    <value>Mostrar mediciones de estrellas en segundos de arco</value>
+  </data>
   <data name="LblInfoOnly" xml:space="preserve">
     <value>Solo Info</value>
   </data>
@@ -7874,5 +7883,23 @@ Si el recuento de las exposiciones no es importante para ti, activa esta opción
   </data>
   <data name="LblEccentricity" xml:space="preserve">
     <value>Excentricidad</value>
+  </data>
+  <data name="Lbl_SequenceTrigger_TriggerOnUnsafe_Name" xml:space="preserve">
+    <value>Trigger On Unsafe</value>
+  </data>
+  <data name="Lbl_SequenceTrigger_TriggerOnUnsafe_Description" xml:space="preserve">
+    <value>Runs configured instructions when the safety monitor reports unsafe conditions or disconnects after being connected, waits until conditions are safe again, then runs follow-up instructions.</value>
+  </data>
+  <data name="Lbl_SequenceTrigger_TriggerOnUnsafe_BeforeWaitingUntilSafe_Description" xml:space="preserve">
+    <value>Before Waiting For Safety</value>
+  </data>
+  <data name="Lbl_SequenceTrigger_TriggerOnUnsafe_AfterWaitingUntilSafe_Description" xml:space="preserve">
+    <value>After Waiting For Safety</value>
+  </data>
+  <data name="Lbl_SequenceTrigger_TriggerOnUnsafe_BeforeWaitingUntilSafe_HelpDescription" xml:space="preserve">
+    <value>Instructions that run before waiting until conditions are safe again.</value>
+  </data>
+  <data name="Lbl_SequenceTrigger_TriggerOnUnsafe_AfterWaitingUntilSafe_HelpDescription" xml:space="preserve">
+    <value>Instructions that run after conditions are safe again.</value>
   </data>
 </root>
