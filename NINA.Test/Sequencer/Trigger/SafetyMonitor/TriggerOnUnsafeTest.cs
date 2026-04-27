@@ -22,6 +22,7 @@ using NINA.Equipment.Interfaces.Mediator;
 using NINA.Equipment.Interfaces.ViewModel;
 using NINA.Sequencer.Container;
 using NINA.Sequencer.SequenceItem;
+using NINA.Sequencer.Trigger;
 using NINA.Sequencer.Trigger.SafetyMonitor;
 using NUnit.Framework;
 using System;
@@ -64,6 +65,8 @@ namespace NINA.Test.Sequencer.Trigger.SafetyMonitor {
         /// </summary>
         [Test]
         public void Clone_CopiesMetadataAndNestedSteps() {
+            sut.IsExpanded = false;
+
             TriggerOnUnsafe clone = (TriggerOnUnsafe)sut.Clone();
 
             clone.Should().NotBeSameAs(sut);
@@ -74,6 +77,7 @@ namespace NINA.Test.Sequencer.Trigger.SafetyMonitor {
             clone.BeforeWaitForSafe.Should().NotBeSameAs(sut.BeforeWaitForSafe);
             clone.AfterWaitForSafe.Should().NotBeSameAs(sut.AfterWaitForSafe);
             clone.WaitUntilSafe.Should().NotBeSameAs(sut.WaitUntilSafe);
+            clone.IsExpanded.Should().BeFalse();
         }
 
         /// <summary>
@@ -181,6 +185,44 @@ namespace NINA.Test.Sequencer.Trigger.SafetyMonitor {
             sut.TriggerRunner.GetItemsSnapshot().Should().HaveCount(3);
         }
 
+        [Test]
+        public async Task Execute_WhenCollapsed_ExpandsDuringRunAndRestoresCollapsedState() {
+            safetyMonitorInfo.Connected = true;
+            safetyMonitorInfo.IsSafe = true;
+            bool? expandedDuringBeforeWaitForSafe = null;
+            sut.IsExpanded = false;
+            sut.BeforeWaitForSafe.Add(new TestInstruction() {
+                ExecuteAction = () => expandedDuringBeforeWaitForSafe = sut.IsExpanded
+            });
+
+            await sut.Execute(new SequentialContainer(), Mock.Of<IProgress<ApplicationStatus>>(), CancellationToken.None);
+
+            expandedDuringBeforeWaitForSafe.Should().BeTrue();
+            sut.IsExpanded.Should().BeFalse();
+        }
+
+        /// <summary>
+        /// Verifies runtime execution uses an isolated context so before/after instruction sets do not evaluate sibling triggers on the live parent container.
+        /// </summary>
+        [Test]
+        public async Task Execute_DoesNotEvaluateParentTriggerSetDuringBeforeWaitForSafeExecution() {
+            SequenceRootContainer root = new SequenceRootContainer();
+            SequentialContainer context = new SequentialContainer();
+            ObservingTrigger siblingTrigger = new ObservingTrigger();
+            TestInstruction instruction = new TestInstruction();
+
+            root.Add(context);
+            context.Add(siblingTrigger);
+            context.Add(sut);
+            sut.BeforeWaitForSafe.Add(instruction);
+
+            await sut.Execute(context, Mock.Of<IProgress<ApplicationStatus>>(), CancellationToken.None);
+
+            instruction.ExecuteCount.Should().Be(1);
+            siblingTrigger.ShouldTriggerCount.Should().Be(0);
+            siblingTrigger.ShouldTriggerAfterCount.Should().Be(0);
+        }
+
         /// <summary>
         /// Verifies validation remains non-blocking when the monitor is disconnected.
         /// </summary>
@@ -250,6 +292,44 @@ namespace NINA.Test.Sequencer.Trigger.SafetyMonitor {
                 Issues.Clear();
                 Issues.Add(issue);
                 return false;
+            }
+        }
+
+        private sealed class ObservingTrigger : SequenceTrigger {
+            public int ShouldTriggerCount { get; private set; }
+            public int ShouldTriggerAfterCount { get; private set; }
+
+            public override object Clone() {
+                return new ObservingTrigger();
+            }
+
+            public override bool ShouldTrigger(ISequenceItem previousItem, ISequenceItem nextItem) {
+                ShouldTriggerCount++;
+                return false;
+            }
+
+            public override bool ShouldTriggerAfter(ISequenceItem previousItem, ISequenceItem nextItem) {
+                ShouldTriggerAfterCount++;
+                return false;
+            }
+
+            public override Task Execute(ISequenceContainer context, IProgress<ApplicationStatus> progress, CancellationToken token) {
+                return Task.CompletedTask;
+            }
+        }
+
+        private sealed class TestInstruction : NINA.Sequencer.SequenceItem.SequenceItem {
+            public int ExecuteCount { get; private set; }
+            public Action? ExecuteAction { get; init; }
+
+            public override object Clone() {
+                return new TestInstruction();
+            }
+
+            public override Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
+                ExecuteCount++;
+                ExecuteAction?.Invoke();
+                return Task.CompletedTask;
             }
         }
     }
