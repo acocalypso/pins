@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -17,6 +17,7 @@ using NINA.Core.Enum;
 using NINA.Core.Interfaces;
 using NINA.Core.Model;
 using NINA.Core.Utility;
+using NINA.Core.Utility.Notification;
 using NINA.Image.FileFormat;
 using NINA.Image.FileFormat.FITS;
 using NINA.Image.FileFormat.XISF;
@@ -320,9 +321,9 @@ namespace NINA.Image.ImageData {
             return p;
         }
 
-        
+
         public async Task<string> SaveToDisk(FileSaveInfo fileSaveInfo, CancellationToken token, bool forceFileType, IList<ImagePattern> customPatterns) {
-            if(customPatterns == null) { customPatterns = new List<ImagePattern>(); }
+            if (customPatterns == null) { customPatterns = new List<ImagePattern>(); }
             var pattern = fileSaveInfo.FilePattern;
             string actualPath = string.Empty;
             try {
@@ -349,10 +350,10 @@ namespace NINA.Image.ImageData {
             } catch (Exception ex) {
                 Logger.Error(ex);
                 throw;
-            } 
+            }
             return actualPath;
         }
-        
+
         private string ExtractDSLRTemperatureAndMoveFile(string actualPath) {
             var oldPath = actualPath;
             try {
@@ -374,8 +375,8 @@ namespace NINA.Image.ImageData {
             }
             return actualPath;
         }
-        
-        
+
+
         public Task<string> SaveToDisk(FileSaveInfo fileSaveInfo, CancellationToken token, bool forceFileType = false) {
             return SaveToDisk(fileSaveInfo, token, forceFileType, new List<ImagePattern>());
         }
@@ -383,12 +384,20 @@ namespace NINA.Image.ImageData {
         private Task<string> SaveToDiskAsync(FileSaveInfo fileSaveInfo, string fileName, CancellationToken cancelToken, bool forceFileType = false) {
             return Task.Run(() => {
                 string path = string.Empty;
-                
+
                 // Normalize path separators to use OS-appropriate separator
                 // This is important for Linux where patterns might contain Windows-style backslashes
                 fileName = fileName.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
-                
+
                 fileSaveInfo.FilePath = Path.Combine(fileSaveInfo.FilePath, fileName);
+
+                if (fileSaveInfo.FilePath.Contains('\0')) {
+                    var sanitizedForLog = fileSaveInfo.FilePath.Replace("\0", "<NULL>");
+                    var msg = $"Image save path contains null characters and cannot be used: \"{sanitizedForLog}\". This usually means a camera driver returned a string with embedded NULL bytes that ended up in a file-pattern substitution or the configured save path. Save aborted.";
+                    Logger.Error(msg);
+                    Notification.ShowError(msg);
+                    throw new InvalidOperationException(msg);
+                }
 
                 if (!forceFileType && Data.RAWData != null) {
                     fileSaveInfo.FileType = FileTypeEnum.RAW;
@@ -510,7 +519,7 @@ namespace NINA.Image.ImageData {
                 }
 
                 var uniquePath = CoreUtil.GetUniqueFilePath(fileSaveInfo.FilePath + fileSaveInfo.GetExtension(extension), "{0}_{1}");
-                
+
                 var compression = GetFITSCompression(fileSaveInfo.FITSCompressionType);
 
                 CFitsioFITS f = null;
