@@ -12,6 +12,8 @@
 
 #endregion "copyright"
 
+using System.Runtime.InteropServices;
+
 namespace NINA.Equipment.SDK.CameraSDKs.SVBonySDK {
 
     public class SVBonyControl {
@@ -23,7 +25,7 @@ namespace NINA.Equipment.SDK.CameraSDKs.SVBonySDK {
         }
 
         public int Index { get; }
-        public int Min { get => capabilities.MinValue; }
-        public int Max { get => capabilities.MaxValue; }
+        public int Min { get => (int)capabilities.MinValue.Value; }
+        public int Max { get => (int)capabilities.MaxValue.Value; }
     }
 }

@@ -107,11 +107,11 @@ namespace NINA.Equipment.SDK.CameraSDKs.SVBonySDK {
 
                     Logger.Trace($"Found control {caps.description} - default: {caps.DefaultValue}, min: {caps.MinValue}, max: {caps.MaxValue}");
                     // Set all to default
-                    SetControlValue(caps.ControlType, caps.DefaultValue);
+                    SetControlValue(caps.ControlType, (int)caps.DefaultValue.Value);
                 }
             }
 
-            SetROI(0, 0, properties.MaxWidth, properties.MaxHeight, 1);
+            SetROI(0, 0, (int)properties.MaxWidth.Value, (int)properties.MaxHeight.Value, 1);
 
             CheckAndLogError(sVBonyPInvoke.SVBStartVideoCapture(id));
 
@@ -401,7 +401,7 @@ namespace NINA.Equipment.SDK.CameraSDKs.SVBonySDK {
 
         public (int, int) GetDimensions() {
             CheckAndLogError(sVBonyPInvoke.SVBGetCameraProperty(id, out var property));
-            return ((int)property.MaxWidth, (int)property.MaxHeight);
+            return ((int)property.MaxWidth.Value, (int)property.MaxHeight.Value);
         }
 
         public bool HasTemperatureReadout() {

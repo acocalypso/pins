@@ -69,12 +69,14 @@ namespace NINA.Equipment.SDK.CameraSDKs.SVBonySDK {
 
         [SecurityCritical]
         public SVB_ERROR_CODE SVBGetControlValue(int iCameraID, SVB_CONTROL_TYPE ControlType, out int value, out SVB_BOOL pbAuto) {
-            return SVBonyPInvoke.SVBGetControlValue(iCameraID, ControlType, out value, out pbAuto);
+            var result = SVBonyPInvoke.SVBGetControlValue(iCameraID, ControlType, out CLong longValue, out pbAuto);
+            value = (int)longValue.Value;
+            return result;
         }
 
         [SecurityCritical]
         public SVB_ERROR_CODE SVBSetControlValue(int iCameraID, SVB_CONTROL_TYPE ControlType, int value, SVB_BOOL pbAuto) {
-            return SVBonyPInvoke.SVBSetControlValue(iCameraID, ControlType, value, pbAuto);
+            return SVBonyPInvoke.SVBSetControlValue(iCameraID, ControlType, new CLong(value), pbAuto);
         }
 
         [SecurityCritical]
@@ -343,7 +345,7 @@ namespace NINA.Equipment.SDK.CameraSDKs.SVBonySDK {
         /// <param name="pbAuto"></param>
         /// <returns></returns>
         [DllImport(DLLNAME, EntryPoint = nameof(SVBGetControlValue), CallingConvention = CallingConvention.Cdecl)]
-        public static extern SVB_ERROR_CODE SVBGetControlValue(int iCameraID, SVB_CONTROL_TYPE ControlType, out int value, out SVB_BOOL pbAuto);
+        public static extern SVB_ERROR_CODE SVBGetControlValue(int iCameraID, SVB_CONTROL_TYPE ControlType, out CLong value, out SVB_BOOL pbAuto);
 
         /// <summary>
         /// /***************************************************************************
@@ -372,7 +374,7 @@ namespace NINA.Equipment.SDK.CameraSDKs.SVBonySDK {
         /// <param name="pbAuto"></param>
         /// <returns></returns>
         [DllImport(DLLNAME, EntryPoint = nameof(SVBSetControlValue), CallingConvention = CallingConvention.Cdecl)]
-        public static extern SVB_ERROR_CODE SVBSetControlValue(int iCameraID, SVB_CONTROL_TYPE ControlType, int value, SVB_BOOL pbAuto);
+        public static extern SVB_ERROR_CODE SVBSetControlValue(int iCameraID, SVB_CONTROL_TYPE ControlType, CLong value, SVB_BOOL pbAuto);
 
         /// <summary>
         /// /***************************************************************************
@@ -646,8 +648,8 @@ namespace NINA.Equipment.SDK.CameraSDKs.SVBonySDK {
 
     [StructLayout(LayoutKind.Sequential)]
     public struct SVB_CAMERA_PROPERTY {
-        public int MaxHeight; //the max height of the camera
-        public int MaxWidth; //the max width of the camera
+        public CLong MaxHeight; //the max height of the camera
+        public CLong MaxWidth; //the max width of the camera
         public SVB_BOOL IsColorCam;
         public SVB_BAYER_PATTERN BayerPattern;
 
@@ -679,9 +681,9 @@ namespace NINA.Equipment.SDK.CameraSDKs.SVBonySDK {
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 128)]
         public byte[] description; //description of this control
 
-        public int MaxValue;
-        public int MinValue;
-        public int DefaultValue;
+        public CLong MaxValue;
+        public CLong MinValue;
+        public CLong DefaultValue;
         public SVB_BOOL IsAutoSupported; //support auto set 1, don't support 0
         public SVB_BOOL IsWritable; //some control like temperature can only be read by some cameras
         public SVB_CONTROL_TYPE ControlType;//this is used to get value and set value of the control
