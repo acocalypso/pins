@@ -4516,34 +4516,34 @@ Hinweis: Dieser Modus setzt voraus, dass die HFR-Unterschiede zwischen den Filte
     <value>Meridianflip</value>
   </data>
   <data name="Lbl_SequenceTrigger_ProgrammableMeridianFlipTrigger_Name" xml:space="preserve">
-    <value>Programmable Meridian Flip</value>
+    <value>Programmierbarer Meridian-Flip</value>
   </data>
   <data name="Lbl_SequenceTrigger_ProgrammableMeridianFlipTrigger_Description" xml:space="preserve">
-    <value>A meridian flip trigger with customizable actions before and after the flip.</value>
+    <value>Ein Meridian-Flip-Auslöser mit anpassbaren Aktionen vor und nach dem Flip.</value>
   </data>
   <data name="Lbl_SequenceTrigger_ProgrammableMeridianFlipTrigger_BeforeFlipActions_Description" xml:space="preserve">
-    <value>Before Flip Actions</value>
+    <value>Aktionen vor dem Flip</value>
   </data>
   <data name="Lbl_SequenceTrigger_ProgrammableMeridianFlipTrigger_AfterFlipActions_Description" xml:space="preserve">
-    <value>After Flip Actions</value>
+    <value>Aktionen nach dem Flip</value>
   </data>
   <data name="Lbl_SequenceTrigger_ProgrammableMeridianFlipTrigger_BeforeFlipActions_HelpDescription" xml:space="preserve">
-    <value>Instructions that run before waiting for the meridian flip.</value>
+    <value>Anweisungen, die vor dem Warten auf den Meridian-Flip ausgeführt werden.</value>
   </data>
   <data name="Lbl_SequenceTrigger_ProgrammableMeridianFlipTrigger_AfterFlipActions_HelpDescription" xml:space="preserve">
-    <value>Instructions that run after the meridian flip.</value>
+    <value>Anweisungen, die nach dem Meridian-Flip ausgeführt werden.</value>
   </data>
   <data name="Lbl_SequenceTrigger_ProgrammableMeridianFlipTrigger_BeforeFlipActions_Warning" xml:space="preserve">
-    <value>Keep these steps short. Long before-flip actions can delay the meridian flip.</value>
+    <value>Diese Schritte kurz halten. Lange Aktionen vor dem Flip können den Meridian-Flip verzögern.</value>
   </data>
   <data name="Lbl_SequenceTrigger_ProgrammableMeridianFlipTrigger_WaitForFlipWindow_Description" xml:space="preserve">
-    <value>Wait For Flip Window</value>
+    <value>Auf Flip-Fenster warten</value>
   </data>
   <data name="Lbl_SequenceTrigger_ProgrammableMeridianFlipTrigger_ResumeTrackingAndFlip_Description" xml:space="preserve">
-    <value>Resume Tracking and Flip</value>
+    <value>Nachführung fortsetzen und Flip ausführen</value>
   </data>
   <data name="Lbl_SequenceTrigger_ProgrammableMeridianFlipTrigger_InitialSettleAndSyncDome_Description" xml:space="preserve">
-    <value>Settle</value>
+    <value>Ruhezeit</value>
   </data>
   <data name="Lbl_SequenceItem_Validation_CameraCannotSetTemperature" xml:space="preserve">
     <value>Die Kamera besitzt keinen Kühler, es kann keine Temperatur eingestellt werden</value>
@@ -4626,11 +4626,20 @@ Hinweis: Dieser Modus setzt voraus, dass die HFR-Unterschiede zwischen den Filte
   <data name="LblTemplates" xml:space="preserve">
     <value>Vorlagen</value>
   </data>
+  <data name="LblLinkedTemplates" xml:space="preserve">
+    <value>Verknüpfte Vorlagen</value>
+  </data>
   <data name="LblTemplate_DefaultTemplates" xml:space="preserve">
     <value>Standardvorlagen</value>
   </data>
   <data name="LblTemplate_DropTemplateHere" xml:space="preserve">
     <value>Sequenzanweisungen aus der Sequenz hier ablegen, um eine neue Vorlage zu erstellen</value>
+  </data>
+  <data name="LblTemplate_LinkedTemplateHint" xml:space="preserve">
+    <value>Strg gedrückt halten, während eine Vorlage abgelegt wird, um sie verknüpft statt als Kopie hinzuzufügen.</value>
+  </data>
+  <data name="LblTemplate_LinkedTemplateHintTooltip" xml:space="preserve">
+    <value>Eine verknüpfte Vorlage hält eine Live-Verknüpfung zur Quellvorlage. Ihr Inhalt wird in der Sequenz als schreibgeschützte Vorschau angezeigt und automatisch aktualisiert, wenn sich die Vorlage ändert. Verwenden Sie Vorlage bearbeiten auf der verknüpften Vorlage, um die Quellvorlage zu aktualisieren. Verwenden Sie eine normale Ablage, wenn Sie eine unabhängige Kopie möchten.</value>
   </data>
   <data name="LblTemplate_OverwriteTemplateMessageBox_Caption" xml:space="preserve">
     <value>Vorlage überschreiben?</value>
@@ -4985,6 +4994,60 @@ Diese Bedingung sollte zusammen mit einer anderen Schleifenbedingung verwendet w
   </data>
   <data name="Lbl_SequenceContainer_SaveAsTemplate_Tooltip" xml:space="preserve">
     <value>Speichert die aktuelle Anweisungsfolge und deren kompletten Inhalt als Vorlage zur Wiederverwendung</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_Name" xml:space="preserve">
+    <value>Verknüpfte Vorlage</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_DisplayName" xml:space="preserve">
+    <value>Verknüpfte Vorlage: {0}</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_Description" xml:space="preserve">
+    <value>Fügt eine Live-Verknüpfung zu einer Sequenzvorlage hinzu, statt sie zu kopieren. Der aktuelle Vorlageninhalt wird in diesem Container angezeigt, damit er in der Sequenz geprüft werden kann. Er ist schreibgeschützt, bis Vorlage bearbeiten aktiviert wird. Wenn sich die Quellvorlage ändert, aktualisiert sich dieser Container automatisch auf die neueste Version. Während der Ausführung wartet N.I.N.A., bis Vorlagen vollständig geladen sind, und führt dann den aktuellen Vorlageninhalt aus. Wenn die verknüpfte Vorlage auf einem Zielcontainer basiert, speichert die Vorlage weiterhin nur die wiederverwendbare Sequenzstruktur; legen Sie ein Ziel auf der verknüpften Vorlage ab, um das Ziel für diese Verwendung auszuwählen, und N.I.N.A. wendet dieses Ziel bei jeder Aktualisierung der Vorlage erneut an. Verwenden Sie dies, wenn mehrere Sequenzen derselben Vorlage folgen sollen. Verwenden Sie eine normale Vorlagenablage, wenn Sie eine unabhängige Kopie möchten. Fügen Sie eine Vorlage über das Menü Verknüpfte Vorlagen hinzu, oder halten Sie Strg gedrückt, während Sie eine Vorlage in die Sequenz ziehen, um sie verknüpft abzulegen.</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_HeaderReadonly" xml:space="preserve">
+    <value>Vorschau der verknüpften Vorlage</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_HeaderEditing" xml:space="preserve">
+    <value>Verknüpfte Vorlage bearbeiten</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_StatusReadonly" xml:space="preserve">
+    <value>Schreibgeschützte Vorschau von "{0}". Verwenden Sie Vorlage bearbeiten, um die Quellvorlage zu ändern.</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_StatusEditing" xml:space="preserve">
+    <value>Quellvorlage wird bearbeitet. Beim Speichern wird die Vorlage für jede verknüpfte Verwendung aktualisiert.</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_StatusLoading" xml:space="preserve">
+    <value>Warte darauf, dass die Vorlage "{0}" vollständig geladen wird.</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_StatusMissing" xml:space="preserve">
+    <value>Vorlage "{0}" konnte nicht gefunden werden.</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_StatusInvalid" xml:space="preserve">
+    <value>Diese verknüpfte Vorlage hat keine gültige Quellvorlage.</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_DefaultNotEditable" xml:space="preserve">
+    <value>Standardvorlagen können nicht direkt bearbeitet werden. Speichern Sie die Vorlage zuerst als Benutzervorlage.</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_EditTemplate" xml:space="preserve">
+    <value>Vorlage bearbeiten</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_SaveTemplate" xml:space="preserve">
+    <value>Vorlage speichern</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_CancelEditTemplate" xml:space="preserve">
+    <value>Vorlagenbearbeitung abbrechen</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_TargetSelected" xml:space="preserve">
+    <value>Ziel: {0}</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_TargetMissing" xml:space="preserve">
+    <value>Kein Ziel ausgewählt. Legen Sie hier ein Ziel ab oder geben Sie unten Zieldetails ein.</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_TargetDrop" xml:space="preserve">
+    <value>Dieses Ziel mit der verknüpften Vorlage verwenden</value>
+  </data>
+  <data name="Lbl_SequenceContainer_LinkedTemplateContainer_TargetRequired" xml:space="preserve">
+    <value>Wählen Sie ein Ziel für diese verknüpfte Vorlage aus, bevor Sie die Sequenz ausführen.</value>
   </data>
   <data name="LblSafetyMonitorNotConnected" xml:space="preserve">
     <value>Sicherheitsmonitor ist nicht verbunden</value>
@@ -7921,35 +7984,35 @@ Wenn die Belichtungsanzahl für Sie nicht wichtig ist, aktivieren Sie diese Opti
     <value>Exzentrizität</value>
   </data>
   <data name="Lbl_SequenceTrigger_CustomTrigger_Name" xml:space="preserve">
-    <value>Custom Trigger</value>
+    <value>Benutzerdefinierter Auslöser</value>
   </data>
   <data name="Lbl_SequenceTrigger_CustomTrigger_Description" xml:space="preserve">
-    <value>Use an existing trigger as the trigger source, then choose your own instructions to run when that trigger would normally fire.
-This is useful when a built-in trigger has the timing you need, but you want custom actions.</value>
+    <value>Verwendet einen vorhandenen Auslöser als Auslöserquelle. Wählen Sie anschließend eigene Anweisungen aus, die ausgeführt werden, wenn dieser Auslöser normalerweise ausgelöst würde.
+Dies ist hilfreich, wenn ein integrierter Auslöser den benötigten Zeitpunkt hat, Sie aber eigene Aktionen ausführen möchten.</value>
   </data>
   <data name="Lbl_SequenceTrigger_CustomTrigger_TriggerSource_Name" xml:space="preserve">
-    <value>Trigger Source</value>
+    <value>Auslöserquelle</value>
   </data>
   <data name="Lbl_SequenceTrigger_CustomTrigger_Instructions_Name" xml:space="preserve">
-    <value>Custom Trigger Instructions</value>
+    <value>Anweisungen des benutzerdefinierten Auslösers</value>
   </data>
   <data name="Lbl_SequenceTrigger_CustomTrigger_TriggerSource_HelpDescription" xml:space="preserve">
-    <value>Drop a trigger here to choose when the custom trigger runs.</value>
+    <value>Legen Sie hier einen Auslöser ab, um festzulegen, wann der benutzerdefinierte Auslöser ausgeführt wird.</value>
   </data>
   <data name="Lbl_SequenceTrigger_CustomTrigger_Instructions_HelpDescription" xml:space="preserve">
-    <value>Drop instructions here to run when the selected trigger source fires.</value>
+    <value>Legen Sie hier Anweisungen ab, die ausgeführt werden, wenn die ausgewählte Auslöserquelle ausgelöst wird.</value>
   </data>
   <data name="Lbl_SequenceTrigger_CustomTrigger_TriggerSource_DragOverText" xml:space="preserve">
-    <value>ADD TRIGGER SOURCE</value>
+    <value>AUSLÖSERQUELLE HINZUFÜGEN</value>
   </data>
   <data name="Lbl_SequenceTrigger_CustomTrigger_Instructions_DragOverText" xml:space="preserve">
-    <value>ADD CUSTOM INSTRUCTIONS</value>
+    <value>BENUTZERDEFINIERTE ANWEISUNGEN HINZUFÜGEN</value>
   </data>
   <data name="Lbl_SequenceTrigger_CustomTrigger_NoTriggerSource_Issue" xml:space="preserve">
-    <value>Add a trigger source.</value>
+    <value>Auslöserquelle hinzufügen.</value>
   </data>
   <data name="Lbl_SequenceTrigger_CustomTrigger_NoInstructions_Issue" xml:space="preserve">
-    <value>Add at least one instruction.</value>
+    <value>Mindestens eine Anweisung hinzufügen.</value>
   </data>
   <data name="Lbl_SequenceTrigger_TriggerOnUnsafe_Name" xml:space="preserve">
     <value>Bei unsicherem Zustand auslösen</value>
