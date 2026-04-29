@@ -89,6 +89,7 @@ namespace System.Windows.Threading {
         }
 
         public bool HasShutdownStarted => false;
+        public bool HasShutdownFinished => false;
 
         public static void PushFrame(DispatcherFrame frame) {
             // In headless mode, simulate frame processing by pumping the message loop

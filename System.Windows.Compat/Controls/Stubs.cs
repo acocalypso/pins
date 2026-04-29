@@ -149,15 +149,26 @@ namespace System.Windows.Controls {
     /// Represents a control that can contain a collection of items.
     /// </summary>
     public class ItemsControl : FrameworkElement {
+        public System.Collections.IList Items { get; } = new System.Collections.ArrayList();
+
         public static ItemsControl ItemsControlFromItemContainer(DependencyObject container) {
             return null;
         }
+
+        public System.Windows.Controls.Primitives.ItemContainerGenerator ItemContainerGenerator { get; } = new System.Windows.Controls.Primitives.ItemContainerGenerator();
     }
 
     /// <summary>
     /// Represents an item in a TreeView control.
     /// </summary>
     public class TreeViewItem : ItemsControl {
+        public bool IsExpanded { get; set; }
+    }
+
+    /// <summary>
+    /// Represents a tree view control.
+    /// </summary>
+    public class TreeView : ItemsControl {
     }
 }
 
@@ -176,5 +187,40 @@ namespace System.Windows.Controls.Primitives {
         Mouse,
         MousePoint,
         Custom
+    }
+
+    /// <summary>
+    /// Generates containers for items in an ItemsControl.
+    /// </summary>
+    public class ItemContainerGenerator {
+        public event EventHandler StatusChanged { add { } remove { } }
+        public event EventHandler<ItemsChangedEventArgs> ItemsChanged { add { } remove { } }
+
+        public System.Windows.DependencyObject ContainerFromIndex(int index) => null;
+        public System.Windows.DependencyObject ContainerFromItem(object item) => null;
+    }
+
+    /// <summary>
+    /// Provides data for the ItemsChanged event raised by an ItemContainerGenerator.
+    /// </summary>
+    public class ItemsChangedEventArgs : EventArgs {
+        public System.Collections.Specialized.NotifyCollectionChangedAction Action { get; }
+        public System.Windows.Controls.Primitives.GeneratorPosition Position { get; }
+        public System.Windows.Controls.Primitives.GeneratorPosition OldPosition { get; }
+        public int ItemCount { get; }
+        public int ItemUICount { get; }
+    }
+
+    /// <summary>
+    /// Describes the position of an item that has been generated.
+    /// </summary>
+    public struct GeneratorPosition {
+        public int Index { get; set; }
+        public int Offset { get; set; }
+
+        public GeneratorPosition(int index, int offset) {
+            Index = index;
+            Offset = offset;
+        }
     }
 }

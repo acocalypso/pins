@@ -483,8 +483,15 @@ namespace System.Windows {
         }
     }
 
+    public enum ShutdownMode {
+        OnLastWindowClose,
+        OnMainWindowClose,
+        OnExplicitShutdown
+    }
+
     public class Application {
         public static Application Current { get; } = new Application();
+        public ShutdownMode ShutdownMode { get; set; } = ShutdownMode.OnLastWindowClose;
         public Window MainWindow { get; set; }
         public Threading.Dispatcher Dispatcher { get; } = Threading.Dispatcher.CurrentDispatcher;
         public ResourceDictionary Resources { get; set; } = new ResourceDictionary();

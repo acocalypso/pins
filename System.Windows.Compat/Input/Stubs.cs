@@ -225,6 +225,8 @@ namespace System.Windows.Input {
     /// Provides access to keyboard input information.
     /// </summary>
     public static class Keyboard {
+        public static ModifierKeys Modifiers => ModifierKeys.None;
+
         public static bool IsKeyDown(Key key) {
             return false;
         }
@@ -271,6 +273,18 @@ namespace System.Windows.Input {
         public static Cursor Hand { get; } = new Cursor();
         public static Cursor Wait { get; } = new Cursor();
     }
+
+    /// <summary>
+    /// Specifies the modifier keys on a keyboard.
+    /// </summary>
+    [Flags]
+    public enum ModifierKeys {
+        None    = 0,
+        Alt     = 1,
+        Control = 2,
+        Shift   = 4,
+        Windows = 8
+    }
 }
 
 namespace System.Windows {
@@ -278,6 +292,7 @@ namespace System.Windows {
     /// Represents an element in the UI tree that can measure and arrange child elements.
     /// </summary>
     public class FrameworkElement : UIElement {
+        public System.Windows.Threading.Dispatcher Dispatcher { get; } = new System.Windows.Threading.Dispatcher();
         public double Width { get; set; }
         public double Height { get; set; }
         public double ActualWidth { get; set; }
@@ -287,6 +302,8 @@ namespace System.Windows {
         public object DataContext { get; set; }
         public Media.Effects.Effect Effect { get; set; }
         public Media.Transform RenderTransform { get; set; }
+        public event RoutedEventHandler Loaded;
+        public event RoutedEventHandler Unloaded;
         public event EventHandler<System.Windows.Input.KeyEventArgs> KeyDown;
 
         public void CaptureTouch(System.Windows.Input.TouchDevice touchDevice) {
@@ -358,6 +375,7 @@ namespace System.Windows {
         public static readonly RoutedEvent MouseEnterEvent = new RoutedEvent();
         public bool IsEnabled { get; set; } = true;
         public bool IsHitTestVisible { get; set; } = true;
+        public double Opacity { get; set; } = 1.0;
 
         public event EventHandler<System.Windows.Input.MouseEventArgs> MouseEnter;
         public event EventHandler<System.Windows.Input.MouseEventArgs> MouseLeave;
@@ -377,6 +395,15 @@ namespace System.Windows {
         public event EventHandler<System.Windows.Input.SizeChangedEventArgs> SizeChanged;
 
         public void RaiseEvent(RoutedEventArgs e) {
+        }
+
+        public void UpdateLayout() {
+        }
+
+        public void Measure(System.Windows.Size availableSize) {
+        }
+
+        public void Arrange(System.Windows.Rect finalRect) {
         }
 
         public void InvalidateVisual() {
