@@ -429,11 +429,13 @@ namespace NINA.Image.ImageData {
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             IImageArray data = Data;
             string uniquePath = CoreUtil.GetUniqueFilePath(path + "." + data.RAWType);
-            using (FileStream fs = new FileStream(uniquePath, FileMode.Create)) {
+            // On Linux, FileOptions.WriteThrough maps to O_SYNC: each write() call blocks
+            // until the device commits the data, matching the behaviour of a sync-mounted
+            // filesystem and preventing write-back cache from masking backpressure.
+            // The final Flush(flushToDisk:true) additionally syncs file metadata.
+            var writeOptions = OperatingSystem.IsLinux() ? FileOptions.WriteThrough : FileOptions.None;
+            using (FileStream fs = new FileStream(uniquePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, writeOptions)) {
                 fs.Write(data.RAWData);
-                // Flush to disk so the write truly completes before returning.
-                // Without this, Linux write-back cache on network mounts signals completion
-                // immediately, providing no backpressure and leading to memory exhaustion.
                 fs.Flush(flushToDisk: true);
             }
             return uniquePath;
@@ -445,7 +447,8 @@ namespace NINA.Image.ImageData {
             Directory.CreateDirectory(Path.GetDirectoryName(fileSaveInfo.FilePath));
             string uniquePath = CoreUtil.GetUniqueFilePath(fileSaveInfo.FilePath + fileSaveInfo.GetExtension(".tif"));
 
-            using (FileStream fs = new FileStream(uniquePath, FileMode.Create)) {
+            var writeOptions = OperatingSystem.IsLinux() ? FileOptions.WriteThrough : FileOptions.None;
+            using (FileStream fs = new FileStream(uniquePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, writeOptions)) {
                 TiffBitmapEncoder encoder = new TiffBitmapEncoder();
 
                 switch (fileSaveInfo.TIFFCompressionType) {
@@ -516,7 +519,8 @@ namespace NINA.Image.ImageData {
 
                 f.PopulateHeaderCards(MetaData);
 
-                using (FileStream fs = new FileStream(uniquePath, FileMode.Create)) {
+                var writeOptions = OperatingSystem.IsLinux() ? FileOptions.WriteThrough : FileOptions.None;
+                using (FileStream fs = new FileStream(uniquePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, writeOptions)) {
                     f.Write(fs);
                     fs.Flush(flushToDisk: true);
                 }
@@ -570,7 +574,8 @@ namespace NINA.Image.ImageData {
             Directory.CreateDirectory(Path.GetDirectoryName(fileSaveInfo.FilePath));
             string uniquePath = CoreUtil.GetUniqueFilePath(fileSaveInfo.FilePath + fileSaveInfo.GetExtension(".xisf"));
 
-            using (FileStream fs = new FileStream(uniquePath, FileMode.Create)) {
+            var writeOptions = OperatingSystem.IsLinux() ? FileOptions.WriteThrough : FileOptions.None;
+            using (FileStream fs = new FileStream(uniquePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, writeOptions)) {
                 img.Save(fs);
                 fs.Flush(flushToDisk: true);
             }
