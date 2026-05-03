@@ -211,6 +211,7 @@ compute_source_fingerprint() {
 
   local tracked_sources=(
     "phd2|$PHD2_REPO_URL|$PHD2_BRANCH"
+    "pins-external|https://github.com/nitr57/pins.external|main"
     "touch-plugin|https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars|develop"
     "joko|https://github.com/nitr57/joko.nina.plugins|"
     "ninaapi|https://github.com/nitr57/ninaAPI|"
@@ -953,27 +954,59 @@ build_and_install_libgpiod() {
 }
 
 populate_external_bundle() {
-  log "Populating NINA/External from zip bundle"
+  log "Populating NINA/External from repository clone and source builds"
 
-  local url="http://cloud.astro-narren.de/public.php/dav/files/7tEAZoEpCMCYyeX/?accept=zip"
-  local tmp_dir
-  tmp_dir="$(mktemp -d)"
-  local zip_path="$tmp_dir/external.zip"
-  local unzip_dir="$tmp_dir/unzipped"
-
-  curl -L --fail --retry 3 --retry-delay 5 -o "$zip_path" "$url"
+  local external_repo_url="https://github.com/nitr57/pins.external"
+  local external_repo_branch="main"
+  local jpleph_url="https://github.com/isbeorn/nina.external/raw/refs/heads/master/JPLEPH"
+  local runtime_dir="NINA/External/$TARGET_RUNTIME"
 
   rm -rf "NINA/External"
-  mkdir -p "NINA/External"
-  unzip -q "$zip_path" -d "$unzip_dir"
+  git clone --depth 1 --branch "$external_repo_branch" "$external_repo_url" "NINA/External"
 
-  if [[ ! -d "$unzip_dir/external" ]]; then
-    rm -rf "$tmp_dir"
-    fail "Downloaded zip did not contain top-level folder 'external'"
-  fi
+  pushd "NINA/External" >/dev/null
+  git lfs pull || true
+  popd >/dev/null
 
-  rsync -a "$unzip_dir/external/" "NINA/External/"
-  rm -rf "$tmp_dir"
+  curl -L --fail --retry 3 --retry-delay 5 -o "NINA/External/JPLEPH" "$jpleph_url"
+  rm -f "NINA/External/.gitignore" "NINA/External/.gitattributes"
+
+  [[ -d "$runtime_dir" ]] || fail "$runtime_dir not found after repository clone"
+
+  # Rebuild NOVAS and sync generated files into the runtime-specific external layout.
+  pushd "NOVAS31" >/dev/null
+  make clean || true
+  make
+  popd >/dev/null
+
+  mkdir -p "$runtime_dir/NOVAS"
+  cp -f "NOVAS31/libnovas_c.so" "$runtime_dir/NOVAS/libnovas_c.so"
+  cp -f "NOVAS31/cio_ra.bin" "$runtime_dir/NOVAS/cio_ra.bin"
+
+  [[ -f "NINA/External/JPLEPH" ]] || fail "NINA/External/JPLEPH not found"
+
+  # SOFA makefile builds a static library by default, so build a shared object explicitly.
+  pushd "SOFA/SOFA/src" >/dev/null
+  make clean || true
+  make
+  rm -f ./*.o libsofa_c.so
+  local src
+  for src in ./*.c; do
+    if [[ "$(basename "$src")" == "t_sofa_c.c" ]]; then
+      continue
+    fi
+    gcc -fPIC -O2 -c "$src"
+  done
+  gcc -shared -o libsofa_c.so ./*.o -lm
+  popd >/dev/null
+
+  mkdir -p "$runtime_dir/SOFA"
+  cp -f "SOFA/SOFA/src/libsofa_c.so" "$runtime_dir/SOFA/libsofa_c.so"
+
+  # Keep only NOVAS and SOFA under the runtime-specific external folder.
+  find "$runtime_dir" -mindepth 1 -maxdepth 1 ! -name 'NOVAS' ! -name 'SOFA' -exec rm -rf {} +
+
+  log "External bundle populated from repository clone into NINA/External"
 }
 
 determine_versions() {
