@@ -93,6 +93,11 @@ namespace System.Drawing
             _mat = mat;
         }
 
+        public Bitmap(Bitmap source)
+        {
+            _mat = source?._mat?.Clone() ?? new Mat();
+        }
+
         public Bitmap(Bitmap source, int width, int height)
         {
             // Resize the source bitmap to the specified dimensions
