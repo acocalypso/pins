@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Updated NINA to 3.3.0.1036-nightly
 ### Fixed
-- Filestream use WriteThrough option
+- Delayed GC
 
 ## 1.1.19 - 2026-04-29
 ### Changed

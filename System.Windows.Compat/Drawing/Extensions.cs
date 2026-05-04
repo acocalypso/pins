@@ -434,7 +434,7 @@ namespace System.Drawing
             stream.Write(buffer, 0, buffer.Length);
         }
 
-        public void Dispose() => _mat?.Dispose();
+        public override void Dispose() => _mat?.Dispose();
 
         // Implicit conversions
         // Returns internal Mat directly — in-place filter operations depend on this.

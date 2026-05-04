@@ -74,10 +74,8 @@ namespace System.Windows.Media.Imaging {
                 GC.RemoveMemoryPressure(_memoryPressure);
                 _memoryPressure = 0;
             }
-            if (disposing) {
-                _mat?.Dispose();
-                _mat = null;
-            }
+            _mat?.Dispose();
+            _mat = null;
         }
 
         public int PixelWidth => _mat.Width;
@@ -220,7 +218,7 @@ namespace System.Windows.Media.Imaging {
             int rowBytes = (int)System.Math.Min((long)stride, mat.Step());
             int maxRowsToCopy = bufferSize / (stride > 0 ? stride : 1);
             int rowsToCopy = System.Math.Min(pixelHeight, maxRowsToCopy);
-            
+
             for (int y = 0; y < rowsToCopy; y++) {
                 IntPtr srcPtr = buffer + (y * stride);
                 IntPtr dstPtr = mat.Data + (y * (int)mat.Step());
