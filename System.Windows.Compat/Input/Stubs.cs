@@ -285,6 +285,10 @@ namespace System.Windows.Input {
         Shift   = 4,
         Windows = 8
     }
+
+    public delegate void MouseButtonEventHandler(object sender, MouseButtonEventArgs e);
+    public delegate void MouseEventHandler(object sender, MouseEventArgs e);
+    public delegate void KeyEventHandler(object sender, KeyEventArgs e);
 }
 
 namespace System.Windows {
@@ -292,12 +296,14 @@ namespace System.Windows {
     /// Represents an element in the UI tree that can measure and arrange child elements.
     /// </summary>
     public class FrameworkElement : UIElement {
+        public static readonly RoutedEvent ContextMenuOpeningEvent = new RoutedEvent();
         public System.Windows.Threading.Dispatcher Dispatcher { get; } = new System.Windows.Threading.Dispatcher();
         public double Width { get; set; }
         public double Height { get; set; }
         public double ActualWidth { get; set; }
         public double ActualHeight { get; set; }
-        public object Parent { get; set; }
+        public DependencyObject Parent { get; set; }
+        public DependencyObject TemplatedParent { get; set; }
         public bool IsMouseCaptured { get; set; }
         public object DataContext { get; set; }
         public Media.Effects.Effect Effect { get; set; }
@@ -362,6 +368,12 @@ namespace System.Windows {
             // This is used to convert coordinates between UI elements
             return point;
         }
+
+        public void AddHandler(RoutedEvent routedEvent, Delegate handler, bool handledEventsToo = false) {
+        }
+
+        public void RemoveHandler(RoutedEvent routedEvent, Delegate handler) {
+        }
     }
 
     /// <summary>
@@ -373,6 +385,9 @@ namespace System.Windows {
         public static readonly RoutedEvent MouseLeaveEvent = new RoutedEvent();
         public static readonly RoutedEvent MouseMoveEvent = new RoutedEvent();
         public static readonly RoutedEvent MouseEnterEvent = new RoutedEvent();
+        public static readonly RoutedEvent PreviewMouseDownEvent = new RoutedEvent();
+        public static readonly RoutedEvent PreviewMouseMoveEvent = new RoutedEvent();
+        public static readonly RoutedEvent PreviewKeyDownEvent = new RoutedEvent();
         public bool IsEnabled { get; set; } = true;
         public bool IsHitTestVisible { get; set; } = true;
         public double Opacity { get; set; } = 1.0;

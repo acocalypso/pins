@@ -163,12 +163,29 @@ namespace System.Windows.Controls {
     /// </summary>
     public class TreeViewItem : ItemsControl {
         public bool IsExpanded { get; set; }
+        public object Header { get; set; }
     }
 
     /// <summary>
     /// Represents a tree view control.
     /// </summary>
     public class TreeView : ItemsControl {
+    }
+
+    /// <summary>
+    /// Represents a control that can be expanded or collapsed.
+    /// </summary>
+    public class Expander : System.Windows.FrameworkElement {
+        public bool IsExpanded { get; set; }
+    }
+
+    /// <summary>
+    /// Provides data for ContextMenuOpening and ContextMenuClosing events.
+    /// </summary>
+    public class ContextMenuEventArgs : System.Windows.RoutedEventArgs {
+        public bool Handled { get; set; }
+        public double CursorLeft { get; set; }
+        public double CursorTop { get; set; }
     }
 }
 
@@ -198,6 +215,34 @@ namespace System.Windows.Controls.Primitives {
 
         public System.Windows.DependencyObject ContainerFromIndex(int index) => null;
         public System.Windows.DependencyObject ContainerFromItem(object item) => null;
+    }
+
+    /// <summary>
+    /// Base class for text input controls.
+    /// </summary>
+    public class TextBoxBase : System.Windows.FrameworkElement {
+    }
+
+    /// <summary>
+    /// Base class for controls that select items.
+    /// </summary>
+    public class Selector : System.Windows.FrameworkElement {
+    }
+
+    /// <summary>
+    /// Base class for controls that have a numeric range.
+    /// </summary>
+    public class RangeBase : System.Windows.FrameworkElement {
+        public double Value { get; set; }
+        public double Minimum { get; set; }
+        public double Maximum { get; set; }
+    }
+
+    /// <summary>
+    /// Represents a button that can be checked or unchecked.
+    /// </summary>
+    public class ToggleButton : ButtonBase {
+        public bool? IsChecked { get; set; }
     }
 
     /// <summary>

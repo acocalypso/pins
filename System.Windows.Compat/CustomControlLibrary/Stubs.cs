@@ -21,4 +21,13 @@ namespace NINA.CustomControlLibrary {
     internal static class CustomControlLibraryStub {
         // Empty placeholder
     }
+
+    /// <summary>
+    /// Headless stub for the WPF DetachingExpander control.
+    /// </summary>
+    public class DetachingExpander : System.Windows.FrameworkElement {
+        public bool IsExpanded { get; set; }
+        public object Header { get; set; }
+        public object Content { get; set; }
+    }
 }
