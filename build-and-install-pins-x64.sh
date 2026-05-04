@@ -106,6 +106,8 @@ PHD2_BRANCH="${PHD2_BRANCH:-master}"
 PHD2_INDI_VERSION="${PHD2_INDI_VERSION:-2.1.9}"
 PHD2_OPENCV_VERSION="${PHD2_OPENCV_VERSION:-4.11.0}"
 PHD2_AUTOSTART_SERVICE="${PHD2_AUTOSTART_SERVICE:-false}"
+PHD2_BUILD_INDI_3RDPARTY="${PHD2_BUILD_INDI_3RDPARTY:-true}"
+PHD2_INDI_ROOT="${PHD2_INDI_ROOT:-/usr}"
 OPENCV_REQUIRED_VERSION="${OPENCV_REQUIRED_VERSION:-$PHD2_OPENCV_VERSION}"
 OPENCV_SOURCE_ROOT="${OPENCV_SOURCE_ROOT:-artifacts/src/opencv}"
 OPENCV_INSTALL_PREFIX="${OPENCV_INSTALL_PREFIX:-/usr/local}"
@@ -1833,16 +1835,33 @@ EOF
 
   ensure_opencv_required_version
 
-  local indi_3p_src="$projects_home/indi-3rdparty"
-  local indi_3p_build="$projects_home/build/indi-3rdparty"
-  rm -rf "$indi_3p_src" "$indi_3p_build"
-  git clone --depth 1 --branch "v$PHD2_INDI_VERSION" https://github.com/indilib/indi-3rdparty.git "$indi_3p_src"
-  cmake -S "$indi_3p_src" -B "$indi_3p_build" \
-    -DCMAKE_INSTALL_PREFIX=/usr \
-    -DCMAKE_BUILD_TYPE=Release
-  cmake --build "$indi_3p_build" --parallel 4
-  run_as_root cmake --install "$indi_3p_build"
-  run_as_root ldconfig
+  if is_truthy "$PHD2_BUILD_INDI_3RDPARTY"; then
+    local indi_3p_src="$projects_home/indi-3rdparty"
+    local indi_3p_build="$projects_home/build/indi-3rdparty"
+    rm -rf "$indi_3p_src" "$indi_3p_build"
+    git clone --depth 1 --branch "v$PHD2_INDI_VERSION" https://github.com/indilib/indi-3rdparty.git "$indi_3p_src"
+
+    # FindINDI.cmake honors INDI_ROOT; pass it explicitly to avoid include detection failures.
+    if cmake -S "$indi_3p_src" -B "$indi_3p_build" \
+      -DCMAKE_INSTALL_PREFIX=/usr \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DINDI_ROOT="$PHD2_INDI_ROOT" \
+      -DCMAKE_PREFIX_PATH="$PHD2_INDI_ROOT:${CMAKE_PREFIX_PATH:-}"; then
+      if cmake --build "$indi_3p_build" --parallel "$(nproc)"; then
+        if run_as_root cmake --install "$indi_3p_build"; then
+          run_as_root ldconfig || true
+        else
+          warn "indi-3rdparty install failed; continuing without installed indi-3rdparty drivers"
+        fi
+      else
+        warn "indi-3rdparty build failed; continuing without indi-3rdparty drivers"
+      fi
+    else
+      warn "indi-3rdparty configure failed (INDI_ROOT=$PHD2_INDI_ROOT); continuing without indi-3rdparty drivers"
+    fi
+  else
+    log "Skipping indi-3rdparty build (PHD2_BUILD_INDI_3RDPARTY=$PHD2_BUILD_INDI_3RDPARTY)"
+  fi
 
   (
     cd "$phd2_src"
