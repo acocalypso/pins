@@ -769,7 +769,7 @@ namespace System.Windows {
 
 namespace System.Windows.Controls {
 
-    public class Button : System.Windows.DependencyObject {
+    public class Button : System.Windows.FrameworkElement {
         public string Name { get; set; }
         public object Content { get; set; }
         public object ToolTip { get; set; }
@@ -784,7 +784,7 @@ namespace System.Windows.Controls {
         public string Text { get; set; }
     }
 
-    public class TextBox : System.Windows.DependencyObject {
+    public class TextBox : System.Windows.FrameworkElement {
         public string Text { get; set; }
         public static readonly DependencyProperty TextProperty = DependencyProperty.Register("Text", typeof(string), typeof(TextBox));
         public object ToolTip { get; set; }
@@ -794,6 +794,14 @@ namespace System.Windows.Controls {
         }
     }
 
+    public class Border : System.Windows.FrameworkElement {
+        public object Child { get; set; }
+    }
+
+    public class StackPanel : System.Windows.FrameworkElement {
+        public System.Collections.Generic.List<System.Windows.UIElement> Children { get; } = new System.Collections.Generic.List<System.Windows.UIElement>();
+    }
+
     public class Label : System.Windows.DependencyObject {
         public object Content { get; set; }
     }
@@ -801,7 +809,7 @@ namespace System.Windows.Controls {
 
 namespace System.Windows.Controls.Primitives {
 
-    public class ButtonBase {
+    public class ButtonBase : System.Windows.FrameworkElement {
         public static readonly System.Windows.RoutedEvent ClickEvent = new System.Windows.RoutedEvent();
     }
 }
@@ -810,6 +818,7 @@ namespace System.Windows {
 
     public class RoutedEventArgs : EventArgs {
         public RoutedEvent RoutedEvent { get; set; }
+        public object OriginalSource { get; set; }
 
         public RoutedEventArgs(RoutedEvent routedEvent) {
             RoutedEvent = routedEvent;
@@ -818,8 +827,30 @@ namespace System.Windows {
         public RoutedEventArgs() { }
     }
 
+    /// <summary>
+    /// Provides a delegate for ContextMenu events.
+    /// </summary>
+    public delegate void ContextMenuEventHandler(object sender, System.Windows.Controls.ContextMenuEventArgs e);
+
     public class RoutedEvent {
         // Stub
+    }
+
+    /// <summary>
+    /// Provides the base class for framework content elements.
+    /// </summary>
+    public class FrameworkContentElement : DependencyObject {
+        public DependencyObject Parent { get; set; }
+        public DependencyObject TemplatedParent { get; set; }
+    }
+
+    /// <summary>
+    /// Provides methods for working with the logical tree.
+    /// </summary>
+    public static class LogicalTreeHelper {
+        public static DependencyObject GetParent(DependencyObject current) {
+            return null;
+        }
     }
 
     /// <summary>
