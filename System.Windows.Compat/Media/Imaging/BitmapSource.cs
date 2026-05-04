@@ -74,8 +74,10 @@ namespace System.Windows.Media.Imaging {
                 GC.RemoveMemoryPressure(_memoryPressure);
                 _memoryPressure = 0;
             }
-            _mat?.Dispose();
-            _mat = null;
+            if (disposing) {
+                _mat?.Dispose();
+                _mat = null;
+            }
         }
 
         public int PixelWidth => _mat.Width;
