@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 1.1.20 - 2026-05-03
 ### Changed
 - Updated NINA to 3.3.0.1036-nightly
+### Fixed
+- Delayed GC
 
 ## 1.1.19 - 2026-04-29
 ### Changed
