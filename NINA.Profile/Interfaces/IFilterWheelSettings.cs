@@ -23,6 +23,7 @@ namespace NINA.Profile.Interfaces {
         string LastDeviceName { get; set; }
         bool DisableGuidingOnFilterChange { get; set; }
         bool Unidirectional { get; set; }
+        int SlotNum { get; set; }
         string IndiConnectionMode { get; set; }
         string IndiPort { get; set; }
         int IndiBaudRate { get; set; }
