@@ -53,6 +53,7 @@ namespace NINA.Profile {
             FilterWheelFilters = new ObserveAllCollection<FilterInfo>();
             disableGuidingOnFilterChange = false;
             unidirectional = true;
+            slotNum = -1;
             indiConnectionMode = "CONNECTION_SERIAL";
             indiPort = "/dev/ttyUSB0";
             indiBaudRate = 9600;
@@ -108,6 +109,19 @@ namespace NINA.Profile {
             set {
                 if (unidirectional != value) {
                     unidirectional = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private int slotNum;
+
+        [DataMember]
+        public int SlotNum {
+            get => slotNum;
+            set {
+                if (slotNum != value) {
+                    slotNum = value;
                     RaisePropertyChanged();
                 }
             }
