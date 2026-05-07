@@ -579,9 +579,12 @@ build_and_install_opencv_required_version() {
   unzip -q "$opencv_zip" -d "$opencv_src_root"
 
   local cmake_args=(
+    -G Ninja
     -DCMAKE_BUILD_TYPE=Release
     -DCMAKE_INSTALL_PREFIX="$OPENCV_INSTALL_PREFIX"
     -DOPENCV_GENERATE_PKGCONFIG=ON
+    -DBUILD_TESTS=OFF
+    -DBUILD_PERF_TESTS=OFF
   )
 
   if is_truthy "$OPENCV_EXTRA_MODULES"; then
@@ -733,6 +736,7 @@ build_and_install_libxisf() {
   git clone --depth 1 --branch "$LIBXISF_BRANCH" "$LIBXISF_REPO_URL" "$LIBXISF_WORKDIR"
 
   cmake -S "$LIBXISF_WORKDIR" -B "$LIBXISF_WORKDIR/build" \
+    -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$LIBXISF_INSTALL_PREFIX" \
     -DUSE_BUNDLED_LIBS=ON \
@@ -1805,6 +1809,22 @@ build_phd2_package() {
   run_as_root cmake --install "$indi_core_build"
   run_as_root ldconfig
 
+  # INDI's cmake does not install a pkg-config file; create one so PHD2's FindINDI.cmake can find it.
+  local indi_multiarch
+  indi_multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo "x86_64-linux-gnu")"
+  run_as_root bash -c "mkdir -p /usr/lib/${indi_multiarch}/pkgconfig && cat > /usr/lib/${indi_multiarch}/pkgconfig/libindi.pc <<'PKGEOF'
+prefix=/usr
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib/${indi_multiarch}
+includedir=\${prefix}/include/libindi
+
+Name: libindi
+Description: Instrument-Neutral Distributed Interface
+Version: ${PHD2_INDI_VERSION}
+Libs: -L\${libdir} -lindidriver -lindiclient
+Cflags: -I\${includedir}
+PKGEOF"
+
   local equivs_dir="/tmp/libindi-dev-equivs"
   rm -rf "$equivs_dir"
   mkdir -p "$equivs_dir"
@@ -1938,9 +1958,14 @@ install_built_packages() {
     [[ -f "$deb" ]] || fail "Missing expected .deb artifact: $deb"
   done
 
-  run_as_root dpkg -i "${unique_debs[@]}" || true
+  # Remove distro INDI packages that conflict with our custom-built ones.
+  run_as_root apt-get remove -y --allow-remove-essential \
+    libindi-plugins libindialignmentdriver1 libindiclient1 libindidriver1 libindilx200-1 \
+    indi-bin libindi-dev libindi1 libindi-data 2>/dev/null || true
+
+  run_as_root dpkg -i --force-overwrite "${unique_debs[@]}" || true
   run_as_root apt-get -f install -y
-  run_as_root dpkg -i "${unique_debs[@]}"
+  run_as_root dpkg -i --force-overwrite "${unique_debs[@]}"
 
   local nina_data_dir="$TARGET_HOME/.local/share/NINA"
   local nina_config_dir="$TARGET_HOME/.config/NINA"
