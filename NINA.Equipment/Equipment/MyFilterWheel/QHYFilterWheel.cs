@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -106,7 +106,7 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
         public short Position {
             get {
                 uint rv;
-                byte[] status = new byte[1];
+                byte[] status = new byte[64];
                 short position;
                 string statusString;
 
@@ -115,7 +115,8 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
                     return -1;
                 }
 
-                statusString = string.Join("", Encoding.ASCII.GetChars(status));
+                var nullTermIdx = Array.IndexOf(status, (byte)0);
+                statusString = Encoding.ASCII.GetString(status, 0, nullTermIdx < 0 ? status.Length : nullTermIdx);
                 Logger.Debug($"QHYCFW: Current position: {statusString}");
 
                 /*
