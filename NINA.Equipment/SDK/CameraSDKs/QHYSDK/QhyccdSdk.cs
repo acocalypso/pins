@@ -261,7 +261,9 @@ namespace QHYCCD {
         }
 
         public uint GetCfwStatus(byte[] status) {
-            return GetQHYCCDCFWStatus(handle, status);
+            lock (lockobj) {
+                return GetQHYCCDCFWStatus(handle, status);
+            }
         }
 
         public uint SendOrderToCfw(string order, int length) {
