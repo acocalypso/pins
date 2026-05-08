@@ -1,0 +1,1333 @@
+{
+  "dome": [
+    {
+      "Name": "indi_alpaca_dome",
+      "Label": "Alpaca Dome",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_baader_dome",
+      "Label": "Baader Dome",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_beaver_dome",
+      "Label": "Beaver Dome",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_ddw_dome",
+      "Label": "DDW Dome",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_script_dome",
+      "Label": "Dome  Scripting Gateway",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_simulator_dome",
+      "Label": "Dome Simulator",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_domepro2_dome",
+      "Label": "DomePro2",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_dragonfly_dome",
+      "Label": "DragonFly Dome",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_dragonlair_dome",
+      "Label": "DragonLAIR",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_maxdomeii",
+      "Label": "MaxDome II",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_nexdome",
+      "Label": "NexDome",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_nexdome_beaver",
+      "Label": "NexDome Beaver",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_ocs",
+      "Label": "OCS",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_rigel_dome",
+      "Label": "Rigel Dome",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_rolloff_dome",
+      "Label": "RollOff Simulator",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_rolloffino",
+      "Label": "RollOff ino",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_scopedome_dome",
+      "Label": "ScopeDome Dome",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_talon6",
+      "Label": "Talon6",
+      "Type": "dome"
+    },
+    {
+      "Name": "indi_universalror_dome",
+      "Label": "Universal ROR",
+      "Type": "dome"
+    }
+  ],
+  "filterwheel": [
+    {
+      "Name": "indi_apogee_wheel",
+      "Label": "Agogee CFW",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_altaircam_wheel",
+      "Label": "Altair",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_omegonprocam_wheel",
+      "Label": "Astroshop",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_atik_wheel",
+      "Label": "Atik",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_bressercam_wheel",
+      "Label": "Bresser",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_fli_wheel",
+      "Label": "FLI CFW",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_simulator_wheel",
+      "Label": "Filter Simulator",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_mallincam_wheel",
+      "Label": "MALLINCAM",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_mi_sfw_usb",
+      "Label": "MI SFW",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_mi_sfw_eth",
+      "Label": "MI SFW",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_manual_wheel",
+      "Label": "Manual Filter",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_meadecam_wheel",
+      "Label": "Meade",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_nncam_wheel",
+      "Label": "Nn",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_ogmacam_wheel",
+      "Label": "OGMAVision",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_oasis_filter_wheel",
+      "Label": "Oasis Filter Wheel",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_openogma",
+      "Label": "OpenOGMA",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_optec_wheel",
+      "Label": "Optec IFW",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_starshootg_wheel",
+      "Label": "Orion",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_pegasusindigo_wheel",
+      "Label": "Pegasus INDIGO",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_playerone_wheel",
+      "Label": "PlayerOne EFW",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_qhycfw1_wheel",
+      "Label": "QHYCFW1",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_qhycfw2_wheel",
+      "Label": "QHYCFW2",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_qhycfw3_wheel",
+      "Label": "QHYCFW3",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_quantum_wheel",
+      "Label": "Quantum Wheel",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_svbonycam_wheel",
+      "Label": "SVBONY2",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_sx_wheel",
+      "Label": "SX Wheel",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_tscam_wheel",
+      "Label": "Teleskop",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_toupcam_wheel",
+      "Label": "Touptek",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_trutech_wheel",
+      "Label": "TruTech Wheel",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_xagyl_wheel",
+      "Label": "XAGYL Wheel",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_asi_wheel",
+      "Label": "ZWO EFW",
+      "Type": "filterwheel"
+    },
+    {
+      "Name": "indi_ioptron_wheel",
+      "Label": "ioptron Wheel",
+      "Type": "filterwheel"
+    }
+  ],
+  "flatpanel": [],
+  "focuser": [
+    {
+      "Name": "indi_aaf2_focus",
+      "Label": "AAF2",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_activefocuser_focus",
+      "Label": "ActiveFocuser",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_alluna_tcs2",
+      "Label": "Alluna TCS2",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_altaircam_focuser",
+      "Label": "Altair",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_armadillo_focus",
+      "Label": "Armadillo focuser",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_astromechfoc",
+      "Label": "Astromechanics FOC",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_omegonprocam_focuser",
+      "Label": "Astroshop",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_avalonud_focuser",
+      "Label": "AvalonUD Focuser",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_steeldrive_focus",
+      "Label": "Baader SteelDrive",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_steeldrive2_focus",
+      "Label": "Baader SteelDriveII",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_beefocus",
+      "Label": "Bee Focuser",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_bressercam_focuser",
+      "Label": "Bresser",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_celestron_sct_focus",
+      "Label": "Celestron SCT",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_deepskydad_af1_focus",
+      "Label": "DeepSkyDad AF1",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_deepskydad_af2_focus",
+      "Label": "DeepSkyDad AF2",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_deepskydad_af3_focus",
+      "Label": "DeepSkyDad AF3",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_esatto_focus",
+      "Label": "Esatto",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_esattoarco_focus",
+      "Label": "Esatto Arco",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_fcusb_focus",
+      "Label": "FCUSB",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_fli_focus",
+      "Label": "FLI PDF",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_lynx_focus",
+      "Label": "FocusLynx",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_simulator_focus",
+      "Label": "Focuser Simulator",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_hitecastrodc_focus",
+      "Label": "HitecAstro DC",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_integra_focus",
+      "Label": "Integra85",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_lacerta_mfoc_focus",
+      "Label": "Lacerta MFOC",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_lacerta_mfoc_fmc_focus",
+      "Label": "Lacerta MFOC FMC",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_lakeside_focus",
+      "Label": "Lakeside",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_mallincam_focuser",
+      "Label": "MALLINCAM",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_meadecam_focuser",
+      "Label": "Meade",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_microtouch_focus",
+      "Label": "Microtouch",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_moonlite_focus",
+      "Label": "MoonLite",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_moonlitedro_focus",
+      "Label": "MoonLite DRO",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_myfocuserpro2_focus",
+      "Label": "MyFocuserPro2",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_nfocus",
+      "Label": "NFocus",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_nightcrawler_focus",
+      "Label": "NightCrawler",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_nncam_focuser",
+      "Label": "Nn",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_ogmacam_focuser",
+      "Label": "OGMAVision",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_oasis_focuser",
+      "Label": "Oasis Focuser",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_onfocus_focus",
+      "Label": "OnFocus",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_tcfs_focus",
+      "Label": "Optec TCF-S",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_tcfs3_focus",
+      "Label": "Optec TCF-S",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_starshootg_focuser",
+      "Label": "Orion",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_dmfc_focus",
+      "Label": "Pegasus DMFC",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_pegasus_scopsoag",
+      "Label": "Pegasus DMFC",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_pegasus_focuscube",
+      "Label": "Pegasus FocusCube",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_pegasus_focuscube3",
+      "Label": "Pegasus FocusCube3",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_pegasus_prodigyMF",
+      "Label": "Pegasus MMC-7000AH",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_perfectstar_focus",
+      "Label": "PerfectStar",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_pinefeat_cef_focus",
+      "Label": "Pinefeat EF Lens Controller",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_efa_focus",
+      "Label": "PlaneWave EFA",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_platypus_focus",
+      "Label": "Platypus focuser",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_qhy_focuser",
+      "Label": "QFocuser",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_rbfocus_focus",
+      "Label": "RBFocus",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_rainbowrsf_focus",
+      "Label": "Rainbow Astro RSF",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_nstep_focus",
+      "Label": "Rigelsys NStep",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_robo_focus",
+      "Label": "RoboFocus",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_siefs_focus",
+      "Label": "SI EFS",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_svbonycam_focuser",
+      "Label": "SVBONY2",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_sestosenso_focus",
+      "Label": "Sesto Senso",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_sestosenso2_focus",
+      "Label": "Sesto Senso 2",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_smartfocus_focus",
+      "Label": "SmartFocus",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_teenastro_focus",
+      "Label": "TeenAstroFocuser",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_tscam_focuser",
+      "Label": "Teleskop",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_ticfocuser-ng",
+      "Label": "TicFocuser-ng",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_toupcam_focuser",
+      "Label": "Touptek",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_usbfocusv3_focus",
+      "Label": "USBFocusV3",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_asi_focuser",
+      "Label": "ZWO EAF",
+      "Type": "focuser"
+    },
+    {
+      "Name": "indi_ieaf_focus",
+      "Label": "iEAFFocus",
+      "Type": "focuser"
+    }
+  ],
+  "rotator": [
+    {
+      "Name": "indi_camelot_rotator",
+      "Label": "Camelot Rotator",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_gemini_focus",
+      "Label": "Gemini Focusing Rotator",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_nightcrawler_focus",
+      "Label": "NightCrawler",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_falcon_rotator",
+      "Label": "Pegasus Falcon",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_falconv2_rotator",
+      "Label": "Pegasus FalconV2",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_pyxis_rotator",
+      "Label": "Pyxis",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_nframe_rotator",
+      "Label": "Rigelsys nFrame",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_simulator_rotator",
+      "Label": "Rotator Simulator",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_seletek_rotator",
+      "Label": "Seletek Rotator",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_wanderer_lite_rotator",
+      "Label": "Wanderer Rotator Lite",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_wanderer_rotator_lite_v2",
+      "Label": "Wanderer Rotator Lite V2",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_wanderer_rotator_mini",
+      "Label": "Wanderer Rotator Mini",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_asi_rotator",
+      "Label": "ZWO CAA",
+      "Type": "rotator"
+    },
+    {
+      "Name": "indi_iafscaa_focus",
+      "Label": "iOptron Focusing Rotator",
+      "Type": "rotator"
+    }
+  ],
+  "safetymonitor": [],
+  "switches": [
+    {
+      "Name": "indi_alto",
+      "Label": "ALTO",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_astarbox",
+      "Label": "AStarBox",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_arduinost4",
+      "Label": "Arduino ST4",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_duino",
+      "Label": "Arduino Simple Switcher",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_astrolink4mini2",
+      "Label": "AstroLink 4 mini II",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_astrometry",
+      "Label": "Astrometry",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_avalonud_aux",
+      "Label": "AvalonUD Aux",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_celestron_dewpower",
+      "Label": "Celestron Dew Power",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_cheapodc",
+      "Label": "CheapoDC",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_deepskydad_fp",
+      "Label": "DeepSkyDad FP",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_deepskydad_fr1",
+      "Label": "DeepSkyDad FR1",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_dragonfly",
+      "Label": "DragonFly Controller",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_dragon_light",
+      "Label": "DragonLIGHT",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_duino_powerbox",
+      "Label": "Duino Power Box",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_simulator_dustcover",
+      "Label": "Dust Cover Simulator",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_flipflat",
+      "Label": "Flip Flat",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_giotto",
+      "Label": "GIOTTO",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_gpsnmea",
+      "Label": "GPS NMEA",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_simulator_gps",
+      "Label": "GPS Simulator",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_gpsd",
+      "Label": "GPSD",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_gpusb",
+      "Label": "GPUSB",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_gemini_flatpanel",
+      "Label": "Gemini Flatpanel",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_alpaca_server",
+      "Label": "INDI Alpaca Server",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_ipx800v4",
+      "Label": "IPX800v4",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_joystick",
+      "Label": "Joystick",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_simulator_lightpanel",
+      "Label": "Light Panel Simulator",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_mgenautoguider",
+      "Label": "MGen Autoguider",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_mydcp4esp32",
+      "Label": "MyDCP4ESP32",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_pegasus_flatmaster",
+      "Label": "Pegasus FlatMaster",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_pegasus_ppb",
+      "Label": "Pegasus PPB",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_pegasus_ppba",
+      "Label": "Pegasus PPBA",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_pegasus_spb",
+      "Label": "Pegasus SPB",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_pegasus_uch",
+      "Label": "Pegasus UCH",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_pegasus_upb",
+      "Label": "Pegasus UPB",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_pegasus_upb3",
+      "Label": "Pegasus UPB3",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_planewave_deltat",
+      "Label": "PlaneWave Delta-T",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_Excalibur",
+      "Label": "RBF Excalibur",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_rtklib",
+      "Label": "RTKLIB Precise Positioning",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_star2000",
+      "Label": "STAR2000",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_svbony_powerbox",
+      "Label": "SVBONY SV241 Pro",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_safetymonitor",
+      "Label": "Safety Monitor",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_simulator_io",
+      "Label": "Simulator IO",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_skysafari",
+      "Label": "SkySafari",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_snapcap",
+      "Label": "SnapCap",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_startech_hub",
+      "Label": "StarTech 7-Ports Managed USB Hub",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_terrans_powerboxgo_v2",
+      "Label": "Terrans PowerBoxGo V2",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_terrans_powerboxpro_v2",
+      "Label": "Terrans PowerBoxPro V2",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_ups_safety",
+      "Label": "UPS",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_usbdewpoint",
+      "Label": "USB_Dewpoint",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_wanderer_cover",
+      "Label": "Wanderer Cover V3",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_wanderer_dew_terminator",
+      "Label": "Wanderer Dew Terminator",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_wanderer_eclipse",
+      "Label": "Wanderer Eclipse",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_wandererbox_plus_v3",
+      "Label": "WandererBox Plus V3",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_wandererbox_pro_v3",
+      "Label": "WandererBox Pro V3",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_wanderercover_v4_pro_ec",
+      "Label": "WandererCover V4 Pro-EC",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_wanderercover_v4_ec",
+      "Label": "WandererCover V4-EC",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_watchdog",
+      "Label": "WatchDog",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_wavesharemodbus_relay",
+      "Label": "Waveshare Relay",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_asi_st4",
+      "Label": "ZWO ST4",
+      "Type": "switches"
+    },
+    {
+      "Name": "indi_myDewControllerPro",
+      "Label": "myDewControllerPro",
+      "Type": "switches"
+    }
+  ],
+  "telescope": [
+    {
+      "Name": "indi_ahpgt_telescope",
+      "Label": "AHP GT Mount",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_azgti_telescope",
+      "Label": "AZ-GTi",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200fs2",
+      "Label": "Astro-Electronic FS-2",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200ap_legacy",
+      "Label": "AstroPhysics GTOCP2",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200ap_v2",
+      "Label": "AstroPhysics V2",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_astrotrac_telescope",
+      "Label": "AstroTrac",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_avalonud_telescope",
+      "Label": "AvalonUD Telescope",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_bresserexos2",
+      "Label": "BRESSER Messier Exos-2 EQ GoTo",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_crux_mount",
+      "Label": "CRUX TitanTCS",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_celestron_aux",
+      "Label": "Celestron AUX",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_celestron_gps",
+      "Label": "Celestron GPS",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_dsc_telescope",
+      "Label": "Digital Setting Circle",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_eq500x_telescope",
+      "Label": "EQ500X",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_eqmod_telescope",
+      "Label": "EQMod Mount",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200gotonova",
+      "Label": "GotoNova",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200_10micron",
+      "Label": "LX200 10micron",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200_16",
+      "Label": "LX200 16",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200aok",
+      "Label": "LX200 AOK",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200autostar",
+      "Label": "LX200 Autostar",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200basic",
+      "Label": "LX200 Basic",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200classic",
+      "Label": "LX200 Classic",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200gps",
+      "Label": "LX200 GPS",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200_OnStep",
+      "Label": "LX200 OnStep",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200_OpenAstroTech",
+      "Label": "LX200 OpenAstroTech",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200stargo",
+      "Label": "LX200 StarGo",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200_TeenAstro",
+      "Label": "LX200 TeenAstro",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200gemini",
+      "Label": "Losmandy Gemini",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_pmc8_telescope",
+      "Label": "PMC8",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_paramount_telescope",
+      "Label": "Paramount",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200_pegasus_nyx101",
+      "Label": "Pegasus NYX-101",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_planewave_telescope",
+      "Label": "Planewave",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200pulsar2",
+      "Label": "Pulsar2",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_rainbow_telescope",
+      "Label": "Rainbow",
+      "Type": "telescope"
+    },
+    {
+      "Name": "shelyak_usis",
+      "Label": "Shelyak Usis",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_skycommander_telescope",
+      "Label": "SkyCommander",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200ss2000pc",
+      "Label": "SkySensor2000PC",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_skywatcherAltAzMount",
+      "Label": "Skywatcher Alt-Az",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_staradventurer2i_telescope",
+      "Label": "Star Adventurer 2i",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_staradventurergti_telescope",
+      "Label": "Star Adventurer GTi",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_starbook_telescope",
+      "Label": "Starbook",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_starbook_ten",
+      "Label": "Starbook Ten",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_synscan_telescope",
+      "Label": "SynScan",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_synscanlegacy_telescope",
+      "Label": "SynScan Legacy",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_script_telescope",
+      "Label": "Telescope  Scripting Gateway",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_simulator_telescope",
+      "Label": "Telescope Simulator",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_temma_telescope",
+      "Label": "Temma",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200zeq25",
+      "Label": "ZEQ25",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_lx200am5",
+      "Label": "ZWO AM5",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_ieqlegacy_telescope",
+      "Label": "iEQ",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_ieq_telescope",
+      "Label": "iEQ",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_ioptronHC8406",
+      "Label": "iOptron HC8406",
+      "Type": "telescope"
+    },
+    {
+      "Name": "indi_ioptronv3_telescope",
+      "Label": "iOptronV3",
+      "Type": "telescope"
+    }
+  ],
+  "weather": [
+    {
+      "Name": "indi_aagcloudwatcher_ng",
+      "Label": "AAG Cloud Watcher NG",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_aagsolo_weather",
+      "Label": "AAG Solo CloudWatcher",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_duino",
+      "Label": "Arduino MeteoStation",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_astromech_lpm",
+      "Label": "Astromechanics LPM",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_hitech_weather",
+      "Label": "HiTech Weather",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_mbox_weather",
+      "Label": "MBox",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_openweathermap_weather",
+      "Label": "OpenWeatherMap",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_sqm_weather",
+      "Label": "SQM",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_uranus_weather",
+      "Label": "Uranus Meteo Sensor",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_vantage_weather",
+      "Label": "Vantage",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_meta_weather",
+      "Label": "Weather Meta",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_weatherradio",
+      "Label": "Weather Radio",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_weather_safety_alpaca",
+      "Label": "Weather Safety Alpaca",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_weather_safety_proxy",
+      "Label": "Weather Safety Proxy",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_simulator_weather",
+      "Label": "Weather Simulator",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_watcher_weather",
+      "Label": "Weather Watcher",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_weatherflow_weather",
+      "Label": "WeatherFlow Tempest",
+      "Type": "weather"
+    },
+    {
+      "Name": "indi_weewx_json",
+      "Label": "WeewxJSON",
+      "Type": "weather"
+    }
+  ]
+}

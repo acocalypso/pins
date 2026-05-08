@@ -215,3 +215,37 @@ rm -f "$DEST/css/app.e1dc5079.css"
 ```
 
 Danach im Browser **Ctrl+Shift+R** (Hard Reload) ausführen.
+
+---
+
+## Touch-N-Stars INDI Treiberliste (3rdparty.json)
+
+**Nicht im Skript — manuelle Installation:**
+
+Der TNS INDI-Setup-Dialog liest Treiber aus eingebetteten JSON-Ressourcen der DLL **plus** einer benutzerbefüllbaren Datei `3rdparty.json`. Auf Linux (deutsches Locale) liegt diese unter:
+
+```
+~/Dokumente/INDI/3rdparty.json
+```
+
+Die eingebettete Liste enthält viele gängige Treiber, aber **nicht** EQMod Mount, ZWO EAF/EFW, Wanderer Rotator Mini oder Pegasus PPBA. Diese werden über `3rdparty.json` nachgetragen.
+
+Die vollständige Liste wurde aus `/usr/share/indi/*.xml` (INDI 2.1.9) generiert und liegt im Repo unter `config/indi-3rdparty.json`. Installation:
+
+```bash
+INDI_DIR="$HOME/Dokumente/INDI"   # Linux DE; EN-Locale: ~/Documents/INDI
+mkdir -p "$INDI_DIR"
+cp "$HOME/pins-build-src/config/indi-3rdparty.json" "$INDI_DIR/3rdparty.json"
+```
+
+Enthält (aus `/usr/share/indi/*.xml` generiert, INDI 2.1.9):
+
+| Kategorie | Treiber |
+|-----------|---------|
+| telescope | 52 (inkl. EQMod Mount) |
+| focuser | 68 (inkl. ZWO EAF) |
+| filterwheel | 32 (inkl. ZWO EFW) |
+| rotator | 14 (inkl. Wanderer Rotator Mini) |
+| switches | 60 (inkl. Pegasus PPBA) |
+| dome | 19 |
+| weather | 18 |
