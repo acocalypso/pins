@@ -191,3 +191,27 @@ Die konfigurierten Geräte im aktiven Profil (`IndiDriver`-Feld in den jeweilige
 - **Wanderer Mini V2:** War zunächst falsch als PowerBox eingetragen — ist ein Rotator (`Wanderer Rotator Mini`). Das Gerät wird per INDI gesteuert.
 
 **Wichtig:** Der `IndiDriver`-Wert muss dem `label`-Attribut aus der INDI XML-Datenbank (`/usr/share/indi/*.xml`) entsprechen, **nicht** dem Binär-Namen.
+
+---
+
+## Touch-N-Stars Frontend-Update (neuere Version)
+
+**Nicht im Skript — manuelle Installation:**
+
+Das installierte Touch-N-Stars-Plugin lädt sein Web-Frontend aus dem Verzeichnis
+`~/.local/share/NINA/Plugins/3.0.0/Touch N Stars/app/`
+(NINA lädt Plugins kompatibel mit API-Version 3.0.0 aus dem `3.0.0`-Unterordner, **nicht** `3.3.0`).
+
+Das mitgelieferte Frontend (1.2.7.0) fehlt den blauen Profil-Management-Button und den INDI-Setup-Button.
+Der neuere Build aus dem Touch-N-Stars-Submodule (`NINA.Plugins/Touch-N-Stars/Touch-N-Stars/app/`) enthält diese Features und wurde manuell installiert:
+
+```bash
+SRC="$HOME/pins-build-src/NINA.Plugins/Touch-N-Stars/Touch-N-Stars/app"
+DEST="$HOME/.local/share/NINA/Plugins/3.0.0/Touch N Stars/app"
+
+cp -r "$SRC/." "$DEST/"
+rm -f "$DEST/js/app.5e7917e6.js" "$DEST/js/app.5e7917e6.js.map"
+rm -f "$DEST/css/app.e1dc5079.css"
+```
+
+Danach im Browser **Ctrl+Shift+R** (Hard Reload) ausführen.
