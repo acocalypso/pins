@@ -160,3 +160,34 @@ Erfolgreicher Build (exit code 0) mit folgenden Paketen:
 
 Commit: `3ec0d2ae8` auf Branch `develop` (gepusht nach `ggtux/pins_Mint`)
 Pull Request: https://github.com/acocalypso/pins/pull/8
+
+---
+
+## INDI-Gerätekonfiguration
+
+**Datei:** `/home/geo/.local/share/NINA/Profiles/adfd1406-d294-4c9b-a7df-8589b7646b1d.profile`
+
+NINA/PINS startet `indiserver` im FIFO-Modus (`/tmp/indiFIFO`) und lädt Treiber on-demand.
+Der externe `indiserver.service` wurde deaktiviert, um Port-Konflikt auf 7624 zu vermeiden:
+
+```bash
+sudo systemctl stop indiserver.service
+sudo systemctl disable indiserver.service
+```
+
+Die konfigurierten Geräte im aktiven Profil (`IndiDriver`-Feld in den jeweiligen Settings):
+
+| Gerät | NINA-Einstellung | INDI-Treiber | Executable |
+|-------|-----------------|--------------|------------|
+| Mount | `TelescopeSettings.IndiDriver` | `EQMod Mount` | `indi_eqmod_telescope` |
+| Focuser | `FocuserSettings.IndiDriver` | `ZWO EAF` | `indi_asi_focuser` |
+| Filter Wheel | `FilterWheelSettings.IndiDriver` | `ZWO EFW` | `indi_asi_wheel` |
+| Rotator | `RotatorSettings.IndiDriver` | `Wanderer Rotator Mini` | `indi_wanderer_rotator_mini` |
+| Switch | `SwitchSettings.IndiDriver` | `Pegasus PPBA` | `indi_pegasus_ppba` |
+
+**Hinweise zu nicht-INDI-Geräten:**
+
+- **Kamera (ZWO ASI):** NINA unterstützt keine INDI-Kamera. Es wird die native `libASICamera2.so` SDK verwendet. Die Kamera erscheint automatisch als `ZWO ASI [Modell]` sobald sie per USB verbunden ist.
+- **Wanderer Mini V2:** War zunächst falsch als PowerBox eingetragen — ist ein Rotator (`Wanderer Rotator Mini`). Das Gerät wird per INDI gesteuert.
+
+**Wichtig:** Der `IndiDriver`-Wert muss dem `label`-Attribut aus der INDI XML-Datenbank (`/usr/share/indi/*.xml`) entsprechen, **nicht** dem Binär-Namen.
