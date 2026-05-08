@@ -22,14 +22,14 @@ auf einem frischen Linux Mint 22 x64-System, inklusive aller Abhängigkeiten.
 
 ```bash
 sudo apt-get install -y git git-lfs
-git clone --recurse-submodules https://github.com/acocalypso/pins.git ~/pins-build-src
+git clone --recurse-submodules https://github.com/ggtux/pins_Mint.git ~/pins-build-src
 cd ~/pins-build-src
 ```
 
-> **Fork:** Wenn du deinen eigenen Fork verwendest (z. B. `ggtux/pins_Mint`):
+> Dieser Fork enthält alle Mint-22-spezifischen Fixes (Ninja-Generator, INDI-Konflikt, PHD2-pkg-config u. a.)
+> sowie die vorbereitete INDI-Treiberliste und das Post-Install-Script.
+> Das Upstream-Repo ist `https://github.com/acocalypso/pins.git` (als `upstream` remote hinterlegt):
 > ```bash
-> git clone --recurse-submodules https://github.com/ggtux/pins_Mint.git ~/pins-build-src
-> cd ~/pins-build-src
 > git remote add upstream https://github.com/acocalypso/pins.git
 > ```
 
