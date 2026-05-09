@@ -178,5 +178,6 @@ Siehe [`BUILD-FIXES.md`](BUILD-FIXES.md) für detaillierte Dokumentation aller a
 - **Fix 1–3:** Ninja-Generator für OpenCV/LibXISF (Race-Condition bei parallelem Build)
 - **Fix 4:** `libindi.pc` manuell erstellt (PHD2 pkg-config)
 - **Fix 5:** Distro-INDI-Pakete vor Installation entfernen (Dateikonflikt)
+- **Fix 6:** `.NET`-Paketfeed-URL: Auf Mint 22 liefert `VERSION_ID` den Wert `22` statt der Ubuntu-Basis-Version. Im Skript ist die URL deshalb auf `23.04` fest kodiert (Zeilen 835–836).
 - **TNS Frontend:** Korrektes Plugin-Verzeichnis ist `3.0.0`, nicht `3.3.0`
 - **INDI Treiberliste:** `3rdparty.json` mit allen INDI 2.1.9 Treibern unter `config/indi-3rdparty.json`

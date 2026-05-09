@@ -127,6 +127,27 @@ run_as_root dpkg -i --force-overwrite "${unique_debs[@]}"
 
 ---
 
+## Fix 6: .NET-Paketfeed-URL auf Linux Mint (VERSION_ID-Mismatch)
+
+**Datei:** `build-and-install-pins-x64.sh`
+**Funktion:** `install_dotnet_10()`
+
+**Problem:**
+Das Skript bezog die Ubuntu-Versionsnummer für die Microsoft-Paketfeed-URL aus `${VERSION_ID}` (gesetzt durch `source /etc/os-release`). Auf Linux Mint 22 liefert `/etc/os-release` jedoch `VERSION_ID="22"` (Mint-Version), nicht die Ubuntu-Basis-Version `24.04`. Dadurch entstand eine ungültige URL:
+```
+https://packages.microsoft.com/config/ubuntu/22/packages-microsoft-prod.deb
+```
+→ wget-Fehler, .NET 10 SDK konnte nicht installiert werden.
+
+**Fix:**
+`${VERSION_ID}` durch die fest kodierte Ubuntu-Version `23.04` ersetzt, für die das Microsoft-Repository das .NET 10 SDK enthält und die auf Mint 22 funktioniert:
+```bash
+# Zeile 835–836 in build-and-install-pins-x64.sh
+wget -q "https://packages.microsoft.com/config/ubuntu/23.04/packages-microsoft-prod.deb" ...
+```
+
+---
+
 ## ASTAP D50-Sternkatalog
 
 **Nicht im Skript — manuelle Installation:**
