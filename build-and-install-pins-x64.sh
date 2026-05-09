@@ -832,8 +832,8 @@ install_dotnet_10() {
   local ms_repo_deb
   ms_repo_deb="$(mktemp)"
 
-  if ! wget -q "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb" -O "$ms_repo_deb"; then
-    fail "Failed to download Microsoft package feed for Ubuntu ${VERSION_ID}"
+  if ! wget -q "https://packages.microsoft.com/config/ubuntu/23.04/packages-microsoft-prod.deb" -O "$ms_repo_deb"; then
+    fail "Failed to download Microsoft package feed for Ubuntu 23.04"
   fi
 
   run_as_root dpkg -i "$ms_repo_deb"
