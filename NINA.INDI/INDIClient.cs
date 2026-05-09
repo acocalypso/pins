@@ -836,11 +836,11 @@ namespace NINA.INDI {
 
                 var startInfo = new ProcessStartInfo {
                     FileName = "indiserver",
-                    Arguments = $"-v -p {_port} -m 1000 -f {_fifoPath}",
+                    Arguments = $"-p {_port} -m 1000 -f {_fifoPath}",
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
+                    RedirectStandardOutput = false,
+                    RedirectStandardError = false
                 };
 
                 var process = Process.Start(startInfo);
