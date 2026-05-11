@@ -1984,7 +1984,11 @@ EOF
     cd "$equivs_dir"
     equivs-build control
   )
-  run_as_root dpkg -i "$equivs_dir/libindi-dev_${PHD2_INDI_VERSION}_all.deb"
+  if dpkg-query -W -f='${Status}' indi-pins-bundle 2>/dev/null | grep -q "install ok installed"; then
+    log "indi-pins-bundle is installed and already provides libindi-dev; skipping equivs dummy install"
+  else
+    run_as_root dpkg -i "$equivs_dir/libindi-dev_${PHD2_INDI_VERSION}_all.deb"
+  fi
 
   (
     cd "$phd2_src"
