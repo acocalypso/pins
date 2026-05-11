@@ -442,18 +442,19 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         private bool IsManualMode() {
             var mode = string.Empty;
-            // Check "exposuremode"
+            // Check "exposuremode" (Canon), "autoexposuremode" (Canon alternate), "capturemode" (Nikon)
             if (GetProperty("exposuremode", out mode) != GP_ERROR_CODE.GP_OK) {
-                // Check "autoexposuremode"
                 if (GetProperty("autoexposuremode", out mode) != GP_ERROR_CODE.GP_OK) {
-                    return false;
+                    if (GetProperty("capturemode", out mode) != GP_ERROR_CODE.GP_OK) {
+                        return false;
+                    }
                 }
             }
             return mode == "M" || mode.Contains("Manual");
         }
 
         private bool IsBulbMode() {
-            // Check if camera is in dedicated Bulb mode (autoexposuremode = "Bulb")
+            // Check if camera is in dedicated Bulb mode (exposuremode / autoexposuremode (Canon), capturemode (Nikon))
             var mode = string.Empty;
             if (GetProperty("exposuremode", out mode) == GP_ERROR_CODE.GP_OK) {
                 if (mode.Equals("Bulb", StringComparison.OrdinalIgnoreCase)) {
@@ -461,6 +462,11 @@ namespace NINA.Equipment.Equipment.MyCamera {
                 }
             }
             if (GetProperty("autoexposuremode", out mode) == GP_ERROR_CODE.GP_OK) {
+                if (mode.Equals("Bulb", StringComparison.OrdinalIgnoreCase)) {
+                    return true;
+                }
+            }
+            if (GetProperty("capturemode", out mode) == GP_ERROR_CODE.GP_OK) {
                 if (mode.Equals("Bulb", StringComparison.OrdinalIgnoreCase)) {
                     return true;
                 }
@@ -1199,6 +1205,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
                     return true;
                 } catch (Exception ex) {
                     Logger.Error(ex);
+                    Disconnect();
                     Notification.ShowExternalError(ex.Message, Loc.Instance["LblCanonDriverError"]);
                     return false;
                 }
