@@ -95,6 +95,8 @@ PLUGIN_FAILURES_FILE="${PLUGIN_FAILURES_FILE:-artifacts/plugin-build-failures.lo
 INDI_VERSION="${INDI_VERSION:-2.1.9}"
 INDI_DEB_ROOT="${INDI_DEB_ROOT:-artifacts/indi-debroot}"
 INDI_ENABLE_XISF="${INDI_ENABLE_XISF:-true}"
+INDI_BUNDLE_DIR="${INDI_BUNDLE_DIR:-artifacts/indi-bundle}"
+CREATE_INDI_BUNDLE="${CREATE_INDI_BUNDLE:-false}"
 LIBXISF_AUTO_UPGRADE_IF_OLD="${LIBXISF_AUTO_UPGRADE_IF_OLD:-true}"
 LIBXISF_REPO_URL="${LIBXISF_REPO_URL:-https://github.com/joxda/libXISF.git}"
 LIBXISF_BRANCH="${LIBXISF_BRANCH:-master}"
@@ -1733,6 +1735,144 @@ build_indi_debian_packages() {
   log "Built INDI packages"
 }
 
+# Create a single installable mega-deb that bundles INDI core packages together
+# with the unpackaged indi-3rdparty drivers and vendor SDKs present on this system.
+# Must be called after build_phd2_package (which builds and installs indi-3rdparty).
+bundle_indi_mega_deb() {
+  log "Creating INDI mega-deb bundle"
+
+  local multiarch
+  multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo "x86_64-linux-gnu")"
+
+  local indi_bin_deb libindi1_deb libindi_data_deb libindi_dev_deb
+  indi_bin_deb="$(find artifacts -maxdepth 1 -name "indi-bin_*.deb" | sort -V | tail -1 || true)"
+  libindi1_deb="$(find artifacts -maxdepth 1 -name "libindi1_*.deb" | sort -V | tail -1 || true)"
+  libindi_data_deb="$(find artifacts -maxdepth 1 -name "libindi-data_*.deb" | sort -V | tail -1 || true)"
+  libindi_dev_deb="$(find artifacts -maxdepth 1 -name "libindi-dev_*.deb" | sort -V | tail -1 || true)"
+
+  [[ -n "$indi_bin_deb" ]]      || fail "indi-bin deb not found in artifacts/; run build_indi_debian_packages first"
+  [[ -n "$libindi1_deb" ]]      || fail "libindi1 deb not found in artifacts/"
+  [[ -n "$libindi_data_deb" ]]  || fail "libindi-data deb not found in artifacts/"
+  [[ -n "$libindi_dev_deb" ]]   || fail "libindi-dev deb not found in artifacts/"
+
+  local bundle_version="${INDI_VERSION}+${BUILD_NUMBER}"
+  local bundle_stage="${INDI_BUNDLE_DIR}/root"
+  local bundle_deb="${INDI_BUNDLE_DIR}/indi-pins-bundle_${bundle_version}_${DEB_ARCH}.deb"
+
+  rm -rf "$bundle_stage"
+  mkdir -p "$bundle_stage/DEBIAN"
+  mkdir -p "$(dirname "$bundle_deb")"
+
+  log "Extracting INDI core debs into bundle staging dir..."
+  for deb in "$indi_bin_deb" "$libindi1_deb" "$libindi_data_deb" "$libindi_dev_deb"; do
+    dpkg-deb -x "$deb" "$bundle_stage"
+  done
+
+  log "Collecting unpackaged 3rd-party driver binaries from /usr/bin..."
+  local n_drivers=0
+  mkdir -p "$bundle_stage/usr/bin"
+  while IFS= read -r drv; do
+    dpkg -S "$drv" &>/dev/null && continue
+    cp -a "$drv" "$bundle_stage/usr/bin/"
+    (( n_drivers++ )) || true
+  done < <(find /usr/bin -maxdepth 1 -name "indi_*" -type f | sort)
+  log "  $n_drivers unpackaged driver binaries collected"
+
+  log "Collecting unpackaged 3rd-party INDI data files from /usr/share/indi..."
+  local n_xml=0
+  mkdir -p "$bundle_stage/usr/share/indi"
+  while IFS= read -r xml; do
+    dpkg -S "$xml" &>/dev/null && continue
+    cp "$xml" "$bundle_stage/usr/share/indi/"
+    (( n_xml++ )) || true
+  done < <(find /usr/share/indi -maxdepth 1 -name "*.xml" | sort)
+  log "  $n_xml unpackaged XML data files collected"
+
+  log "Collecting unpackaged vendor shared libraries..."
+  local vendor_patterns=(
+    "/usr/lib/$multiarch/libASICamera2.so"
+    "/usr/lib/$multiarch/libASICamera2.so.*"
+    "/usr/lib/$multiarch/libEFWFilter.so"
+    "/usr/lib/$multiarch/libEFWFilter.so.*"
+    "/usr/lib/$multiarch/libUSB2ST4Conv.so"
+    "/usr/lib/$multiarch/libUSB2ST4Conv.so.*"
+    "/usr/lib/$multiarch/libqhyccd.so"
+    "/usr/lib/$multiarch/libqhyccd.so.*"
+  )
+  mkdir -p "$bundle_stage/usr/lib/$multiarch"
+  local n_libs=0
+  for pattern in "${vendor_patterns[@]}"; do
+    for f in $pattern; do
+      [[ -e "$f" || -L "$f" ]] || continue
+      dpkg -S "$f" &>/dev/null && continue
+      cp -a "$f" "$bundle_stage/usr/lib/$multiarch/"
+      (( n_libs++ )) || true
+    done
+  done
+  log "  $n_libs vendor library files collected"
+
+  log "Collecting unpackaged udev rules..."
+  local udev_rules=(
+    "/lib/udev/rules.d/85-qhyccd.rules"
+    "/lib/udev/rules.d/99-asi.rules"
+    "/lib/udev/rules.d/99-astroasis.rules"
+  )
+  local n_rules=0
+  for rules in "${udev_rules[@]}"; do
+    [[ -f "$rules" ]] || continue
+    dpkg -S "$rules" &>/dev/null && continue
+    mkdir -p "$bundle_stage/lib/udev/rules.d"
+    cp "$rules" "$bundle_stage/lib/udev/rules.d/"
+    (( n_rules++ )) || true
+  done
+  log "  $n_rules udev rule files collected"
+
+  local installed_size
+  installed_size="$(du -sk --exclude="$bundle_stage/DEBIAN" "$bundle_stage" | awk 'NR==1{print $1}')"
+
+  local os_desc
+  os_desc="$(lsb_release -ds 2>/dev/null || uname -r)"
+
+  cat > "$bundle_stage/DEBIAN/control" << EOF
+Package: indi-pins-bundle
+Version: $bundle_version
+Architecture: $DEB_ARCH
+Maintainer: PINS Team
+Installed-Size: $installed_size
+Depends: libc6, libstdc++6, libusb-1.0-0
+Provides: indi-bin (= $bundle_version), libindi1 (= $bundle_version), libindi-data (= $bundle_version), libindi-dev (= $bundle_version)
+Conflicts: indi-bin, libindi1, libindi-data, libindi-dev
+Replaces: indi-bin, libindi1, libindi-data, libindi-dev
+Section: science
+Priority: optional
+Description: INDI $INDI_VERSION complete bundle for PINS (core + all 3rd-party drivers)
+ Single-package snapshot of INDI $INDI_VERSION including: indiserver,
+ all built-in and third-party drivers ($n_drivers binaries), shared
+ libraries, vendor SDKs (ZWO ASI/EFW, QHY), $n_xml driver XML files,
+ $n_rules udev rule files, and INDI data files.
+ Built on $os_desc $(uname -m).
+EOF
+
+  cat > "$bundle_stage/DEBIAN/postinst" << 'POSTINST'
+#!/bin/sh
+set -e
+ldconfig
+if command -v udevadm >/dev/null 2>&1; then
+  udevadm control --reload-rules || true
+  udevadm trigger || true
+fi
+POSTINST
+  chmod 755 "$bundle_stage/DEBIAN/postinst"
+
+  dpkg-deb --root-owner-group --build "$bundle_stage" "$bundle_deb"
+  sha256sum "$bundle_deb" > "${bundle_deb}.sha256"
+  record_built_deb "$bundle_deb"
+
+  local bundle_size
+  bundle_size="$(du -sh "$bundle_deb" | awk '{print $1}')"
+  log "INDI mega-deb created: $bundle_deb ($bundle_size)"
+}
+
 configure_phd2_service_file() {
   local service_file="$1"
   [[ -f "$service_file" ]] || return
@@ -2158,6 +2298,11 @@ main() {
   build_plugins
   build_indi_debian_packages
   build_phd2_package
+  if is_truthy "$CREATE_INDI_BUNDLE"; then
+    bundle_indi_mega_deb
+  else
+    log "Skipping INDI bundle creation (CREATE_INDI_BUNDLE=$CREATE_INDI_BUNDLE)"
+  fi
   if is_truthy "$CREATE_FIRMWARE_BUNDLE"; then
     create_firmware_bundle
   else

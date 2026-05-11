@@ -110,3 +110,5 @@ lfs/
 # the bundled .net runtime - it will be automatically downloaded from the ms page. no need to include this in source control
 /NINA.SetupBundle/dotnet-windowsdesktop-runtime-win-x64.exe
 /.dotnet-cli/.dotnet
+# INDI bundle: staging dir is build-time scratch space; only the final .deb and .sha256 are tracked via git-lfs
+artifacts/indi-bundle/root/

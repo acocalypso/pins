@@ -3,6 +3,13 @@
 Diese Anleitung beschreibt die vollständige Installation von PINS (PI 'N' Stars – Linux-Port von N.I.N.A.)
 auf einem frischen Linux Mint 22 x64-System, inklusive aller Abhängigkeiten.
 
+> **Schnellinstallation mit vorgebautem INDI-Bundle?**
+> Wenn du das Repo von einem Astromint-Snapshot geklont hast, der eine
+> `artifacts/indi-bundle/indi-pins-bundle_*.deb` enthält, kannst du INDI und alle
+> 3rd-Party-Treiber sofort installieren – ohne selbst zu kompilieren.
+> Springe direkt zu [Schritt 1b – Vorgebautes INDI-Bundle installieren](#schritt-1b--vorgebautes-indi-bundle-installieren).
+> Für einen vollständigen Neubau aller Komponenten starte bei **Schritt 1**.
+
 ---
 
 ## Systemvoraussetzungen
@@ -22,16 +29,51 @@ auf einem frischen Linux Mint 22 x64-System, inklusive aller Abhängigkeiten.
 
 ```bash
 sudo apt-get install -y git git-lfs
+git lfs install
 git clone --recurse-submodules https://github.com/ggtux/pins_Mint.git ~/pins-build-src
 cd ~/pins-build-src
+git lfs pull   # lädt große Binärartefakte (INDI-Bundle, External-DLLs) herunter
 ```
 
 > Dieser Fork enthält alle Mint-22-spezifischen Fixes (Ninja-Generator, INDI-Konflikt, PHD2-pkg-config u. a.)
-> sowie die vorbereitete INDI-Treiberliste und das Post-Install-Script.
+> sowie die vorbereitete INDI-Treiberliste, das Post-Install-Script und das vorgebaute INDI-Bundle.
 > Das Upstream-Repo ist `https://github.com/acocalypso/pins.git` (als `upstream` remote hinterlegt):
 > ```bash
 > git remote add upstream https://github.com/acocalypso/pins.git
 > ```
+
+---
+
+## Schritt 1b – Vorgebautes INDI-Bundle installieren
+
+Das Repo enthält ein vorgebautes `indi-pins-bundle_*.deb` (via git-lfs) mit:
+- `indiserver` + alle INDI-Core-Treiber (v2.1.9)
+- Alle `indi-3rdparty`-Treiber (~200 Binaries, inkl. EQMod, ASI, QHY, SVBony u. a.)
+- Vendor-SDKs: `libASICamera2`, `libEFWFilter`, `libUSB2ST4Conv`, `libqhyccd`
+- INDI-XML-Datendateien und udev-Regeln
+
+**Diesen Schritt ausführen, bevor `build-and-install-pins-x64.sh` gestartet wird:**
+
+```bash
+cd ~/pins-build-src
+
+# Laufzeit-Abhängigkeiten des Bundles installieren
+sudo apt-get install -y libusb-1.0-0 libstdc++6 libc6
+
+# Eventuell vorhandene Distro-INDI-Pakete zuerst entfernen
+sudo apt-get remove -y libindi-plugins libindialignmentdriver1 libindidriver1 \
+  libindilx200-1 indi-bin libindi1 libindi-data libindi-dev 2>/dev/null || true
+
+# Bundle installieren (ersetzt alle Einzel-INDI-Pakete)
+sudo dpkg -i artifacts/indi-bundle/indi-pins-bundle_*.deb
+
+# Fehlende Laufzeit-Deps nachholen (falls dpkg Fehler meldet)
+sudo apt-get install -f -y
+```
+
+> Nach dieser Installation kann der vollständige Build in **Schritt 2** mit
+> `PHD2_BUILD_INDI_3RDPARTY=false` gestartet werden – die 3rd-Party-Treiber sind
+> bereits installiert und müssen nicht neu gebaut werden.
 
 ---
 
@@ -162,8 +204,10 @@ ninaAPI erreichbar unter: `http://localhost:1889/v2/api/version`
 | OpenCV | 4.11.0 | Aus Quellcode |
 | LibXISF | aktuell | Aus Quellcode |
 | PHD2 | 2.6.14 | Aus Quellcode |
-| INDI | 2.1.9 | Aus Quellcode |
-| indi-3rdparty | 2.1.9 | Aus Quellcode |
+| **indi-pins-bundle** | **2.1.9** | **Vorgebaut (git-lfs) oder Aus Quellcode** |
+| – indiserver + Core-Treiber | 2.1.9 | (enthalten im Bundle) |
+| – indi-3rdparty (~200 Treiber) | 2.1.9 | (enthalten im Bundle) |
+| – Vendor-SDKs (ASI, EFW, QHY) | herstellerspezifisch | (enthalten im Bundle) |
 | ninaAPI Plugin | 2.2.x | Submodule |
 | Touch-N-Stars Plugin | 1.2.x | Submodule |
 | ASTAP | aktuell | APT |
