@@ -198,7 +198,7 @@ namespace System.Drawing {
         /// <summary>
         /// Draws a string (text)
         /// </summary>
-        public void DrawString(string text, Font font, SolidBrush brush, System.Drawing.PointF point) {
+        public void DrawString(string text, Font font, Brush brush, System.Drawing.PointF point) {
             if (string.IsNullOrEmpty(text)) return;
 
             // Convert font size to OpenCV scale
@@ -213,13 +213,13 @@ namespace System.Drawing {
             }
 
             Cv2.PutText(_canvas, text, new OpenCvSharp.Point((int)point.X, (int)point.Y),
-                fontFace, fontScale, brush.Color, thickness, LineTypes.AntiAlias);
+                fontFace, fontScale, brush.ToScalar(), thickness, LineTypes.AntiAlias);
         }
 
         /// <summary>
         /// Draws a string (text) with individual x and y coordinates
         /// </summary>
-        public void DrawString(string text, Font font, SolidBrush brush, float x, float y) {
+        public void DrawString(string text, Font font, Brush brush, float x, float y) {
             DrawString(text, font, brush, new PointF(x, y));
         }
 
@@ -277,25 +277,25 @@ namespace System.Drawing {
         /// <summary>
         /// Fills an ellipse
         /// </summary>
-        public void FillEllipse(SolidBrush brush, Rectangle rect) {
+        public void FillEllipse(Brush brush, Rectangle rect) {
             var center = new OpenCvSharp.Point(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
             var axes = new OpenCvSharp.Size(rect.Width / 2, rect.Height / 2);
-            Cv2.Ellipse(_canvas, center, axes, 0, 0, 360, brush.Color, -1, LineTypes.AntiAlias);
+            Cv2.Ellipse(_canvas, center, axes, 0, 0, 360, brush.ToScalar(), -1, LineTypes.AntiAlias);
         }
 
         /// <summary>
         /// Fills an ellipse with floating point coordinates
         /// </summary>
-        public void FillEllipse(SolidBrush brush, RectangleF rect) {
+        public void FillEllipse(Brush brush, RectangleF rect) {
             var center = new OpenCvSharp.Point((int)(rect.X + rect.Width / 2), (int)(rect.Y + rect.Height / 2));
             var axes = new OpenCvSharp.Size((int)(rect.Width / 2), (int)(rect.Height / 2));
-            Cv2.Ellipse(_canvas, center, axes, 0, 0, 360, brush.Color, -1, LineTypes.AntiAlias);
+            Cv2.Ellipse(_canvas, center, axes, 0, 0, 360, brush.ToScalar(), -1, LineTypes.AntiAlias);
         }
 
         /// <summary>
         /// Fills an ellipse with floating point coordinates using individual parameters
         /// </summary>
-        public void FillEllipse(SolidBrush brush, float x, float y, float width, float height) {
+        public void FillEllipse(Brush brush, float x, float y, float width, float height) {
             FillEllipse(brush, new RectangleF(x, y, width, height));
         }
 
@@ -612,6 +612,52 @@ namespace System.Drawing {
                 _transform = null;
                 _disposed = true;
             }
+        }
+
+        /// <summary>
+        /// Saves the current state of the Graphics object (transform stack)
+        /// </summary>
+        public GraphicsState Save() {
+            return new GraphicsState(
+                _transform?.Clone(),
+                _hasTransform);
+        }
+
+        /// <summary>
+        /// Restores a previously saved Graphics state
+        /// </summary>
+        public void Restore(GraphicsState state) {
+            if (state == null) return;
+            _transform?.Dispose();
+            _transform = state.Transform?.Clone() ?? new Mat(2, 3, MatType.CV_64F);
+            _hasTransform = state.HasTransform;
+            if (!_hasTransform) {
+                _transform.Set(0, 0, 1.0); _transform.Set(0, 1, 0.0); _transform.Set(0, 2, 0.0);
+                _transform.Set(1, 0, 0.0); _transform.Set(1, 1, 1.0); _transform.Set(1, 2, 0.0);
+            }
+        }
+
+        /// <summary>
+        /// Fills a rectangle with the specified brush
+        /// </summary>
+        public void FillRectangle(Brush brush, RectangleF rect) {
+            FillRectangle(brush, rect.X, rect.Y, rect.Width, rect.Height);
+        }
+
+        /// <summary>
+        /// Fills a rectangle with the specified brush using individual coordinates
+        /// </summary>
+        public void FillRectangle(Brush brush, float x, float y, float width, float height) {
+            var pt1 = new OpenCvSharp.Point((int)x, (int)y);
+            var pt2 = new OpenCvSharp.Point((int)(x + width), (int)(y + height));
+            Cv2.Rectangle(_canvas, pt1, pt2, brush.ToScalar(), -1, LineTypes.AntiAlias);
+        }
+
+        /// <summary>
+        /// Fills a rectangle with the specified brush using integer coordinates
+        /// </summary>
+        public void FillRectangle(Brush brush, int x, int y, int width, int height) {
+            FillRectangle(brush, (float)x, (float)y, (float)width, (float)height);
         }
     }
 }

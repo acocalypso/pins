@@ -60,4 +60,34 @@ namespace System.Windows.Forms {
             }
         }
     }
+
+    /// <summary>
+    /// Represents a dialog result value.
+    /// </summary>
+    public enum DialogResult {
+        None = 0,
+        OK = 1,
+        Cancel = 2,
+        Abort = 3,
+        Retry = 4,
+        Ignore = 5,
+        Yes = 6,
+        No = 7
+    }
+
+    /// <summary>
+    /// Stub for FolderBrowserDialog – on Linux uses a console fallback.
+    /// </summary>
+    public class FolderBrowserDialog : IDisposable {
+        public string SelectedPath { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public bool ShowNewFolderButton { get; set; } = true;
+
+        public DialogResult ShowDialog() {
+            // On Linux there is no native WinForms dialog; return Cancel so callers degrade gracefully.
+            return DialogResult.Cancel;
+        }
+
+        public void Dispose() { }
+    }
 }
