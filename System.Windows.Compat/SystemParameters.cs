@@ -28,4 +28,21 @@ namespace System.Windows {
             }
         }
     }
+
+    /// <summary>
+    /// Stub for System.Windows.Clipboard – clipboard operations are no-ops on Linux.
+    /// </summary>
+    public static class Clipboard {
+        private static string _text = string.Empty;
+
+        public static void SetText(string text) {
+            _text = text ?? string.Empty;
+        }
+
+        public static string GetText() => _text;
+
+        public static bool ContainsText() => !string.IsNullOrEmpty(_text);
+
+        public static void Clear() => _text = string.Empty;
+    }
 }
