@@ -75,9 +75,17 @@ namespace System.Drawing {
     }
 
     /// <summary>
+    /// Abstract base class for brushes, mirroring System.Drawing.Brush
+    /// </summary>
+    public abstract class Brush : IDisposable {
+        internal abstract Scalar ToScalar();
+        public abstract void Dispose();
+    }
+
+    /// <summary>
     /// SolidBrush for OpenCV - stores a single color
     /// </summary>
-    public class SolidBrush : IDisposable {
+    public class SolidBrush : Brush {
         public Windows.Media.Color Color { get; set; }
 
         public SolidBrush(Windows.Media.Color color) {
@@ -92,7 +100,9 @@ namespace System.Drawing {
         // Implicit conversion to Scalar for OpenCV
         public static implicit operator Scalar(SolidBrush brush) => brush.Color;
 
-        public void Dispose() {
+        internal override Scalar ToScalar() => Color;
+
+        public override void Dispose() {
             // No resources to dispose
         }
     }
@@ -150,6 +160,8 @@ namespace System.Drawing {
         public FontFamily(string name) {
             Name = name;
         }
+
+        public static FontFamily GenericSansSerif { get; } = new FontFamily("sans-serif");
     }
 
     /// <summary>
