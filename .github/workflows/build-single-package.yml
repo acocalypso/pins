@@ -548,17 +548,25 @@ jobs:
             if [ -n "$assembly_regex" ]; then
               assembly_version_line=$(grep -E "$assembly_regex" "$assembly_info" || true)
             else
+              assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyInformationalVersion' "$assembly_info" || true)
+            fi
+
+            if [ -z "$assembly_version_line" ]; then
+              assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyFileVersion' "$assembly_info" || true)
+            fi
+
+            if [ -z "$assembly_version_line" ]; then
               assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyVersion' "$assembly_info" || true)
             fi
 
             if [ -z "$assembly_version_line" ]; then
-              assembly_version_line=$(grep -E 'AssemblyVersion' "$assembly_info" || true)
+              assembly_version_line=$(grep -E 'AssemblyInformationalVersion|AssemblyFileVersion|AssemblyVersion' "$assembly_info" || true)
             fi
 
             local plugin_version
             plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^"]+)".*/\1/')
             if [ -z "$plugin_version" ]; then
-              echo "AssemblyVersion not found in $assembly_info" >&2
+              echo "No supported assembly version attribute found in $assembly_info" >&2
               return 1
             fi
 
