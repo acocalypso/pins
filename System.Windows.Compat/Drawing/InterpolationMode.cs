@@ -34,4 +34,17 @@ namespace System.Drawing.Drawing2D {
         None = 3,
         Half = 4
     }
+
+    /// <summary>
+    /// Represents the state of a Graphics object, used by Save/Restore
+    /// </summary>
+    public class GraphicsState {
+        internal OpenCvSharp.Mat Transform { get; }
+        internal bool HasTransform { get; }
+
+        internal GraphicsState(OpenCvSharp.Mat transform, bool hasTransform) {
+            Transform = transform;
+            HasTransform = hasTransform;
+        }
+    }
 }
