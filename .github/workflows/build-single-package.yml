@@ -68,7 +68,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: ${{ inputs.package_key == 'pins' }}
           submodules: false
 
       - name: Setup .NET 10 SDK
@@ -125,10 +125,7 @@ jobs:
           cd ..
 
           rm -rf NINA/External
-          git clone --depth 1 --branch main https://github.com/nitr57/pins.external NINA/External
-          pushd NINA/External >/dev/null
-          git lfs pull || true
-          popd >/dev/null
+          GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch main https://github.com/nitr57/pins.external NINA/External
 
           jpleph_url="https://github.com/isbeorn/nina.external/raw/refs/heads/master/JPLEPH"
           curl -L --fail --retry 3 --retry-delay 5 -o "NINA/External/JPLEPH" "$jpleph_url"
