@@ -107,7 +107,7 @@ jobs:
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
       - name: Prepare core linux-arm64 publish payload
-        if: ${{ inputs.package_key == 'pins' || startsWith(inputs.package_key, 'plugin-') }}
+        if: ${{ inputs.package_key == 'pins' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -588,10 +588,15 @@ jobs:
             mkdir -p "$install_root"
 
             core_publish_dir="${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
-            exclude_list="$(pwd)/core_excludes.txt"
-            (cd "$core_publish_dir" && find . -type f -printf '%P\n') > "$exclude_list"
-            rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
-            rm -f "$exclude_list"
+            if [ -d "$core_publish_dir" ]; then
+              exclude_list="$(pwd)/core_excludes.txt"
+              (cd "$core_publish_dir" && find . -type f -printf '%P\n') > "$exclude_list"
+              rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
+              rm -f "$exclude_list"
+            else
+              echo "Core publish directory not found at $core_publish_dir; packaging plugin without core file exclusion."
+              rsync -a "$tfm_dir/" "$install_root/"
+            fi
 
             find "$install_root" -mindepth 1 -maxdepth 1 -type d -name '??-??' -exec rm -rf {} +
             find "$install_root" -mindepth 1 -maxdepth 1 -type d -name '??' -exec rm -rf {} +
