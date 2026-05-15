@@ -308,9 +308,12 @@ namespace System.Windows {
         public object DataContext { get; set; }
         public Media.Effects.Effect Effect { get; set; }
         public Media.Transform RenderTransform { get; set; }
+        public bool IsLoaded { get; set; }
+        public Visibility Visibility { get; set; }
         public event RoutedEventHandler Loaded;
         public event RoutedEventHandler Unloaded;
         public event EventHandler<System.Windows.Input.KeyEventArgs> KeyDown;
+        public event DependencyPropertyChangedEventHandler DataContextChanged;
 
         public void CaptureTouch(System.Windows.Input.TouchDevice touchDevice) {
         }

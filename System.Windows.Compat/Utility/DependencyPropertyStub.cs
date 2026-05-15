@@ -98,6 +98,11 @@ namespace System.Windows {
     public delegate void PropertyChangedCallback(DependencyObject d, DependencyPropertyChangedEventArgs e);
 
     /// <summary>
+    /// Represents the method that handles the DataContextChanged event.
+    /// </summary>
+    public delegate void DependencyPropertyChangedEventHandler(object sender, DependencyPropertyChangedEventArgs e);
+
+    /// <summary>
     /// Provides data for dependency property changed events.
     /// </summary>
     public class DependencyPropertyChangedEventArgs : System.EventArgs {
