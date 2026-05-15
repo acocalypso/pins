@@ -99,15 +99,15 @@ namespace NINA.Equipment.Equipment.MySafetyMonitor {
 
         public bool IsSafe => ((ISafetyMonitor)device).IsSafe;
 
-        public bool Connected => device?.Connected ?? false;
+        public bool Connected => ((IDevice)device)?.Connected ?? false;
 
-        public string Description => device?.Description ?? string.Empty;
+        public string Description => ((IDevice)device)?.Description ?? string.Empty;
 
-        public string DriverInfo => device?.DriverInfo ?? string.Empty;
+        public string DriverInfo => ((IDevice)device)?.DriverInfo ?? string.Empty;
 
-        public string DriverVersion => device?.DriverVersion ?? string.Empty;
+        public string DriverVersion => ((IDevice)device)?.DriverVersion ?? string.Empty;
 
-        public IList<string> SupportedActions => device?.SupportedActions ?? [];
+        public IList<string> SupportedActions => ((IDevice)device)?.SupportedActions ?? [];
 
         public void Disconnect() {
             ((IDevice)device).Disconnect();

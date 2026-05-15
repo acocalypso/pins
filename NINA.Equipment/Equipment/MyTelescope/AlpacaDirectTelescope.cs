@@ -104,13 +104,13 @@ namespace NINA.Equipment.Equipment.MyTelescope {
             return ((IDevice)device).Action(actionName, actionParameters);
         }
 
-        public bool Connected => device?.Connected ?? false;
+        public bool Connected => ((IDevice)device)?.Connected ?? false;
 
-        public string Description => device?.Description;
+        public string Description => ((IDevice)device)?.Description ?? string.Empty;
 
-        public string DriverInfo => device?.DriverInfo;
+        public string DriverInfo => ((IDevice)device)?.DriverInfo ?? string.Empty;
 
-        public string DriverVersion => device?.DriverVersion;
+        public string DriverVersion => ((IDevice)device)?.DriverVersion ?? string.Empty;
 
         public Coordinates Coordinates => ((ITelescope)device).Coordinates;
 
@@ -208,7 +208,7 @@ namespace NINA.Equipment.Equipment.MyTelescope {
 
         public DateTime UTCDate => ((ITelescope)device).UTCDate;
 
-        public IList<string> SupportedActions => device?.SupportedActions ?? [];
+        public IList<string> SupportedActions => ((IDevice)device)?.SupportedActions ?? [];
 
         public PierSide DestinationSideOfPier(Coordinates coordinates) {
             return ((ITelescope)device).DestinationSideOfPier(coordinates);

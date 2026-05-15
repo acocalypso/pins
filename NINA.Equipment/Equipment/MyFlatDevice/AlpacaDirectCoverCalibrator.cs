@@ -111,15 +111,15 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
         public bool SupportsOnOff => ((IFlatDevice)device).SupportsOnOff;
 
-        public bool Connected => device?.Connected ?? false;
+        public bool Connected => ((IDevice)device)?.Connected ?? false;
 
-        public string Description => device?.Description ?? string.Empty;
+        public string Description => ((IDevice)device)?.Description ?? string.Empty;
 
-        public string DriverInfo => device?.DriverInfo ?? string.Empty;
+        public string DriverInfo => ((IDevice)device)?.DriverInfo ?? string.Empty;
 
-        public string DriverVersion => device?.DriverVersion ?? string.Empty;
+        public string DriverVersion => ((IDevice)device)?.DriverVersion ?? string.Empty;
 
-        public IList<string> SupportedActions => device?.SupportedActions ?? [];
+        public IList<string> SupportedActions => ((IDevice)device)?.SupportedActions ?? [];
 
         public Task<bool> Open(CancellationToken ct, int delay = 300) {
             return ((IFlatDevice)device).Open(ct, delay);

@@ -14,14 +14,20 @@
 
 using NCalc.Handlers;
 using NINA.Equipment.Interfaces.ViewModel;
+using System;
 using System.Collections.Generic;
 
 namespace NINA.Sequencer.Logic {
     public interface ISymbolBroker {
+        event EventHandler<SymbolChangedEventArgs> SymbolAdded;
+        event EventHandler<SymbolChangedEventArgs> SymbolUpdated;
+        event EventHandler<SymbolChangedEventArgs> SymbolRemoved;
+
         bool TryGetValue(string key, out object value);
         bool TryGetSymbol(string key, out Symbol symbol);
         List<Symbol> GetSymbols();
         ISymbolProvider RegisterSymbolProvider(string name);
+        bool IsProviderRegistered(string providerName);
         IList<Symbol> GetHiddenSymbols(string source);
         IReadOnlyCollection<SymbolFunction> GetFunctions();
         void InvokeFunction(string name, FunctionArgs args, out object result, out bool isVolatile);
