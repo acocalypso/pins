@@ -50,7 +50,7 @@ namespace NINA.Equipment.Equipment.MySwitch.Ascom {
 
             RaisePropertyChanged(e.PropertyName);
         }
-        
+
         private IProfileService profileService;
         private AlpacaDirectSettings settings;
 
@@ -100,15 +100,15 @@ namespace NINA.Equipment.Equipment.MySwitch.Ascom {
 
         public ICollection<ISwitch> Switches => ((ISwitchHub)device).Switches;
 
-        public bool Connected => device?.Connected ?? false;
+        public bool Connected => ((IDevice)device)?.Connected ?? false;
 
-        public string Description => device?.Description ?? string.Empty;
+        public string Description => ((IDevice)device)?.Description ?? string.Empty;
 
-        public string DriverInfo => device?.DriverInfo ?? string.Empty;
+        public string DriverInfo => ((IDevice)device)?.DriverInfo ?? string.Empty;
 
-        public string DriverVersion => device?.DriverVersion ?? string.Empty;
+        public string DriverVersion => ((IDevice)device)?.DriverVersion ?? string.Empty;
 
-        public IList<string> SupportedActions => device?.SupportedActions ?? [];
+        public IList<string> SupportedActions => ((IDevice)device)?.SupportedActions ?? [];
 
         public void Disconnect() {
             ((IDevice)device).Disconnect();

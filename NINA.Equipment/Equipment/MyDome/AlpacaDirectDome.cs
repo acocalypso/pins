@@ -124,15 +124,15 @@ namespace NINA.Equipment.Equipment.MyDome {
 
         public bool Slewing => ((IDome)device).Slewing;
 
-        public bool Connected => device?.Connected ?? false;
+        public bool Connected => ((IDevice)device)?.Connected ?? false;
 
-        public string Description => device?.Description ?? string.Empty;
+        public string Description => ((IDevice)device)?.Description ?? string.Empty;
 
-        public string DriverInfo => device?.DriverInfo ?? string.Empty;
+        public string DriverInfo => ((IDevice)device)?.DriverInfo ?? string.Empty;
 
-        public string DriverVersion => device?.DriverVersion ?? string.Empty;
+        public string DriverVersion => ((IDevice)device)?.DriverVersion ?? string.Empty;
 
-        public IList<string> SupportedActions => device?.SupportedActions ?? [];
+        public IList<string> SupportedActions => ((IDevice)device)?.SupportedActions ?? [];
 
         public Task SlewToAzimuth(double azimuth, CancellationToken ct) {
             return ((IDome)device).SlewToAzimuth(azimuth, ct);
