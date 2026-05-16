@@ -95,7 +95,7 @@ namespace NINA.INDI.Devices {
 
         public int Position => (int)(GetNumberPropertyValue("ABS_FOCUS_POSITION", "FOCUS_ABSOLUTE_POSITION") ?? 0.0);
 
-        public double StepSize => MaxIncrement;
+        public double StepSize => double.NaN;
         public bool TempComp => false;
         public bool TempCompAvailable => false;
         public double Temperature => GetNumberPropertyValue("FOCUS_TEMPERATURE", "TEMPERATURE") ?? double.NaN;

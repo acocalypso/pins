@@ -107,16 +107,13 @@ namespace NINA.Sequencer.SequenceItem.Imaging {
         }
 
         partial void AfterClone(SmartExposure clone) {
-            int iterations = Iterations;
             // The order of these matters!
             clone.Add((SwitchFilter)GetSwitchFilter().Clone());
             clone.Add((TakeExposure)GetTakeExposure().Clone());
             clone.Add((LoopCondition)GetLoopCondition().Clone());
             clone.Add((DitherAfterExposures)GetDitherAfterExposures().Clone());
             clone.IterationsExpression.Validator = clone.IterationsExpressionValidator;
-            clone.GetLoopCondition().Iterations = iterations;
-            GetLoopCondition().Iterations = iterations;
-            // Weak thing...
+            clone.GetLoopCondition().Iterations = GetLoopCondition().Iterations;
         }
 
 
