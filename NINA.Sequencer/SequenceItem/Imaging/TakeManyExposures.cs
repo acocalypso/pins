@@ -116,12 +116,10 @@ namespace NINA.Sequencer.SequenceItem.Imaging {
         }
 
         partial void AfterClone(TakeManyExposures clone) {
-            int iterations = Iterations;
             clone.Add((TakeExposure)GetTakeExposure().Clone());
             clone.Add((LoopCondition)GetLoopCondition().Clone());
             clone.IterationsExpression.Validator = clone.IterationsExpressionValidator;
-            clone.GetLoopCondition().Iterations = iterations;
-            GetLoopCondition().Iterations = iterations;
+            clone.GetLoopCondition().Iterations = GetLoopCondition().Iterations;
         }
 
         private TakeManyExposures(TakeManyExposures cloneMe) {
