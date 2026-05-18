@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 1.1.28 - 2026-05-18
 ### Changed
 - Updated NINA to 3.3.0.1040-nightly
+### Fixed
+- Fixed OnStep mounts running into timeout when homing
 
 ## 1.1.27 - 2026-05-16
 ### Fixed
