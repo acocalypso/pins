@@ -13,7 +13,6 @@
 #endregion "copyright"
 
 using NINA.Astrometry;
-using NINA.Astrometry;
 using NINA.Core.Enum;
 using NINA.Core.Utility;
 using NINA.INDI.Enums;
@@ -129,7 +128,10 @@ namespace NINA.INDI.Devices {
         }
         public double ApertureArea => ApertureDiameter * ApertureDiameter * 0.25 * Math.PI;
         public double ApertureDiameter => GetNumberPropertyValue("TELESCOPE_INFO", "TELESCOPE_APERTURE") ?? double.NaN;
-        public bool AtHome { get; }
+
+        private bool atHome = false;
+        public bool AtHome => atHome;
+
         public bool AtPark => GetSwitchPropertyValue("TELESCOPE_PARK", "PARK") ?? false;
         public double Azimuth {
             get {
@@ -212,6 +214,11 @@ namespace NINA.INDI.Devices {
                     { "TRACK_OFF", !value }
                 };
                 SetSwitchProperty("TELESCOPE_TRACK_STATE", switchValues);
+
+                // Negate atHome, if tracking was enabled
+                if (value) {
+                    atHome = false;
+                }
             }
         }
 
@@ -262,6 +269,7 @@ namespace NINA.INDI.Devices {
             SetSwitchProperty("TELESCOPE_TRACK_MODE", switchValues);
             // Turn tracking on after setting the mode
             Tracking = true;
+            atHome = false;
         }
 
         /// <summary>
@@ -473,6 +481,10 @@ namespace NINA.INDI.Devices {
                 // Secondary: positive=North, negative=South
                 double absRate = Math.Abs(rate);
 
+                if (rate != 0) {
+                    atHome = false;
+                }
+
                 Logger.Debug($"INDITelescope.MoveAxis: axis={axis}, rate={rate}, absRate={absRate}");
 
                 switch (axis) {
@@ -585,6 +597,8 @@ namespace NINA.INDI.Devices {
                     await Task.Delay(200, ct);
                     parkProp = GetProperty("TELESCOPE_PARK");
                 }
+
+                atHome = false;
             } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
@@ -622,6 +636,8 @@ namespace NINA.INDI.Devices {
                     Logger.Error("Cannot slew: Mount is parked");
                     throw new InvalidOperationException("Mount is parked");
                 }
+
+                atHome = false;
 
                 // Enable slewing mode
                 SetSwitchValue("ON_COORD_SET", "SLEW", true);
@@ -674,6 +690,8 @@ namespace NINA.INDI.Devices {
                     Logger.Error("Cannot slew: Mount is parked");
                     throw new InvalidOperationException("Mount is parked");
                 }
+
+                atHome = false;
 
                 // Enable slewing mode
                 SetSwitchValue("ON_COORD_SET", "SLEW", true);
@@ -764,13 +782,18 @@ namespace NINA.INDI.Devices {
                 }
 
                 // Wait for property to become busy then return to idle/ok
-                await Task.Delay(100, ct);
+                await Task.Delay(1000, ct);
 
                 homeProp = GetSwitchProperty("TELESCOPE_HOME");
-                while ((Slewing == true || homeProp?.State == PropertyState.Busy) && !ct.IsCancellationRequested) {
-                    await Task.Delay(200, ct);
+                Logger.Debug($"Slewing state: {Slewing}");
+                while (Slewing == true && !ct.IsCancellationRequested) {
+                    await Task.Delay(500, ct);
                     homeProp = GetSwitchProperty("TELESCOPE_HOME");
+                    Logger.Debug($"Waiting to reach home...");
                 }
+
+                Logger.Debug($"Reached home");
+                atHome = true;
             } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
