@@ -97,6 +97,7 @@ namespace NINA.WPF.Base.ViewModel.Equipment.FlatDevice {
                 }
 
                 devices.AddRange(new List<IDevice>{
+                    new ManualFlatDevice(),
                     new AllProSpikeAFlat(profileService),
                     new AlnitakFlipFlatSimulator(profileService),
                     new AlnitakFlatDevice(id: "817b60ab-6775-41bd-97b5-3857cc676e51", category: "Alnitak Astrosystems", name: $"Alnitak Flat Panel", displayName: $"{Loc.Instance["LblAlnitakFlatPanel"]}", profileService),
