@@ -707,6 +707,9 @@ namespace System.Windows {
 
         public static Vector operator *(double scalar, Vector v) => v * scalar;
 
+        public static Vector operator /(Vector v, double scalar) =>
+            new Vector { _vec = v._vec / scalar };
+
         public static double operator *(Vector v1, Vector v2) =>
             v1.X * v2.X + v1.Y * v2.Y;
 
