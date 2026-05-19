@@ -111,14 +111,6 @@ namespace NINA.Sequencer.SequenceItem.FlatDevice {
 
         private InstructionErrorBehavior errorBehavior = InstructionErrorBehavior.ContinueOnError;
 
-        /// <summary>
-        /// When false, the profile trained exposure time is not used and the ExposureTime set on the
-        /// inner TakeExposure item is preserved as-is. Set to false by callers that have already
-        /// resolved the correct exposure time (e.g. BuildDarkFlatsContainer in ninaAPI).
-        /// </summary>
-        [JsonIgnore]
-        public bool UseProfileExposureTime { get; set; } = true;
-
         [JsonProperty]
         public override InstructionErrorBehavior ErrorBehavior {
             get => errorBehavior;
@@ -227,14 +219,10 @@ namespace NINA.Sequencer.SequenceItem.FlatDevice {
             var binning = takeExposure.Binning;
             var gain = takeExposure.Gain == -1 ? profileService.ActiveProfile.CameraSettings.Gain ?? -1 : takeExposure.Gain;
             var offset = takeExposure.Offset == -1 ? profileService.ActiveProfile.CameraSettings.Offset ?? -1 : takeExposure.Offset;
-            var info = UseProfileExposureTime
-                ? profileService.ActiveProfile.FlatDeviceSettings.GetTrainedFlatExposureSetting(filter?.Position, binning, gain, offset)
-                : null;
+            var info = profileService.ActiveProfile.FlatDeviceSettings.GetTrainedFlatExposureSetting(filter?.Position, binning, gain, offset);
 
             GetSetBrightnessItem().Brightness = 0;
-            if (info != null) {
-                takeExposure.ExposureTime = info.Time;
-            }
+            takeExposure.ExposureTime = info.Time;
 
             if (KeepPanelClosed) {
                 GetOpenCoverItem().Skip();
