@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 1.1.32 - 2026-05-21
 ### Changed
 - Updated NINA to 3.3.0.1043-nightly
+- Logger colors (ERROR red, WARNING orange)
 
 ## 1.1.31 - 2026-05-20
 ### Changed
