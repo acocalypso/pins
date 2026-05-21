@@ -13,14 +13,18 @@
 #endregion "copyright"
 
 namespace System.Windows.Navigation {
-    // Placeholder for System.Windows.Navigation namespace
-    // This namespace contains WPF navigation-related types (Frame, NavigationService, etc.)
-    // Currently unused in headless mode
-
     /// <summary>
-    /// Dummy placeholder class to ensure namespace exists in compiled assembly
+    /// Event args for the RequestNavigate routed event raised by Hyperlink (stub).
     /// </summary>
-    internal static class NavigationStub {
-        // Empty placeholder
+    public class RequestNavigateEventArgs : System.Windows.RoutedEventArgs {
+        public Uri Uri { get; }
+        public string Target { get; }
+        public RequestNavigateEventArgs(Uri uri, string target) {
+            Uri = uri;
+            Target = target;
+        }
     }
+
+    /// <summary>Delegate for RequestNavigate events.</summary>
+    public delegate void RequestNavigateEventHandler(object sender, RequestNavigateEventArgs e);
 }

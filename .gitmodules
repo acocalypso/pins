@@ -1,7 +1,3 @@
-[submodule "NINA/External"]
-	path = NINA/External
-	url = https://github.com/nitr57/pins.external.git
-	branch = main
 [submodule "Touch-N-Stars"]
 	path = Touch-N-Stars
 	url = https://github.com/Touch-N-Stars/Touch-N-Stars.git

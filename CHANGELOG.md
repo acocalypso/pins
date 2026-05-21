@@ -4,9 +4,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.32 - 2026-05-21
+### Changed
+- Updated NINA to 3.3.0.1043-nightly
+- Logger colors (ERROR red, WARNING orange)
+
+## 1.1.31 - 2026-05-20
+### Changed
+- Updated NINA to 3.3.0.1042-nightly
+### Added
+- GET/SET guide rate, if supported
+
+## 1.1.30 - 2026-05-19
+### Added
+- Added Manual flat device, in order to properly control dark flat generation
+
 ## 1.1.29 - 2026-05-19
 ### Fixed
-- Fixed issue with dark flats when no flat panel was connected
+- AddedFixed issue with dark flats when no flat panel was connected
 
 ## 1.1.28 - 2026-05-18
 ### Changed

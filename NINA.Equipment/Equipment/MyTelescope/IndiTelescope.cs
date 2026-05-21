@@ -86,7 +86,9 @@ namespace NINA.Equipment.Equipment.MyTelescope {
         public bool CanSetDeclinationRate => canSetDeclinationRate;
 
         private bool canSetGuideRates = true;
-        public bool CanSetGuideRates => canSetGuideRates;
+        // Delegates to INDITelescope.CanSetGuideRate which checks the INDI property permission.
+        // canSetGuideRates is kept as a fallback that flips false on NotImplementedException.
+        public bool CanSetGuideRates => canSetGuideRates && GetProperty("CanSetGuideRate", false);
 
         private bool canSetPark = true;
         public bool CanSetPark => canSetPark;
@@ -210,21 +212,17 @@ namespace NINA.Equipment.Equipment.MyTelescope {
         public double GuideRateDeclinationArcsecPerSec {
             get {
                 try {
-                    if (CanSetGuideRates) {
-                        var rate = GetProperty(nameof(IINDITelescope.GuideRateDeclination), double.NaN);
-                        if (!double.IsNaN(rate)) {
-                            return rate * 3600.0;
-                        }
+                    var rate = GetProperty(nameof(IINDITelescope.GuideRateDeclination), double.NaN);
+                    if (!double.IsNaN(rate)) {
+                        return rate * 3600.0;
                     }
-                } catch (NotImplementedException) {
-                    canSetGuideRates = false;
-                }
+                } catch (NotImplementedException) { }
                 return double.NaN;
             }
             set {
                 try {
                     if (CanSetGuideRates) {
-                        SetProperty(nameof(IINDITelescope.GuideRateDeclination), value);
+                        SetProperty(nameof(IINDITelescope.GuideRateDeclination), value / 3600.0);
                     }
                 } catch (NotImplementedException) {
                     canSetGuideRates = false;
@@ -235,21 +233,17 @@ namespace NINA.Equipment.Equipment.MyTelescope {
         public double GuideRateRightAscensionArcsecPerSec {
             get {
                 try {
-                    if (CanSetGuideRates) {
-                        var rate = GetProperty(nameof(IINDITelescope.GuideRateRightAscension), double.NaN);
-                        if (!double.IsNaN(rate)) {
-                            return rate * 3600.0;
-                        }
+                    var rate = GetProperty(nameof(IINDITelescope.GuideRateRightAscension), double.NaN);
+                    if (!double.IsNaN(rate)) {
+                        return rate * 3600.0;
                     }
-                } catch (NotImplementedException) {
-                    canSetGuideRates = false;
-                }
+                } catch (NotImplementedException) { }
                 return double.NaN;
             }
             set {
                 try {
                     if (CanSetGuideRates) {
-                        SetProperty(nameof(IINDITelescope.GuideRateRightAscension), value);
+                        SetProperty(nameof(IINDITelescope.GuideRateRightAscension), value / 3600.0);
                     }
                 } catch (NotImplementedException) {
                     canSetGuideRates = false;
@@ -498,7 +492,7 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                                         actualRate = GetAdjustedMovingRate(Math.Abs(rate), Math.Abs(rate), axis) * sign;
                                     }
                                     var switchDesc = (device as NINA.INDI.Devices.INDITelescope)?.GetSwitchDescription(Math.Abs(actualRate));
-                                    Logger.Info($"Moving {axis} Telescope Axis using rate {actualRate}{(string.IsNullOrEmpty(switchDesc) ? "" : $" ({switchDesc})")}." );
+                                    Logger.Info($"Moving {axis} Telescope Axis using rate {actualRate}{(string.IsNullOrEmpty(switchDesc) ? "" : $" ({switchDesc})")}.");
                                     device.MoveAxis(axis, actualRate);
                                     InvalidatePropertyCache();
                                 }

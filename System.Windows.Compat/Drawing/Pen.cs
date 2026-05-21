@@ -210,5 +210,8 @@ namespace System.Drawing {
         public static Windows.Media.SolidColorBrush DarkBlue { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(0, 0, 139));
         public static Windows.Media.SolidColorBrush DarkRed { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(139, 0, 0));
         public static Windows.Media.SolidColorBrush LightYellow { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(255, 255, 224));
+        public static Windows.Media.SolidColorBrush LightBlue { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(173, 216, 230));
+        public static Windows.Media.SolidColorBrush LightGreen { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(144, 238, 144));
+        public static Windows.Media.SolidColorBrush OrangeRed { get; } = new Windows.Media.SolidColorBrush(Windows.Media.Color.FromRgb(255, 69, 0));
     }
 }

@@ -148,8 +148,40 @@ namespace NINA.INDI.Devices {
         public double DeclinationRate { get; set; }
         public bool DoesRefraction { get; }
         public double FocalLength => GetNumberPropertyValue("TELESCOPE_INFO", "TELESCOPE_FOCAL_LENGTH") ?? double.NaN;
-        public double GuideRateDeclination { get; }
-        public double GuideRateRightAscension { get; }
+
+        // GUIDE_RATE values are sidereal multipliers (e.g. 0.5 = 0.5× sidereal).
+        // Convert to deg/s so IndiTelescope can multiply by 3600 to get arcsec/s
+        // as expected by the ITelescope GuideRate* contract.
+        // Sidereal rate = 15 arcsec/s = 15/3600 deg/s.
+        private const double SiderealDegPerSec = 15.0 / 3600.0;
+
+        /// <summary>Returns true when the INDI driver exposes GUIDE_RATE as writable (rw/wo).</summary>
+        public bool CanSetGuideRate =>
+            GetNumberProperty("GUIDE_RATE") is { } p &&
+            p.Permission != PropertyPermission.ReadOnly;
+
+        public double GuideRateDeclination {
+            get {
+                var val = GetNumberPropertyValue("GUIDE_RATE", "GUIDE_RATE_NS");
+                return val.HasValue ? val.Value * SiderealDegPerSec : double.NaN;
+            }
+            set {
+                if (!CanSetGuideRate) return;
+                // value is in deg/s; convert back to sidereal multiplier for INDI
+                SetNumberValue("GUIDE_RATE", "GUIDE_RATE_NS", value / SiderealDegPerSec);
+            }
+        }
+        public double GuideRateRightAscension {
+            get {
+                var val = GetNumberPropertyValue("GUIDE_RATE", "GUIDE_RATE_WE");
+                return val.HasValue ? val.Value * SiderealDegPerSec : double.NaN;
+            }
+            set {
+                if (!CanSetGuideRate) return;
+                // value is in deg/s; convert back to sidereal multiplier for INDI
+                SetNumberValue("GUIDE_RATE", "GUIDE_RATE_WE", value / SiderealDegPerSec);
+            }
+        }
         public bool IsPulseGuiding { get; }
         public double RightAscension => GetNumberPropertyValue("EQUATORIAL_EOD_COORD", "RA") ?? double.NaN;
         public double RightAscensionRate { get; set; }
