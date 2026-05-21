@@ -14,6 +14,48 @@
 
 namespace System.Windows.Documents {
     /// <summary>
+    /// Base class for inline flow-content elements.
+    /// </summary>
+    public abstract class Inline : System.Windows.DependencyObject { }
+
+    /// <summary>
+    /// A collection of Inline elements (stub — no WPF rendering on Linux).
+    /// </summary>
+    public class InlineCollection : System.Collections.Generic.List<Inline> {
+        public new void Add(Inline item) => base.Add(item);
+    }
+
+    /// <summary>Represents a run of plain text.</summary>
+    public class Run : Inline {
+        public string Text { get; set; }
+        public Run() { }
+        public Run(string text) { Text = text; }
+    }
+
+    /// <summary>Applies bold formatting to inline content.</summary>
+    public class Bold : Inline {
+        public Bold() { }
+        public Bold(Inline childInline) { }
+    }
+
+    /// <summary>Applies italic formatting to inline content.</summary>
+    public class Italic : Inline {
+        public Italic() { }
+        public Italic(Inline childInline) { }
+    }
+
+    /// <summary>Represents a line break in flow content.</summary>
+    public class LineBreak : Inline { }
+
+    /// <summary>An inline-level element that provides click-navigation (stub).</summary>
+    public class Hyperlink : Inline {
+        public Hyperlink() { }
+        public Hyperlink(Inline childInline) { }
+        public Uri NavigateUri { get; set; }
+        public event System.Windows.Navigation.RequestNavigateEventHandler RequestNavigate;
+    }
+
+    /// <summary>
     /// Represents an adorner element that decorates another visual element.
     /// </summary>
     public abstract class Adorner : System.Windows.FrameworkElement {

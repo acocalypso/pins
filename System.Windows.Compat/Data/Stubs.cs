@@ -785,6 +785,7 @@ namespace System.Windows.Controls {
 
     public class TextBlock : System.Windows.DependencyObject {
         public string Text { get; set; }
+        public System.Windows.Documents.InlineCollection Inlines { get; } = new System.Windows.Documents.InlineCollection();
     }
 
     public class TextBox : System.Windows.FrameworkElement {
@@ -822,6 +823,7 @@ namespace System.Windows {
     public class RoutedEventArgs : EventArgs {
         public RoutedEvent RoutedEvent { get; set; }
         public object OriginalSource { get; set; }
+        public bool Handled { get; set; }
 
         public RoutedEventArgs(RoutedEvent routedEvent) {
             RoutedEvent = routedEvent;
