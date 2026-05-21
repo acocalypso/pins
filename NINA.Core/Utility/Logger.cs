@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -49,7 +49,8 @@ namespace NINA.Core.Utility {
                 .MinimumLevel.ControlledBy(levelSwitch)
                 .Enrich.With<LegacyLogLevelMappingEnricher>()
                 .WriteTo.Console(
-                    outputTemplate: "{Timestamp:yyyy-MM-ddTHH:mm:ss.ffff}|{LegacyLogLevel}|{Message:lj}{NewLine}{Exception}")
+                    theme: Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme.Literate,
+                    outputTemplate: "{Timestamp:yyyy-MM-ddTHH:mm:ss.ffff}|{LegacyLogLevelConsole}|{Message:lj}{NewLine}{Exception}")
                 .WriteTo.File(logFilePath,
                     rollOnFileSizeLimit: true,
                     rollingInterval: RollingInterval.Month,
@@ -77,7 +78,7 @@ namespace NINA.Core.Utility {
                 sb.AppendLine(PadBoth("{0}", 70, '-', RuntimeInformation.FrameworkDescription));
                 sb.AppendLine(PadBoth("", 70, '-'));
                 sb.AppendLine(PadBoth("Processor Count {0}", 70, '-', Environment.ProcessorCount.ToString()));
-            } catch { 
+            } catch {
                 sb.AppendLine(PadBoth("Unable to determine OS information", 70, '-'));
             }
 
@@ -219,6 +220,7 @@ namespace NINA.Core.Utility {
 
         private class LegacyLogLevelMappingEnricher : ILogEventEnricher {
             private static readonly string LEGACYLOGLEVELPROPERTY = "LegacyLogLevel";
+            private static readonly string COLOREDLEGACYLOGLEVELPROPERTY = "LegacyLogLevelConsole";
             private static readonly string TRACE = LogLevelEnum.TRACE.ToString();
             private static readonly string DEBUG = LogLevelEnum.DEBUG.ToString();
             private static readonly string INFO = LogLevelEnum.INFO.ToString();
@@ -228,7 +230,7 @@ namespace NINA.Core.Utility {
             private static readonly string UNKNOWN = "UNKNOWN";
 
             public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory) {
-                
+
                 var legacyLogLevel = logEvent.Level switch {
                     LogEventLevel.Verbose => TRACE,
                     LogEventLevel.Debug => DEBUG,
@@ -239,6 +241,14 @@ namespace NINA.Core.Utility {
                     _ => UNKNOWN
                 };
                 logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty(LEGACYLOGLEVELPROPERTY, legacyLogLevel));
+
+                var coloredLevel = logEvent.Level switch {
+                    LogEventLevel.Warning => "\x1b[33mWARNING\x1b[0m",
+                    LogEventLevel.Error => "\x1b[31mERROR\x1b[0m",
+                    LogEventLevel.Fatal => "\x1b[31mFATAL\x1b[0m",
+                    _ => legacyLogLevel
+                };
+                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty(COLOREDLEGACYLOGLEVELPROPERTY, coloredLevel));
             }
         }
     }

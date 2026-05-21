@@ -243,26 +243,42 @@ namespace Accord.Imaging.Filters {
     }
 
     /// <summary>
-    /// Fast Gaussian Blur - applies Gaussian blur using optimized OpenCV implementation
+    /// Gaussian sharpen filter - sharpens using Gaussian unsharp mask via OpenCV
     /// </summary>
-    public class FastGaussianBlur {
-        private Bitmap sourceBitmap;
+    public class GaussianSharpen {
+        private double sigma;
+        private int kernelSize;
 
-        public FastGaussianBlur(Bitmap source) {
-            sourceBitmap = source;
+        public GaussianSharpen(double sigma, int kernelSize) {
+            this.sigma = sigma;
+            this.kernelSize = kernelSize | 1; // ensure odd
+            if (this.kernelSize < 3) this.kernelSize = 3;
         }
 
-        public Bitmap Process(int sigma) {
-            Mat sourceMat = sourceBitmap;
-            Mat result = new Mat();
+        public void ApplyInPlace(Bitmap image) {
+            Mat mat = image;
+            using Mat blurred = new Mat();
+            Cv2.GaussianBlur(mat, blurred, new OpenCvSharp.Size(kernelSize, kernelSize), sigma);
+            Cv2.AddWeighted(mat, 1.5, blurred, -0.5, 0, mat);
+        }
+    }
 
-            // Calculate kernel size based on sigma
-            int kernelSize = (sigma * 2) * 2 + 1;
-            if (kernelSize < 3) kernelSize = 3;
-            if (kernelSize % 2 == 0) kernelSize++; // Ensure odd
+    /// <summary>
+    /// Gaussian blur filter - wraps OpenCV GaussianBlur
+    /// </summary>
+    public class GaussianBlur {
+        private double sigma;
+        private int kernelSize;
 
-            Cv2.GaussianBlur(sourceMat, result, new OpenCvSharp.Size(kernelSize, kernelSize), sigma);
-            return new Bitmap(result);
+        public GaussianBlur(double sigma, int kernelSize) {
+            this.sigma = sigma;
+            this.kernelSize = kernelSize | 1; // ensure odd
+            if (this.kernelSize < 3) this.kernelSize = 3;
+        }
+
+        public void ApplyInPlace(Bitmap image) {
+            Mat mat = image;
+            Cv2.GaussianBlur(mat, mat, new OpenCvSharp.Size(kernelSize, kernelSize), sigma);
         }
     }
 
