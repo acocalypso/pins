@@ -57,6 +57,7 @@ jobs:
             pkg-config \
             libudev-dev \
             libjsoncpp-dev \
+            libgpiod-dev \
             libssl-dev \
             libicu-dev \
             rsync
@@ -70,7 +71,7 @@ jobs:
       - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y libudev-dev libjsoncpp-dev autoconf autoconf-archive libtool pkg-config
+          apt-get install -y libudev-dev libjsoncpp-dev libgpiod-dev autoconf autoconf-archive libtool pkg-config
 
       - name: Build and install libgpiod 2.2
         shell: bash
