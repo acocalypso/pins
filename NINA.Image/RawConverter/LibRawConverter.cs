@@ -1,9 +1,9 @@
 #region "copyright"
 
 /*
-    Copyright © 2025 Nico Trost <nico.trost57@gmail.com> and the PI.N.S. contributors
+    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
-    This file is part of PI 'N' Stars.
+    This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
     This Source Code Form is subject to the terms of the Mozilla Public
     License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -23,15 +23,22 @@ using System.Threading.Tasks;
 
 namespace NINA.Image.RawConverter {
 
-    /// <summary>
-    /// RAW converter using LibRaw library
-    /// LibRaw is specifically designed for RAW image processing and works reliably on Linux
-    /// </summary>
     internal class LibRawConverter : IRawConverter {
+        private const string LibRawDllName = "libraw.so";
+
+        // Offsets are from LibRaw 0.22.1's public libraw_types.h and must be updated with the versioned DLL.
+        private const int ImageSizesOffset = 8;
+        private const int RawDataOffset = 193768;
+        private const int RawImageOffset = 8;
+
+        private static readonly object loadLock = new object();
+        private static bool dllLoaded;
+
         private readonly IImageDataFactory imageDataFactory;
 
         public LibRawConverter(IImageDataFactory imageDataFactory) {
             this.imageDataFactory = imageDataFactory;
+            EnsureDllLoaded();
         }
 
         public Task<IImageData> Convert(
@@ -41,127 +48,199 @@ namespace NINA.Image.RawConverter {
             ImageMetaData metaData,
             CancellationToken token = default) {
             return Task.Run(() => {
-                using (MyStopWatch.Measure("LibRaw Conversion")) {
-                    IntPtr processor = IntPtr.Zero;
+                using (MyStopWatch.Measure()) {
+                    token.ThrowIfCancellationRequested();
+
+                    var rawBytes = s.ToArray();
+                    var handle = GCHandle.Alloc(rawBytes, GCHandleType.Pinned);
+                    var processor = IntPtr.Zero;
                     try {
-                        // Create LibRaw processor instance
-                        processor = LibRawInterop.libraw_init(0);
+                        processor = LibRawNative.Init(0);
                         if (processor == IntPtr.Zero) {
-                            throw new Exception("Failed to initialize LibRaw processor");
+                            throw new InvalidOperationException("LibRaw initialization failed.");
                         }
 
-                        // Get raw bytes from stream
-                        byte[] rawBytes = s.ToArray();
+                        ThrowIfError(
+                            LibRawNative.OpenBuffer(processor, handle.AddrOfPinnedObject(), (UIntPtr)rawBytes.Length),
+                            "LibRaw open buffer");
 
-                        Logger.Debug($"LibRaw: Processing {rawBytes.Length} bytes");
+                        token.ThrowIfCancellationRequested();
 
-                        // Open RAW from buffer
-                        int ret = LibRawInterop.libraw_open_buffer(processor, rawBytes, (uint)rawBytes.Length);
-                        if (ret != 0) {
-                            throw new Exception($"LibRaw open_buffer failed: {GetLibRawError(ret)}");
-                        }
+                        ThrowIfError(LibRawNative.Unpack(processor), "LibRaw unpack");
 
-                        Logger.Debug("LibRaw: Buffer opened successfully");
+                        token.ThrowIfCancellationRequested();
 
-                        // Unpack the RAW data
-                        ret = LibRawInterop.libraw_unpack(processor);
-                        if (ret != 0) {
-                            throw new Exception($"LibRaw unpack failed: {GetLibRawError(ret)}");
-                        }
-
-                        Logger.Debug("LibRaw: Data unpacked successfully");
-
-                        // Obtain image from RAW data
-                        ret = LibRawInterop.libraw_raw2image(processor);
-                        if (ret != 0) {
-                            throw new Exception($"LibRaw raw2image failed: {GetLibRawError(ret)}");
-                        }
-
-                        Logger.Debug("LibRaw: Data obtained successfully");
-
-                        // Get image dimensions before processing
-                        ushort width = LibRawInterop.libraw_get_iwidth(processor);
-                        ushort height = LibRawInterop.libraw_get_iheight(processor);
-
-                        Logger.Debug($"LibRaw: Image dimensions {width}x{height}");
-
-                        // libraw_data_t is the first entry in the LibRaw class and raw image data
-                        // is the first entry in the libraw_data_t struct (which is a ushort (*image)[4])
-                        // containing the RGGB data (undemosaiced raw sensor data)
-
-                        // The processor IS the libraw_data_t structure
-                        // The first field in libraw_data_t is the image pointer (ushort (*image)[4])
-                        IntPtr imagePtr = Marshal.ReadIntPtr(processor, 0);
-
-                        if (imagePtr == IntPtr.Zero) {
-                            throw new Exception("Image data pointer is null");
-                        }
-
-                        if (width == 0 || height == 0) {
-                            throw new Exception($"Invalid image dimensions: {width}x{height}");
-                        }
-
-                        // Calculate total ushort values: width * height * 4 (RGBG)
-                        // The ushort (*image)[4] declaration means 4 ushort values per pixel:
-                        // (*image)[0] = R, (*image)[1] = G, (*image)[2] = B, (*image)[3] = G2
-                        int totalPixels = width * height;
-
-                        // Convert RGBG data directly from unmanaged memory to single-channel Bayer image
-                        // No intermediate buffer - read directly from the pointer
-                        ushort[] bayerImageSingleChannel = new ushort[totalPixels];
-
-                        unsafe {
-                            ushort* pImage = (ushort*)imagePtr;
-                            for (int i = 0; i < totalPixels; i++) {
-                                int baseIdx = i * 4;
-                                ushort r = pImage[baseIdx];
-                                ushort g = pImage[baseIdx + 1];
-                                ushort b = pImage[baseIdx + 2];
-                                ushort g2 = pImage[baseIdx + 3];
-
-                                // Use the non-zero value (Bayer pattern encodes which channel applies to each pixel)
-                                ushort value = (r > 0) ? r : (g > 0) ? g : (b > 0) ? b : g2;
-                                bayerImageSingleChannel[i] = value;
-                            }
-                        }
-
-                        Logger.Debug("LibRaw: Converted RGBG data to single-channel Bayer image (no intermediate copy)");
-
-                        // Create image data from single-channel Bayer image (matching FreeImage format)
-                        var imageArray = new ImageArray(flatArray: bayerImageSingleChannel, rawData: rawBytes, rawType: rawType);
-                        var data = imageDataFactory.CreateBaseImageData(
-                            imageArray: imageArray,
-                            width: width,
-                            height: height,
-                            bitDepth: bitDepth,
-                            isBayered: true,
-                            metaData: metaData);
-
-                        Logger.Debug("LibRaw: Bayer image data created successfully (single-channel format)");
-
-                        return Task.FromResult<IImageData>(data);
-                    } catch (Exception ex) {
-                        Logger.Error($"LibRaw conversion failed: {ex.Message}");
-                        throw;
+                        return CreateImageData(processor, rawBytes, rawType, bitDepth, metaData);
                     } finally {
                         if (processor != IntPtr.Zero) {
-                            LibRawInterop.libraw_close(processor);
+                            LibRawNative.Close(processor);
+                        }
+
+                        if (handle.IsAllocated) {
+                            handle.Free();
                         }
                     }
                 }
-            });
+            }, token);
         }
 
-        private static string GetLibRawError(int errorCode) {
-            try {
-                IntPtr errorPtr = LibRawInterop.libraw_strerror(errorCode);
-                if (errorPtr != IntPtr.Zero) {
-                    return Marshal.PtrToStringAnsi(errorPtr) ?? $"Unknown error code {errorCode}";
+        private static void EnsureDllLoaded() {
+            lock (loadLock) {
+                if (dllLoaded) {
+                    return;
                 }
-            } catch {
-                // Ignore
+
+                DllLoader.LoadDll(Path.Combine("Libraw", LibRawDllName));
+                dllLoaded = true;
             }
-            return $"Unknown error code {errorCode}";
+        }
+
+        private IImageData CreateImageData(IntPtr processor, byte[] rawBytes, string rawType, int bitDepth, ImageMetaData metaData) {
+            var sizes = Marshal.PtrToStructure<LibRawImageSizes>(IntPtr.Add(processor, ImageSizesOffset));
+            var frame = GetActiveFrame(sizes);
+
+            var rawImage = ReadRawDataPointer(processor, RawImageOffset);
+            if (rawImage != IntPtr.Zero) {
+                var pixels = CopyUshortFrame(rawImage, frame);
+                return CreateImageData(pixels, rawBytes, rawType, frame.Width, frame.Height, bitDepth, metaData);
+            }
+
+            throw new NotSupportedException("LibRaw did not return an unpacked CFA RAW image buffer.");
+        }
+
+        private IImageData CreateImageData(ushort[] pixels, byte[] rawBytes, string rawType, int width, int height, int bitDepth, ImageMetaData metaData) {
+            var imageArray = new ImageArray(flatArray: pixels, rawData: rawBytes, rawType: rawType);
+            return imageDataFactory.CreateBaseImageData(
+                imageArray: imageArray,
+                width: width,
+                height: height,
+                bitDepth: bitDepth,
+                isBayered: true,
+                metaData: metaData);
+        }
+
+        private static ActiveFrame GetActiveFrame(LibRawImageSizes sizes) {
+            var sourceWidth = sizes.RawWidth;
+            var sourceHeight = sizes.RawHeight;
+            var rowStride = sizes.RawPitch > 0 ? Math.Max(sourceWidth, (int)sizes.RawPitch / sizeof(ushort)) : sourceWidth;
+            var width = FirstPositive(sizes.Width, sizes.IWidth, sourceWidth);
+            var height = FirstPositive(sizes.Height, sizes.IHeight, sourceHeight);
+            var left = Math.Min(sizes.LeftMargin, rowStride);
+            var top = Math.Min(sizes.TopMargin, sourceHeight);
+
+            width = Math.Min(width, rowStride - left);
+            height = Math.Min(height, sourceHeight - top);
+
+            if (width <= 0 || height <= 0 || rowStride <= 0) {
+                throw new InvalidOperationException("LibRaw returned invalid RAW image dimensions.");
+            }
+
+            return new ActiveFrame(left, top, width, height, rowStride);
+        }
+
+        private static int FirstPositive(params ushort[] values) {
+            foreach (var value in values) {
+                if (value > 0) {
+                    return value;
+                }
+            }
+
+            return 0;
+        }
+
+        private static IntPtr ReadRawDataPointer(IntPtr processor, int rawDataFieldOffset) {
+            return Marshal.ReadIntPtr(processor, RawDataOffset + rawDataFieldOffset);
+        }
+
+        private static void ThrowIfError(int result, string operation) {
+            if (result == 0) {
+                return;
+            }
+
+            var message = Marshal.PtrToStringAnsi(LibRawNative.StrError(result));
+            if (string.IsNullOrWhiteSpace(message)) {
+                message = $"LibRaw error {result}";
+            }
+
+            throw new InvalidOperationException($"{operation} failed: {message}");
+        }
+
+        private static unsafe ushort[] CopyUshortFrame(IntPtr image, ActiveFrame frame) {
+            var pixels = new ushort[frame.Width * frame.Height];
+            var source = (ushort*)image.ToPointer();
+            fixed (ushort* destination = pixels) {
+                for (var y = 0; y < frame.Height; y++) {
+                    var sourceRow = source + ((frame.Top + y) * frame.RowStride) + frame.Left;
+                    var destinationRow = destination + (y * frame.Width);
+                    Buffer.MemoryCopy(sourceRow, destinationRow, frame.Width * sizeof(ushort), frame.Width * sizeof(ushort));
+                }
+            }
+
+            return pixels;
+        }
+
+        [StructLayout(LayoutKind.Explicit, Size = 184)]
+        private struct LibRawImageSizes {
+            [FieldOffset(0)]
+            public ushort RawHeight;
+
+            [FieldOffset(2)]
+            public ushort RawWidth;
+
+            [FieldOffset(4)]
+            public ushort Height;
+
+            [FieldOffset(6)]
+            public ushort Width;
+
+            [FieldOffset(8)]
+            public ushort TopMargin;
+
+            [FieldOffset(10)]
+            public ushort LeftMargin;
+
+            [FieldOffset(12)]
+            public ushort IHeight;
+
+            [FieldOffset(14)]
+            public ushort IWidth;
+
+            [FieldOffset(16)]
+            public uint RawPitch;
+        }
+
+        private readonly struct ActiveFrame {
+            public ActiveFrame(int left, int top, int width, int height, int rowStride) {
+                Left = left;
+                Top = top;
+                Width = width;
+                Height = height;
+                RowStride = rowStride;
+            }
+
+            public int Left { get; }
+            public int Top { get; }
+            public int Width { get; }
+            public int Height { get; }
+            public int RowStride { get; }
+        }
+
+        private static class LibRawNative {
+
+            [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_init")]
+            public static extern IntPtr Init(uint flags);
+
+            [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_open_buffer")]
+            public static extern int OpenBuffer(IntPtr processor, IntPtr buffer, UIntPtr bufferSize);
+
+            [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_unpack")]
+            public static extern int Unpack(IntPtr processor);
+
+            [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_close")]
+            public static extern void Close(IntPtr processor);
+
+            [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_strerror")]
+            public static extern IntPtr StrError(int errorCode);
         }
     }
 }
