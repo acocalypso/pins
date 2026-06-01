@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright � 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -284,6 +284,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     }
 
                     await EnsurePHD2EquipmentConnected();
+                    await ApplyPhd2ProfileSettings();
                     await TryRefreshShiftLockParams();
                     await SetPixelScale();
                     initialized = true;
@@ -1092,6 +1093,326 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
             return foo != null ? foo.State : TcpState.Unknown;
         }
 
+        private async Task ApplyPhd2ProfileSettings() {
+            var s = profileService.ActiveProfile.GuiderSettings;
+            bool anyStored = s.PHD2RAMinMove.HasValue || s.PHD2DecMinMove.HasValue
+                || s.PHD2RAAggressiveness.HasValue || s.PHD2DecAggressiveness.HasValue
+                || s.PHD2RAHysteresis.HasValue || s.PHD2DecFastSwitch.HasValue
+                || !string.IsNullOrEmpty(s.PHD2DecGuideMode) || s.PHD2ExposureMs.HasValue
+                || s.PHD2CalibrationStepMs.HasValue || s.PHD2CalibrationDistancePx.HasValue || s.PHD2SearchRegion.HasValue
+                || s.PHD2MaxRADuration.HasValue || s.PHD2MaxDecDuration.HasValue
+                || !string.IsNullOrEmpty(s.PHD2GuideAlgorithmRA) || !string.IsNullOrEmpty(s.PHD2GuideAlgorithmDec)
+                || s.PHD2DitherScale.HasValue || s.PHD2DitherRAOnly.HasValue || !string.IsNullOrEmpty(s.PHD2DitherMode)
+                || s.PHD2NoiseReductionMethod.HasValue || s.PHD2CameraGain.HasValue
+                || s.PHD2CameraBinning.HasValue || s.PHD2UseSubframes.HasValue
+                || s.PHD2FocalLength.HasValue || s.PHD2AutoRestoreCalibration.HasValue
+                || s.PHD2AssumeDecOrthogonal.HasValue || s.PHD2UseDecCompensation.HasValue
+                || s.PHD2ReverseDecOnFlip.HasValue || s.PHD2FastRecenter.HasValue
+                || s.PHD2MinStarHFD.HasValue || s.PHD2MaxStarHFD.HasValue
+                || s.PHD2BeepForLostStar.HasValue || s.PHD2MassChangeThresholdEnabled.HasValue
+                || s.PHD2MassChangeThreshold.HasValue || s.PHD2UseMultipleStars.HasValue
+                || s.PHD2TimeLapseMs.HasValue || s.PHD2VarDelayEnabled.HasValue
+                || s.PHD2VarDelayShortSec.HasValue || s.PHD2VarDelayLongSec.HasValue
+                || s.PHD2AfMinStarSnr.HasValue || !string.IsNullOrEmpty(s.PHD2AutoSelectDownsample)
+                || s.PHD2SaturationByADU.HasValue || s.PHD2SaturationADUValue.HasValue
+                || s.PHD2DecHysteresis.HasValue || s.PHD2RAFastSwitch.HasValue
+                || s.PHD2RASlopeWeight.HasValue || s.PHD2DecSlopeWeight.HasValue
+                || s.PHD2RALowpass2Aggressiveness.HasValue || s.PHD2DecLowpass2Aggressiveness.HasValue
+                || s.PHD2RAPredictiveWeight.HasValue || s.PHD2DecPredictiveWeight.HasValue
+                || s.PHD2RAReactiveWeight.HasValue || s.PHD2DecReactiveWeight.HasValue
+                || s.PHD2RAPeriodLength.HasValue || s.PHD2DecPeriodLength.HasValue
+                || s.PHD2RAExpFactor.HasValue || s.PHD2DecExpFactor.HasValue;
+            if (!anyStored) {
+                Logger.Info("No PHD2 algo settings stored in NINA profile, skipping restore");
+                return;
+            }
+            try {
+                // Algorithm selection must come first — switching algo resets its params
+                if (!string.IsNullOrEmpty(s.PHD2GuideAlgorithmRA)) {
+                    var msg = new Phd2SetGuideAlgorithmRA() { Parameters = new object[] { s.PHD2GuideAlgorithmRA } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore RA guide algorithm: {resp.error.message}");
+                }
+                if (!string.IsNullOrEmpty(s.PHD2GuideAlgorithmDec)) {
+                    var msg = new Phd2SetGuideAlgorithmDec() { Parameters = new object[] { s.PHD2GuideAlgorithmDec } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore Dec guide algorithm: {resp.error.message}");
+                }
+                // Fetch valid param names for each axis so we only send params the active algorithm supports
+                var raParams = await GetAlgoParamNames("ra");
+                var decParams = await GetAlgoParamNames("dec");
+                if (s.PHD2RAMinMove.HasValue && raParams.Contains("minMove"))
+                    await SetAlgoParam("ra", "minMove", s.PHD2RAMinMove.Value);
+                if (s.PHD2DecMinMove.HasValue && decParams.Contains("minMove"))
+                    await SetAlgoParam("dec", "minMove", s.PHD2DecMinMove.Value);
+                if (s.PHD2RAAggressiveness.HasValue && raParams.Contains("aggression"))
+                    await SetAlgoParam("ra", "aggression", s.PHD2RAAggressiveness.Value);
+                if (s.PHD2DecAggressiveness.HasValue && decParams.Contains("aggression"))
+                    await SetAlgoParam("dec", "aggression", s.PHD2DecAggressiveness.Value);
+                if (s.PHD2RAHysteresis.HasValue && raParams.Contains("hysteresis"))
+                    await SetAlgoParam("ra", "hysteresis", s.PHD2RAHysteresis.Value);
+                if (s.PHD2DecFastSwitch.HasValue && decParams.Contains("fastSwitch"))
+                    await SetAlgoParam("dec", "fastSwitch", s.PHD2DecFastSwitch.Value ? 1.0 : 0.0);
+                if (s.PHD2DecHysteresis.HasValue && decParams.Contains("hysteresis"))
+                    await SetAlgoParam("dec", "hysteresis", s.PHD2DecHysteresis.Value);
+                if (s.PHD2RAFastSwitch.HasValue && raParams.Contains("fastSwitch"))
+                    await SetAlgoParam("ra", "fastSwitch", s.PHD2RAFastSwitch.Value ? 1.0 : 0.0);
+                if (s.PHD2RASlopeWeight.HasValue && raParams.Contains("slopeWeight"))
+                    await SetAlgoParam("ra", "slopeWeight", s.PHD2RASlopeWeight.Value);
+                if (s.PHD2DecSlopeWeight.HasValue && decParams.Contains("slopeWeight"))
+                    await SetAlgoParam("dec", "slopeWeight", s.PHD2DecSlopeWeight.Value);
+                if (s.PHD2RALowpass2Aggressiveness.HasValue && raParams.Contains("aggressiveness"))
+                    await SetAlgoParam("ra", "aggressiveness", s.PHD2RALowpass2Aggressiveness.Value);
+                if (s.PHD2DecLowpass2Aggressiveness.HasValue && decParams.Contains("aggressiveness"))
+                    await SetAlgoParam("dec", "aggressiveness", s.PHD2DecLowpass2Aggressiveness.Value);
+                if (s.PHD2RAPredictiveWeight.HasValue && raParams.Contains("predictiveWeight"))
+                    await SetAlgoParam("ra", "predictiveWeight", s.PHD2RAPredictiveWeight.Value);
+                if (s.PHD2DecPredictiveWeight.HasValue && decParams.Contains("predictiveWeight"))
+                    await SetAlgoParam("dec", "predictiveWeight", s.PHD2DecPredictiveWeight.Value);
+                if (s.PHD2RAReactiveWeight.HasValue && raParams.Contains("reactiveWeight"))
+                    await SetAlgoParam("ra", "reactiveWeight", s.PHD2RAReactiveWeight.Value);
+                if (s.PHD2DecReactiveWeight.HasValue && decParams.Contains("reactiveWeight"))
+                    await SetAlgoParam("dec", "reactiveWeight", s.PHD2DecReactiveWeight.Value);
+                if (s.PHD2RAPeriodLength.HasValue && raParams.Contains("periodLength") && s.PHD2RAGPAutoAdjustPeriod != true)
+                    await SetAlgoParam("ra", "periodLength", s.PHD2RAPeriodLength.Value);
+                if (s.PHD2DecPeriodLength.HasValue && decParams.Contains("periodLength") && s.PHD2DecGPAutoAdjustPeriod != true)
+                    await SetAlgoParam("dec", "periodLength", s.PHD2DecPeriodLength.Value);
+                if (s.PHD2RAExpFactor.HasValue && raParams.Contains("expFactor"))
+                    await SetAlgoParam("ra", "expFactor", s.PHD2RAExpFactor.Value);
+                if (s.PHD2DecExpFactor.HasValue && decParams.Contains("expFactor"))
+                    await SetAlgoParam("dec", "expFactor", s.PHD2DecExpFactor.Value);
+                if (!string.IsNullOrEmpty(s.PHD2DecGuideMode)) {
+                    var msg = new Phd2SetDecGuideMode() { Parameters = new object[] { s.PHD2DecGuideMode } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore dec guide mode: {resp.error.message}");
+                }
+                if (s.PHD2ExposureMs.HasValue) {
+                    var msg = new Phd2SetExposure() { Parameters = new object[] { s.PHD2ExposureMs.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore exposure: {resp.error.message}");
+                }
+                if (s.PHD2CalibrationStepMs.HasValue) {
+                    var msg = new Phd2SetCalibrationStep() { Parameters = new object[] { s.PHD2CalibrationStepMs.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore calibration step: {resp.error.message}");
+                }
+                if (s.PHD2CalibrationDistancePx.HasValue) {
+                    var msg = new Phd2SetCalibrationDistance() { Parameters = new object[] { s.PHD2CalibrationDistancePx.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore calibration distance: {resp.error.message}");
+                }
+                if (s.PHD2SearchRegion.HasValue) {
+                    var msg = new Phd2SetSearchRegion() { Parameters = new object[] { s.PHD2SearchRegion.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore search region: {resp.error.message}");
+                }
+                if (s.PHD2MaxRADuration.HasValue) {
+                    var msg = new Phd2SetMaxRADuration() { Parameters = new object[] { s.PHD2MaxRADuration.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore max RA duration: {resp.error.message}");
+                }
+                if (s.PHD2MaxDecDuration.HasValue) {
+                    var msg = new Phd2SetMaxDecDuration() { Parameters = new object[] { s.PHD2MaxDecDuration.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore max Dec duration: {resp.error.message}");
+                }
+                if (s.PHD2DitherScale.HasValue) {
+                    var msg = new Phd2SetDitherScale() { Parameters = new object[] { s.PHD2DitherScale.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore dither scale: {resp.error.message}");
+                }
+                if (s.PHD2DitherRAOnly.HasValue) {
+                    var msg = new Phd2SetDitherRAOnly() { Parameters = new object[] { s.PHD2DitherRAOnly.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore dither RA only: {resp.error.message}");
+                }
+                if (!string.IsNullOrEmpty(s.PHD2DitherMode)) {
+                    var msg = new Phd2SetDitherMode() { Parameters = new object[] { s.PHD2DitherMode } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore dither mode: {resp.error.message}");
+                }
+                if (s.PHD2NoiseReductionMethod.HasValue) {
+                    var msg = new Phd2SetNoiseReductionMethod() { Parameters = new object[] { s.PHD2NoiseReductionMethod.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore noise reduction method: {resp.error.message}");
+                }
+                if (s.PHD2CameraGain.HasValue) {
+                    var msg = new Phd2SetCameraGain() { Parameters = new object[] { s.PHD2CameraGain.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore camera gain: {resp.error.message}");
+                }
+                if (s.PHD2CameraBinning.HasValue) {
+                    var msg = new Phd2SetCameraBinning() { Parameters = new object[] { s.PHD2CameraBinning.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore camera binning: {resp.error.message}");
+                }
+                if (s.PHD2UseSubframes.HasValue) {
+                    var msg = new Phd2SetCameraUseSubframes() { Parameters = new object[] { s.PHD2UseSubframes.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore use subframes: {resp.error.message}");
+                }
+                if (s.PHD2UseMultipleStars.HasValue) {
+                    var msg = new Phd2SetUseMultipleStars() { Parameters = new object[] { s.PHD2UseMultipleStars.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore use multiple stars: {resp.error.message}");
+                }
+                if (s.PHD2MassChangeThresholdEnabled.HasValue) {
+                    var msg = new Phd2SetMassChangeThresholdEnabled() { Parameters = new object[] { s.PHD2MassChangeThresholdEnabled.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore mass change threshold enabled: {resp.error.message}");
+                }
+                if (s.PHD2MassChangeThreshold.HasValue) {
+                    var msg = new Phd2SetMassChangeThreshold() { Parameters = new object[] { s.PHD2MassChangeThreshold.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore mass change threshold: {resp.error.message}");
+                }
+                if (s.PHD2MinStarHFD.HasValue) {
+                    var msg = new Phd2SetMinStarHFD() { Parameters = new object[] { s.PHD2MinStarHFD.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore min star HFD: {resp.error.message}");
+                }
+                if (s.PHD2MaxStarHFD.HasValue) {
+                    var msg = new Phd2SetMaxStarHFD() { Parameters = new object[] { s.PHD2MaxStarHFD.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore max star HFD: {resp.error.message}");
+                }
+                if (s.PHD2BeepForLostStar.HasValue) {
+                    var msg = new Phd2SetBeepForLostStar() { Parameters = new object[] { s.PHD2BeepForLostStar.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore beep for lost star: {resp.error.message}");
+                }
+                if (s.PHD2FocalLength.HasValue) {
+                    var msg = new Phd2SetFocalLength() { Parameters = new object[] { s.PHD2FocalLength.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore focal length: {resp.error.message}");
+                }
+                if (s.PHD2AutoRestoreCalibration.HasValue) {
+                    var msg = new Phd2SetAutoRestoreCalibration() { Parameters = new object[] { s.PHD2AutoRestoreCalibration.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore auto restore calibration: {resp.error.message}");
+                }
+                if (s.PHD2AssumeDecOrthogonal.HasValue) {
+                    var msg = new Phd2SetAssumeDecOrthogonal() { Parameters = new object[] { s.PHD2AssumeDecOrthogonal.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore assume dec orthogonal: {resp.error.message}");
+                }
+                if (s.PHD2UseDecCompensation.HasValue) {
+                    var msg = new Phd2SetUseDecCompensation() { Parameters = new object[] { s.PHD2UseDecCompensation.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore use dec compensation: {resp.error.message}");
+                }
+                if (s.PHD2ReverseDecOnFlip.HasValue) {
+                    var msg = new Phd2SetReverseDecOnFlip() { Parameters = new object[] { s.PHD2ReverseDecOnFlip.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore reverse dec on flip: {resp.error.message}");
+                }
+                if (s.PHD2FastRecenter.HasValue) {
+                    var msg = new Phd2SetFastRecenterEnabled() { Parameters = new object[] { s.PHD2FastRecenter.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore fast recenter: {resp.error.message}");
+                }
+                if (s.PHD2TimeLapseMs.HasValue) {
+                    var msg = new Phd2SetTimeLapse() { Parameters = new object[] { s.PHD2TimeLapseMs.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore time lapse: {resp.error.message}");
+                }
+                if (s.PHD2VarDelayEnabled.HasValue && s.PHD2VarDelayShortSec.HasValue && s.PHD2VarDelayLongSec.HasValue) {
+                    var msg = new Phd2SetVariableDelaySettings() {
+                        Parameters = new Phd2SetVariableDelaySettingsParam {
+                            Enabled = s.PHD2VarDelayEnabled.Value,
+                            ShortDelaySeconds = s.PHD2VarDelayShortSec.Value,
+                            LongDelaySeconds = s.PHD2VarDelayLongSec.Value
+                        }
+                    };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore variable delay settings: {resp.error.message}");
+                }
+                if (s.PHD2AfMinStarSnr.HasValue) {
+                    var msg = new Phd2SetAfMinStarSnr() { Parameters = new object[] { s.PHD2AfMinStarSnr.Value } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore AF min star SNR: {resp.error.message}");
+                }
+                if (!string.IsNullOrEmpty(s.PHD2AutoSelectDownsample)) {
+                    var msg = new Phd2SetAutoSelectDownsample() { Parameters = new object[] { s.PHD2AutoSelectDownsample } };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore auto select downsample: {resp.error.message}");
+                }
+                if (s.PHD2SaturationByADU.HasValue) {
+                    var msg = new Phd2SetSaturationByADU() {
+                        Parameters = new Phd2SetSaturationByADUParam {
+                            ByADU = s.PHD2SaturationByADU.Value,
+                            ADUValue = s.PHD2SaturationByADU.Value ? s.PHD2SaturationADUValue : null
+                        }
+                    };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore saturation mode: {resp.error.message}");
+                }
+                Logger.Info("PHD2 algo settings restored from NINA profile");
+            } catch (Exception ex) {
+                Logger.Warning($"Failed to restore stored PHD2 algo settings: {ex.Message}");
+            }
+        }
+
+        private async Task SetAlgoParam(string axis, string name, double value) {
+            var msg = new Phd2SetAlgoParam() { Parameters = new object[] { axis, name, value } };
+            var resp = await SendMessage(msg);
+            if (resp.error != null)
+                Logger.Warning($"Failed to set PHD2 {axis} {name}: {resp.error.message} (code {resp.error.code})");
+        }
+
+        private async Task<double?> GetAlgoParam(string axis, string name) {
+            var msg = new Phd2GetAlgoParam() { Parameters = new object[] { axis, name } };
+            var resp = await SendMessage<DoublePhdMethodResponse>(msg);
+            if (resp.error != null) {
+                Logger.Info($"PHD2 {axis} {name} not available: {resp.error.message}");
+                return null;
+            }
+            return resp.result;
+        }
+
+        private async Task<HashSet<string>> GetAlgoParamNames(string axis) {
+            var msg = new Phd2GetAlgoParamNames() { Parameters = new object[] { axis } };
+            var resp = await SendMessage<StringArrayPhdMethodResponse>(msg);
+            if (resp.error != null || resp.result == null) {
+                Logger.Info($"PHD2 could not get algo param names for {axis}: {resp.error?.message}");
+                return new HashSet<string>(StringComparer.Ordinal);
+            }
+            return new HashSet<string>(resp.result, StringComparer.Ordinal);
+        }
+
         private async Task GetProfiles() {
             var getProfile = new Phd2GetProfile();
             var getProfileResponse = await SendMessage<GetProfileResponse>(getProfile);
@@ -1115,15 +1436,12 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
             SelectedProfile = AvailableProfiles.FirstOrDefault(x => x.Id == _activeProfile.id);
         }
 
-        private async Task<string> GetSelectedMount()
-        {
-            try
-            {
+        private async Task<string> GetSelectedMount() {
+            try {
                 var getSelectedMountMsg = new Phd2GetSelectedMount();
                 var getSelectedMountResponse = await SendMessage<StringPhdMethodResponse>(getSelectedMountMsg);
 
-                if (getSelectedMountResponse.error != null)
-                {
+                if (getSelectedMountResponse.error != null) {
                     Logger.Error($"Failed to get selected mount: {getSelectedMountResponse.error.message}");
                     return null;
                 }
@@ -1132,13 +1450,11 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 Logger.Info($"Currently selected mount by PHD2: {selectedMount}");
 
                 // If INDI mount is selected, also get the INDI driver name
-                if (selectedMount == "INDI")
-                {
+                if (selectedMount == "INDI") {
                     var getINDIDriverMsg = new Phd2GetSelectedINDIMountDriver();
                     var getINDIDriverResponse = await SendMessage<StringPhdMethodResponse>(getINDIDriverMsg);
 
-                    if (getINDIDriverResponse.error != null)
-                    {
+                    if (getINDIDriverResponse.error != null) {
                         Logger.Error($"Failed to get selected INDI mount driver: {getINDIDriverResponse.error.message}");
                         return selectedMount;
                     }
@@ -1148,18 +1464,14 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 }
 
                 return selectedMount;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error getting PHD2 mount information: {ex.Message}");
                 return null;
             }
         }
 
-        private async Task<bool> ValidateMountMatch(TelescopeInfo telescopeInfo, string phdSelectedMount)
-        {
-            try
-            {
+        private async Task<bool> ValidateMountMatch(TelescopeInfo telescopeInfo, string phdSelectedMount) {
+            try {
                 // Get NINA mount information
                 string ninaMountName = telescopeInfo.Name;
                 string ninaMountDisplayName = telescopeInfo.DisplayName;
@@ -1168,30 +1480,25 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 Logger.Info($"Validating mount match: NINA='{ninaMountName}' (ID: '{ninaDeviceId}'), PHD2='{phdSelectedMount}'");
 
                 // Determine if NINA has an INDI mount - check DisplayName for INDI keyword
-                bool isINDIMount = !string.IsNullOrEmpty(ninaMountDisplayName) && 
+                bool isINDIMount = !string.IsNullOrEmpty(ninaMountDisplayName) &&
                     ninaMountDisplayName.Contains("INDI", StringComparison.OrdinalIgnoreCase);
 
-                if (isINDIMount)
-                {
+                if (isINDIMount) {
                     // For INDI mounts, PHD2 format is "INDI Mount [$deviceId]"
                     string expectedPHD2Mount = $"INDI Mount [{ninaDeviceId}]";
-                    
-                    if (phdSelectedMount.Equals(expectedPHD2Mount, StringComparison.OrdinalIgnoreCase))
-                    {
+
+                    if (phdSelectedMount.Equals(expectedPHD2Mount, StringComparison.OrdinalIgnoreCase)) {
                         Logger.Info($"Mount match confirmed: both use INDI mount '{expectedPHD2Mount}'");
                         return true;
                     }
-                    
+
                     // Mounts don't match - attempt to set PHD2 mount to match NINA
                     Logger.Warning($"Mount mismatch detected: NINA expects '{expectedPHD2Mount}', PHD2 has '{phdSelectedMount}' selected. Attempting to sync...");
                     return await SetPHD2MountToMatch(telescopeInfo);
-                }
-                else
-                {
+                } else {
                     // For non-INDI mounts, check if the names match
-                    if (!string.IsNullOrEmpty(ninaMountName) && 
-                        ninaMountName.Equals(phdSelectedMount, StringComparison.OrdinalIgnoreCase))
-                    {
+                    if (!string.IsNullOrEmpty(ninaMountName) &&
+                        ninaMountName.Equals(phdSelectedMount, StringComparison.OrdinalIgnoreCase)) {
                         Logger.Info($"Mount match confirmed: both use '{ninaMountName}'");
                         return true;
                     }
@@ -1200,23 +1507,18 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     Logger.Warning($"Mount mismatch detected: NINA='{ninaMountName}', PHD2='{phdSelectedMount}'. Attempting to sync...");
                     return await SetPHD2MountToMatch(telescopeInfo);
                 }
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error validating mount match: {ex.Message}");
                 return false;
             }
         }
 
-        private async Task<string> GetSelectedCamera()
-        {
-            try
-            {
+        private async Task<string> GetSelectedCamera() {
+            try {
                 var getSelectedCameraMsg = new Phd2GetSelectedCamera();
                 var getSelectedCameraResponse = await SendMessage<StringPhdMethodResponse>(getSelectedCameraMsg);
 
-                if (getSelectedCameraResponse.error != null)
-                {
+                if (getSelectedCameraResponse.error != null) {
                     Logger.Error($"Failed to get selected camera: {getSelectedCameraResponse.error.message}");
                     return null;
                 }
@@ -1225,13 +1527,11 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 Logger.Info($"Currently selected camera by PHD2: {selectedCamera}");
 
                 // If INDI camera is selected, also get the INDI driver name
-                if (selectedCamera == "INDI")
-                {
+                if (selectedCamera == "INDI") {
                     var getINDIDriverMsg = new Phd2GetSelectedINDICameraDriver();
                     var getINDIDriverResponse = await SendMessage<StringPhdMethodResponse>(getINDIDriverMsg);
 
-                    if (getINDIDriverResponse.error != null)
-                    {
+                    if (getINDIDriverResponse.error != null) {
                         Logger.Error($"Failed to get selected INDI camera driver: {getINDIDriverResponse.error.message}");
                         return selectedCamera;
                     }
@@ -1241,23 +1541,18 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 }
 
                 return selectedCamera;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error getting PHD2 camera information: {ex.Message}");
                 return null;
             }
         }
 
-        private async Task<string> GetSelectedCameraId()
-        {
-            try
-            {
+        private async Task<string> GetSelectedCameraId() {
+            try {
                 var getSelectedCameraIdMsg = new Phd2GetSelectedCameraId();
                 var getSelectedCameraIdResponse = await SendMessage<StringPhdMethodResponse>(getSelectedCameraIdMsg);
 
-                if (getSelectedCameraIdResponse.error != null)
-                {
+                if (getSelectedCameraIdResponse.error != null) {
                     Logger.Error($"Failed to get selected camera id: {getSelectedCameraIdResponse.error.message}");
                     return null;
                 }
@@ -1266,23 +1561,18 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 Logger.Info($"Currently selected camera id by PHD2: {selectedCameraId}");
 
                 return selectedCameraId;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error getting PHD2 camera id information: {ex.Message}");
                 return null;
             }
         }
 
-        private async Task<int> GetSelectedCameraBitDepth()
-        {
-            try
-            {
+        private async Task<int> GetSelectedCameraBitDepth() {
+            try {
                 var getSelectedCameraBitDepthMsg = new Phd2GetCameraBitDepth();
                 var getSelectedCameraBitDepthResponse = await SendMessage<IntegerPhdMethodResponse>(getSelectedCameraBitDepthMsg);
 
-                if (getSelectedCameraBitDepthResponse.error != null)
-                {
+                if (getSelectedCameraBitDepthResponse.error != null) {
                     Logger.Error($"Failed to get selected camera bit depth: {getSelectedCameraBitDepthResponse.error.message}");
                     return 0;
                 }
@@ -1291,24 +1581,18 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 Logger.Info($"Currently selected camera bit depth by PHD2: {selectedCameraBitDepth}");
 
                 return selectedCameraBitDepth;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error getting PHD2 camera bit depth information: {ex.Message}");
                 return 0;
             }
         }
 
-        private async Task<bool> ValidateCameraMatch(string ninaCamera, string ninaCameraId, string phdSelectedCamera, string phdSelectedCameraId)
-        {
-            try
-            {
+        private async Task<bool> ValidateCameraMatch(string ninaCamera, string ninaCameraId, string phdSelectedCamera, string phdSelectedCameraId) {
+            try {
                 Logger.Info($"Validating camera match: NINA='{ninaCameraId}' ({ninaCamera}), PHD2='{phdSelectedCameraId}' ({phdSelectedCamera})");
 
-                if (phdSelectedCamera.Equals(ninaCamera, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (phdSelectedCameraId.Equals(ninaCameraId, StringComparison.OrdinalIgnoreCase))
-                    {
+                if (phdSelectedCamera.Equals(ninaCamera, StringComparison.OrdinalIgnoreCase)) {
+                    if (phdSelectedCameraId.Equals(ninaCameraId, StringComparison.OrdinalIgnoreCase)) {
                         Logger.Info($"Camera match confirmed: both use '{ninaCameraId}' ({ninaCamera}");
                         return true;
                     }
@@ -1316,29 +1600,22 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     // Camera ids don't match - attempt to set PHD2 camera id to match NINA
                     Logger.Warning($"Camera id mismatch detected: NINA expects '{ninaCameraId}', PHD2 has '{phdSelectedCameraId}' selected. Attempting to sync...");
                     return await SetPHD2CameraIdToMatch(ninaCameraId);
-                }
-                else
-                {
+                } else {
                     // Cameras don't match - attempt to set PHD2 camera to match NINA
                     Logger.Warning($"Camera mismatch detected: NINA='{ninaCamera}', PHD2='{phdSelectedCamera}'. Attempting to sync...");
                     return await SetPHD2CameraToMatch(ninaCamera, ninaCameraId);
                 }
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error validating camera match: {ex.Message}");
                 return false;
             }
         }
 
-        private async Task<bool> ValidateCameraBitDepth(int ninaBitDepth, int phdBitDepth)
-        {
-            try
-            {
+        private async Task<bool> ValidateCameraBitDepth(int ninaBitDepth, int phdBitDepth) {
+            try {
                 Logger.Info($"Validating camera bit depth: NINA={ninaBitDepth}, PHD2={phdBitDepth}");
 
-                if (ninaBitDepth == phdBitDepth)
-                {
+                if (ninaBitDepth == phdBitDepth) {
                     Logger.Info($"Camera bit depth match confirmed: both use {ninaBitDepth} bit");
                     return true;
                 }
@@ -1346,18 +1623,14 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 // Camera bit depth don't match
                 Logger.Warning($"Camera bit depth mismatch detected: NINA expects {ninaBitDepth}, PHD2 has {phdBitDepth}. Attempting to sync...");
                 return await SetPHD2CameraBitDepthToMatch(ninaBitDepth);
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error validating camera bit depth match: {ex.Message}");
                 return false;
             }
         }
 
-        private async Task<bool> SetPHD2MountToMatch(TelescopeInfo telescopeInfo)
-        {
-            try
-            {
+        private async Task<bool> SetPHD2MountToMatch(TelescopeInfo telescopeInfo) {
+            try {
                 string ninaMountName = telescopeInfo.Name;
                 string ninaMountDisplayName = telescopeInfo.DisplayName;
                 string ninaDeviceId = telescopeInfo.DeviceId;
@@ -1367,8 +1640,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 bool isINDIMount = !string.IsNullOrEmpty(ninaMountDisplayName) &&
                     ninaMountDisplayName.Contains("INDI", StringComparison.OrdinalIgnoreCase);
 
-                if (isINDIMount)
-                {
+                if (isINDIMount) {
                     // PHD2's set_selected_mount validates against Scope::MountList(), which builds the
                     // INDI entry by reading the "/indi/INDImount" profile config key via INDIMountName().
                     // If that key is not yet set to ninaDeviceId, the list only contains "INDI Mount"
@@ -1381,8 +1653,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     setDriverMsg.Parameters = new JObject { ["driver"] = ninaDeviceId };
                     var setDriverResult = await SendMessage(setDriverMsg);
 
-                    if (setDriverResult.error != null)
-                    {
+                    if (setDriverResult.error != null) {
                         Logger.Error($"Failed to set PHD2 INDI mount driver to '{ninaDeviceId}': {setDriverResult.error.message}");
                         return false;
                     }
@@ -1395,17 +1666,14 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     setMountMsg.Parameters = new JObject { ["mount"] = phd2MountId };
                     var setMountResult = await SendMessage(setMountMsg);
 
-                    if (setMountResult.error != null)
-                    {
+                    if (setMountResult.error != null) {
                         Logger.Error($"Failed to set PHD2 mount to '{phd2MountId}': {setMountResult.error.message}");
                         return false;
                     }
 
                     Logger.Info($"Successfully synchronized PHD2 mount to INDI: {phd2MountId}");
                     return true;
-                }
-                else
-                {
+                } else {
                     // Set regular mount by name
                     Logger.Info($"Setting PHD2 mount to: {ninaMountName}");
 
@@ -1413,8 +1681,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     setMountMsg.Parameters = new JObject { ["mount"] = ninaMountName };
                     var setMountResult = await SendMessage(setMountMsg);
 
-                    if (setMountResult.error != null)
-                    {
+                    if (setMountResult.error != null) {
                         Logger.Error($"Failed to set PHD2 mount to '{ninaMountName}': {setMountResult.error.message}");
                         return false;
                     }
@@ -1422,18 +1689,14 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     Logger.Info($"Successfully synchronized PHD2 mount to: {ninaMountName}");
                     return true;
                 }
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error setting PHD2 mount to match NINA: {ex.Message}");
                 return false;
             }
         }
 
-        private async Task<bool> SetPHD2CameraIdToMatch(string ninaCameraId)
-        {
-            try
-            {
+        private async Task<bool> SetPHD2CameraIdToMatch(string ninaCameraId) {
+            try {
                 // Set camera id
                 Logger.Info($"Setting PHD2 camera id to: {ninaCameraId}");
 
@@ -1441,26 +1704,21 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 setCameraIdMsg.Parameters = new JObject { ["camera_id"] = ninaCameraId };
                 var setCameraIdResult = await SendMessage(setCameraIdMsg);
 
-                if (setCameraIdResult.error != null)
-                {
+                if (setCameraIdResult.error != null) {
                     Logger.Error($"Failed to set PHD2 camera id to '{ninaCameraId}': {setCameraIdResult.error.message}");
                     return false;
                 }
 
                 Logger.Info($"Successfully synchronized PHD2 camera id to: {ninaCameraId}");
                 return true;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error setting PHD2 camera id to match NINA: {ex.Message}");
                 return false;
             }
         }
 
-        private async Task<bool> SetPHD2CameraToMatch(string ninaCamera, string ninaCameraId)
-        {
-            try
-            {
+        private async Task<bool> SetPHD2CameraToMatch(string ninaCamera, string ninaCameraId) {
+            try {
                 // Set camera
                 Logger.Info($"Setting PHD2 camera to: {ninaCamera}");
 
@@ -1468,8 +1726,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 setCameraMsg.Parameters = new JObject { ["camera"] = ninaCamera };
                 var setCameraResult = await SendMessage(setCameraMsg);
 
-                if (setCameraResult.error != null)
-                {
+                if (setCameraResult.error != null) {
                     Logger.Error($"Failed to set PHD2 camera to '{ninaCamera}': {setCameraResult.error.message}");
                     return false;
                 }
@@ -1478,18 +1735,14 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
 
                 // Set camera id
                 return await SetPHD2CameraIdToMatch(ninaCameraId);
-            }
-            catch(Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error setting PHD2 camera to match NINA: {ex.Message}");
                 return false;
             }
         }
 
-        private async Task<bool> SetPHD2CameraBitDepthToMatch(int ninaBitDepth)
-        {
-            try
-            {
+        private async Task<bool> SetPHD2CameraBitDepthToMatch(int ninaBitDepth) {
+            try {
                 // Set camera bit depth
                 Logger.Info($"Setting PHD2 camera bit depth to: {ninaBitDepth}");
 
@@ -1497,14 +1750,12 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 setCameraBitDepthMsg.Parameters = new JObject { ["bitdepth"] = ninaBitDepth };
                 var setCameraBitDepthResult = await SendMessage(setCameraBitDepthMsg);
 
-                if (setCameraBitDepthResult.error != null)
-                {
+                if (setCameraBitDepthResult.error != null) {
                     // PHD2 returns "Camera does not support bitdepth setting" for cameras where the
                     // depth cannot be changed via config (e.g. INDI cameras).  That is not a real
                     // failure — the camera simply manages its own bit depth.  Log as info and report
                     // success so the caller does not surface a spurious warning to the user.
-                    if (setCameraBitDepthResult.error.message?.Contains("does not support bitdepth") == true)
-                    {
+                    if (setCameraBitDepthResult.error.message?.Contains("does not support bitdepth") == true) {
                         Logger.Info($"PHD2 camera does not support bitdepth configuration; skipping sync.");
                         return true;
                     }
@@ -1514,9 +1765,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
 
                 Logger.Info($"Successfully synchronized PHD2 camera bit depth to: {ninaBitDepth}");
                 return true;
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Logger.Error($"Error setting PHD2 camera bit depth to match NINA: {ex.Message}");
                 return false;
             }
