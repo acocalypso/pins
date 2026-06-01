@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright Â© 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -152,7 +152,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
         public override string Method => "get_algo_param_names";
     }
 
-    public class Phd2GetAlgoParam : Phd2Method {
+    public class Phd2GetAlgoParam : Phd2Method<Array> {
         public override string Method => "get_algo_param";
     }
 
@@ -200,12 +200,200 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
         public override string Method => "get_search_region";
     }
 
+    public class Phd2SetSearchRegion : Phd2Method<Array> {
+        public override string Method => "set_search_region";
+    }
+
+    public class Phd2GetMaxRADuration : Phd2Method {
+        public override string Method => "get_max_ra_duration";
+    }
+
+    public class Phd2SetMaxRADuration : Phd2Method<Array> {
+        public override string Method => "set_max_ra_duration";
+    }
+
+    public class Phd2GetMaxDecDuration : Phd2Method {
+        public override string Method => "get_max_dec_duration";
+    }
+
+    public class Phd2SetMaxDecDuration : Phd2Method<Array> {
+        public override string Method => "set_max_dec_duration";
+    }
+
+    public class Phd2GetGuideAlgorithmRA : Phd2Method {
+        public override string Method => "get_guide_algorithm_ra";
+    }
+
+    public class Phd2SetGuideAlgorithmRA : Phd2Method<Array> {
+        public override string Method => "set_guide_algorithm_ra";
+    }
+
+    public class Phd2GetGuideAlgorithmDec : Phd2Method {
+        public override string Method => "get_guide_algorithm_dec";
+    }
+
+    public class Phd2SetGuideAlgorithmDec : Phd2Method<Array> {
+        public override string Method => "set_guide_algorithm_dec";
+    }
+
+    public class Phd2GetDitherScale : Phd2Method {
+        public override string Method => "get_dither_scale";
+    }
+
+    public class Phd2SetDitherScale : Phd2Method<Array> {
+        public override string Method => "set_dither_scale";
+    }
+
+    public class Phd2GetDitherRAOnly : Phd2Method {
+        public override string Method => "get_dither_ra_only";
+    }
+
+    public class Phd2SetDitherRAOnly : Phd2Method<Array> {
+        public override string Method => "set_dither_ra_only";
+    }
+
+    public class Phd2GetDitherMode : Phd2Method {
+        public override string Method => "get_dither_mode";
+    }
+
+    public class Phd2SetDitherMode : Phd2Method<Array> {
+        public override string Method => "set_dither_mode";
+    }
+
     public class Phd2GetCCDTemperature : Phd2Method {
         public override string Method => "get_ccd_temperature";
     }
 
     public class Phd2GetUseSubFrames : Phd2Method {
         public override string Method => "get_use_subframes";
+    }
+
+    public class Phd2GetNoiseReductionMethod : Phd2Method {
+        public override string Method => "get_noise_reduction_method";
+    }
+
+    public class Phd2SetNoiseReductionMethod : Phd2Method<Array> {
+        public override string Method => "set_noise_reduction_method";
+    }
+
+    public class Phd2GetCameraGain : Phd2Method {
+        public override string Method => "get_camera_gain";
+    }
+
+    public class Phd2SetCameraGain : Phd2Method<Array> {
+        public override string Method => "set_camera_gain";
+    }
+
+    public class Phd2GetCameraBinning : Phd2Method {
+        public override string Method => "get_camera_binning";
+    }
+
+    public class Phd2SetCameraBinning : Phd2Method<Array> {
+        public override string Method => "set_camera_binning";
+    }
+
+    public class Phd2GetCameraUseSubframes : Phd2Method {
+        public override string Method => "get_camera_use_subframes";
+    }
+
+    public class Phd2SetCameraUseSubframes : Phd2Method<Array> {
+        public override string Method => "set_camera_use_subframes";
+    }
+
+    public class Phd2GetFocalLength : Phd2Method {
+        public override string Method => "get_focal_length";
+    }
+
+    public class Phd2SetFocalLength : Phd2Method<Array> {
+        public override string Method => "set_focal_length";
+    }
+
+    public class Phd2GetAutoRestoreCalibration : Phd2Method {
+        public override string Method => "get_auto_restore_calibration";
+    }
+
+    public class Phd2SetAutoRestoreCalibration : Phd2Method<Array> {
+        public override string Method => "set_auto_restore_calibration";
+    }
+
+    public class Phd2GetAssumeDecOrthogonal : Phd2Method {
+        public override string Method => "get_assume_dec_orthogonal";
+    }
+
+    public class Phd2SetAssumeDecOrthogonal : Phd2Method<Array> {
+        public override string Method => "set_assume_dec_orthogonal";
+    }
+
+    public class Phd2GetUseDecCompensation : Phd2Method {
+        public override string Method => "get_use_dec_compensation";
+    }
+
+    public class Phd2SetUseDecCompensation : Phd2Method<Array> {
+        public override string Method => "set_use_dec_compensation";
+    }
+
+    public class Phd2GetReverseDecOnFlip : Phd2Method {
+        public override string Method => "get_reverse_dec_on_flip";
+    }
+
+    public class Phd2SetReverseDecOnFlip : Phd2Method<Array> {
+        public override string Method => "set_reverse_dec_on_flip";
+    }
+
+    public class Phd2GetFastRecenterEnabled : Phd2Method {
+        public override string Method => "get_fast_recenter_enabled";
+    }
+
+    public class Phd2SetFastRecenterEnabled : Phd2Method<Array> {
+        public override string Method => "set_fast_recenter_enabled";
+    }
+
+    public class Phd2GetMinStarHFD : Phd2Method {
+        public override string Method => "get_min_star_hfd";
+    }
+
+    public class Phd2SetMinStarHFD : Phd2Method<Array> {
+        public override string Method => "set_min_star_hfd";
+    }
+
+    public class Phd2GetMaxStarHFD : Phd2Method {
+        public override string Method => "get_max_star_hfd";
+    }
+
+    public class Phd2SetMaxStarHFD : Phd2Method<Array> {
+        public override string Method => "set_max_star_hfd";
+    }
+
+    public class Phd2GetBeepForLostStar : Phd2Method {
+        public override string Method => "get_beep_for_lost_star";
+    }
+
+    public class Phd2SetBeepForLostStar : Phd2Method<Array> {
+        public override string Method => "set_beep_for_lost_star";
+    }
+
+    public class Phd2GetMassChangeThresholdEnabled : Phd2Method {
+        public override string Method => "get_mass_change_threshold_enabled";
+    }
+
+    public class Phd2SetMassChangeThresholdEnabled : Phd2Method<Array> {
+        public override string Method => "set_mass_change_threshold_enabled";
+    }
+
+    public class Phd2GetMassChangeThreshold : Phd2Method {
+        public override string Method => "get_mass_change_threshold";
+    }
+
+    public class Phd2SetMassChangeThreshold : Phd2Method<Array> {
+        public override string Method => "set_mass_change_threshold";
+    }
+
+    public class Phd2GetUseMultipleStars : Phd2Method {
+        public override string Method => "get_use_multiple_stars";
+    }
+
+    public class Phd2SetUseMultipleStars : Phd2Method<Array> {
+        public override string Method => "set_use_multiple_stars";
     }
 
     public class Phd2SetAlgoParam : Phd2Method<Array> {
@@ -301,8 +489,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
         public override string Method => "get_selected_camera_id";
     }
 
-    public class Phd2GetSelectedINDICameraDriver : Phd2Method
-    {
+    public class Phd2GetSelectedINDICameraDriver : Phd2Method {
         public override string Method => "get_selected_indi_camera_driver";
     }
 
@@ -322,8 +509,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
         public override string Method => "set_camera_bitdepth";
     }
 
-    public class Phd2SetSelectedINDICameraDriver : Phd2Method<JObject>
-    {
+    public class Phd2SetSelectedINDICameraDriver : Phd2Method<JObject> {
         public override string Method => "set_selected_indi_camera_driver";
     }
 
@@ -384,6 +570,107 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
 
     public class StringPhdMethodResponse : PhdMethodResponse {
         public string result;
+    }
+
+    public class StringArrayPhdMethodResponse : PhdMethodResponse {
+        public string[] result;
+    }
+
+    public class DoublePhdMethodResponse : PhdMethodResponse {
+        public double result;
+    }
+
+    public class Phd2GetCalibrationStep : Phd2Method {
+        public override string Method => "get_calibration_step";
+    }
+
+    public class Phd2SetCalibrationStep : Phd2Method<Array> {
+        public override string Method => "set_calibration_step";
+    }
+
+    public class Phd2GetCalibrationDistance : Phd2Method {
+        public override string Method => "get_calibration_distance";
+    }
+
+    public class Phd2SetCalibrationDistance : Phd2Method<Array> {
+        public override string Method => "set_calibration_distance";
+    }
+
+    public class Phd2GetTimeLapse : Phd2Method {
+        public override string Method => "get_time_lapse";
+    }
+
+    public class Phd2SetTimeLapse : Phd2Method<Array> {
+        public override string Method => "set_time_lapse";
+    }
+
+    public class Phd2GetVariableDelaySettings : Phd2Method {
+        public override string Method => "get_variable_delay_settings";
+    }
+
+    public class Phd2SetVariableDelaySettingsParam {
+        [JsonProperty(PropertyName = "Enabled")]
+        public bool Enabled { get; set; }
+        [JsonProperty(PropertyName = "ShortDelaySeconds")]
+        public int ShortDelaySeconds { get; set; }
+        [JsonProperty(PropertyName = "LongDelaySeconds")]
+        public int LongDelaySeconds { get; set; }
+    }
+
+    public class Phd2SetVariableDelaySettings : Phd2Method<Phd2SetVariableDelaySettingsParam> {
+        public override string Method => "set_variable_delay_settings";
+    }
+
+    public class VariableDelayResult {
+        [JsonProperty(PropertyName = "Enabled")]
+        public bool Enabled { get; set; }
+        [JsonProperty(PropertyName = "ShortDelaySeconds")]
+        public int ShortDelaySeconds { get; set; }
+        [JsonProperty(PropertyName = "LongDelaySeconds")]
+        public int LongDelaySeconds { get; set; }
+    }
+
+    public class VariableDelaySettingsResponse : PhdMethodResponse {
+        public VariableDelayResult result { get; set; }
+    }
+
+    public class Phd2GetAfMinStarSnr : Phd2Method {
+        public override string Method => "get_af_min_star_snr";
+    }
+
+    public class Phd2SetAfMinStarSnr : Phd2Method<Array> {
+        public override string Method => "set_af_min_star_snr";
+    }
+
+    public class Phd2GetAutoSelectDownsample : Phd2Method {
+        public override string Method => "get_auto_select_downsample";
+    }
+
+    public class Phd2SetAutoSelectDownsample : Phd2Method<Array> {
+        public override string Method => "set_auto_select_downsample";
+    }
+
+    public class Phd2GetSaturationByADU : Phd2Method {
+        public override string Method => "get_saturation_by_adu";
+    }
+
+    public class Phd2GetSaturationADUValue : Phd2Method {
+        public override string Method => "get_saturation_adu_value";
+    }
+
+    public class Phd2SetSaturationByADUParam {
+        [JsonProperty(PropertyName = "by_adu")]
+        public bool ByADU { get; set; }
+        [JsonProperty(PropertyName = "adu_value", NullValueHandling = NullValueHandling.Ignore)]
+        public int? ADUValue { get; set; }
+    }
+
+    public class Phd2SetSaturationByADU : Phd2Method<Phd2SetSaturationByADUParam> {
+        public override string Method => "set_saturation_by_adu";
+    }
+
+    public class Phd2SetSaturationADUValue : Phd2Method<Array> {
+        public override string Method => "set_saturation_adu_value";
     }
 
     public class LockShiftParams {

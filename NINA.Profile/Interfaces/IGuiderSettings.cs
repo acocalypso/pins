@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -46,6 +46,64 @@ namespace NINA.Profile.Interfaces {
         bool MetaGuideLockWhenGuiding { get; set; }
         int PHD2ROIPct { get; set; }
         int? PHD2ProfileId { get; set; }
+        double? PHD2RAMinMove { get; set; }
+        double? PHD2DecMinMove { get; set; }
+        double? PHD2RAAggressiveness { get; set; }
+        double? PHD2DecAggressiveness { get; set; }
+        double? PHD2RAHysteresis { get; set; }
+        double? PHD2DecHysteresis { get; set; }
+        bool? PHD2DecFastSwitch { get; set; }
+        bool? PHD2RAFastSwitch { get; set; }
+        double? PHD2RASlopeWeight { get; set; }
+        double? PHD2DecSlopeWeight { get; set; }
+        double? PHD2RALowpass2Aggressiveness { get; set; }
+        double? PHD2DecLowpass2Aggressiveness { get; set; }
+        double? PHD2RAPredictiveWeight { get; set; }
+        double? PHD2DecPredictiveWeight { get; set; }
+        double? PHD2RAReactiveWeight { get; set; }
+        double? PHD2DecReactiveWeight { get; set; }
+        double? PHD2RAPeriodLength { get; set; }
+        double? PHD2DecPeriodLength { get; set; }
+        bool? PHD2RAGPAutoAdjustPeriod { get; set; }
+        bool? PHD2DecGPAutoAdjustPeriod { get; set; }
+        double? PHD2RAExpFactor { get; set; }
+        double? PHD2DecExpFactor { get; set; }
+        string PHD2DecGuideMode { get; set; }
+        int? PHD2ExposureMs { get; set; }
+        int? PHD2CalibrationStepMs { get; set; }
+        int? PHD2CalibrationDistancePx { get; set; }
+        int? PHD2SearchRegion { get; set; }
+        int? PHD2MaxRADuration { get; set; }
+        int? PHD2MaxDecDuration { get; set; }
+        string PHD2GuideAlgorithmRA { get; set; }
+        string PHD2GuideAlgorithmDec { get; set; }
+        double? PHD2DitherScale { get; set; }
+        bool? PHD2DitherRAOnly { get; set; }
+        string PHD2DitherMode { get; set; }
+        int? PHD2NoiseReductionMethod { get; set; }
+        int? PHD2CameraGain { get; set; }
+        int? PHD2CameraBinning { get; set; }
+        bool? PHD2UseSubframes { get; set; }
+        int? PHD2FocalLength { get; set; }
+        bool? PHD2AutoRestoreCalibration { get; set; }
+        bool? PHD2AssumeDecOrthogonal { get; set; }
+        bool? PHD2UseDecCompensation { get; set; }
+        bool? PHD2ReverseDecOnFlip { get; set; }
+        bool? PHD2FastRecenter { get; set; }
+        double? PHD2MinStarHFD { get; set; }
+        double? PHD2MaxStarHFD { get; set; }
+        bool? PHD2BeepForLostStar { get; set; }
+        bool? PHD2MassChangeThresholdEnabled { get; set; }
+        double? PHD2MassChangeThreshold { get; set; }
+        bool? PHD2UseMultipleStars { get; set; }
+        int? PHD2TimeLapseMs { get; set; }
+        bool? PHD2VarDelayEnabled { get; set; }
+        int? PHD2VarDelayShortSec { get; set; }
+        int? PHD2VarDelayLongSec { get; set; }
+        double? PHD2AfMinStarSnr { get; set; }
+        string PHD2AutoSelectDownsample { get; set; }
+        bool? PHD2SaturationByADU { get; set; }
+        int? PHD2SaturationADUValue { get; set; }
         int SkyGuardServerPort { get; set; }
         string SkyGuardServerUrl { get; set; }
         string SkyGuardPath { get; set; }
