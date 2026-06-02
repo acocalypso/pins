@@ -104,6 +104,10 @@ namespace NINA.Profile.Interfaces {
         string PHD2AutoSelectDownsample { get; set; }
         bool? PHD2SaturationByADU { get; set; }
         int? PHD2SaturationADUValue { get; set; }
+        bool? PHD2BacklashCompEnabled { get; set; }
+        int? PHD2BacklashPulseWidth { get; set; }
+        int? PHD2BacklashFloor { get; set; }
+        int? PHD2BacklashCeiling { get; set; }
         int SkyGuardServerPort { get; set; }
         string SkyGuardServerUrl { get; set; }
         string SkyGuardPath { get; set; }

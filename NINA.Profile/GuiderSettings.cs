@@ -107,6 +107,10 @@ namespace NINA.Profile {
             phd2AutoSelectDownsample = "Auto";
             phd2SaturationByADU = true;
             phd2SaturationADUValue = 255;
+            phd2BacklashCompEnabled = false;
+            phd2BacklashPulseWidth = 0;
+            phd2BacklashFloor = 0;
+            phd2BacklashCeiling = 0;
             metaGuideUseIpAddressAny = false;
             metaGuidePort = 1277;
             metaGuideMinIntensity = 100;
@@ -1247,6 +1251,54 @@ namespace NINA.Profile {
             set {
                 if (phd2SaturationADUValue != value) {
                     phd2SaturationADUValue = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        bool? phd2BacklashCompEnabled;
+        [DataMember]
+        public bool? PHD2BacklashCompEnabled {
+            get => phd2BacklashCompEnabled;
+            set {
+                if (phd2BacklashCompEnabled != value) {
+                    phd2BacklashCompEnabled = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        int? phd2BacklashPulseWidth;
+        [DataMember]
+        public int? PHD2BacklashPulseWidth {
+            get => phd2BacklashPulseWidth;
+            set {
+                if (phd2BacklashPulseWidth != value) {
+                    phd2BacklashPulseWidth = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        int? phd2BacklashFloor;
+        [DataMember]
+        public int? PHD2BacklashFloor {
+            get => phd2BacklashFloor;
+            set {
+                if (phd2BacklashFloor != value) {
+                    phd2BacklashFloor = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        int? phd2BacklashCeiling;
+        [DataMember]
+        public int? PHD2BacklashCeiling {
+            get => phd2BacklashCeiling;
+            set {
+                if (phd2BacklashCeiling != value) {
+                    phd2BacklashCeiling = value;
                     RaisePropertyChanged();
                 }
             }
