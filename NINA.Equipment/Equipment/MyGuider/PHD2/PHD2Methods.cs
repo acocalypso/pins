@@ -673,6 +673,25 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
         public override string Method => "set_saturation_adu_value";
     }
 
+    public class Phd2GetBacklashComp : Phd2Method {
+        public override string Method => "get_backlash_comp";
+    }
+
+    public class Phd2SetBacklashCompParam {
+        [JsonProperty(PropertyName = "enabled", NullValueHandling = NullValueHandling.Ignore)]
+        public bool? Enable { get; set; }
+        [JsonProperty(PropertyName = "pulseWidth", NullValueHandling = NullValueHandling.Ignore)]
+        public int? Pulse { get; set; }
+        [JsonProperty(PropertyName = "floor", NullValueHandling = NullValueHandling.Ignore)]
+        public int? Floor { get; set; }
+        [JsonProperty(PropertyName = "ceiling", NullValueHandling = NullValueHandling.Ignore)]
+        public int? Ceiling { get; set; }
+    }
+
+    public class Phd2SetBacklashComp : Phd2Method<Phd2SetBacklashCompParam> {
+        public override string Method => "set_backlash_comp";
+    }
+
     public class LockShiftParams {
 
         [JsonProperty(PropertyName = "enabled")]

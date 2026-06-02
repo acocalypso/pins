@@ -1115,6 +1115,8 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                 || s.PHD2VarDelayShortSec.HasValue || s.PHD2VarDelayLongSec.HasValue
                 || s.PHD2AfMinStarSnr.HasValue || !string.IsNullOrEmpty(s.PHD2AutoSelectDownsample)
                 || s.PHD2SaturationByADU.HasValue || s.PHD2SaturationADUValue.HasValue
+                || s.PHD2BacklashCompEnabled.HasValue || s.PHD2BacklashPulseWidth.HasValue
+                || s.PHD2BacklashFloor.HasValue || s.PHD2BacklashCeiling.HasValue
                 || s.PHD2DecHysteresis.HasValue || s.PHD2RAFastSwitch.HasValue
                 || s.PHD2RASlopeWeight.HasValue || s.PHD2DecSlopeWeight.HasValue
                 || s.PHD2RALowpass2Aggressiveness.HasValue || s.PHD2DecLowpass2Aggressiveness.HasValue
@@ -1379,6 +1381,20 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     var resp = await SendMessage(msg);
                     if (resp.error != null)
                         Logger.Warning($"Failed to restore saturation mode: {resp.error.message}");
+                }
+                if (s.PHD2BacklashCompEnabled.HasValue || s.PHD2BacklashPulseWidth.HasValue
+                    || s.PHD2BacklashFloor.HasValue || s.PHD2BacklashCeiling.HasValue) {
+                    var msg = new Phd2SetBacklashComp() {
+                        Parameters = new Phd2SetBacklashCompParam {
+                            Enable = s.PHD2BacklashCompEnabled,
+                            Pulse = s.PHD2BacklashPulseWidth,
+                            Floor = s.PHD2BacklashFloor,
+                            Ceiling = s.PHD2BacklashCeiling
+                        }
+                    };
+                    var resp = await SendMessage(msg);
+                    if (resp.error != null)
+                        Logger.Warning($"Failed to restore backlash compensation: {resp.error.message}");
                 }
                 Logger.Info("PHD2 algo settings restored from NINA profile");
             } catch (Exception ex) {
