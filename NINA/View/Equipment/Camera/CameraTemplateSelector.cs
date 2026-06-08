@@ -27,7 +27,6 @@ namespace NINA.View.Equipment {
         public DataTemplate LegacySbig { get; set; }
         public DataTemplate Moravian { get; set; }
         public DataTemplate Canon { get; set; }
-        public DataTemplate Nikon { get; set; }
         public DataTemplate Atik { get; set; }
         public DataTemplate Zwo { get; set; }
         public DataTemplate Generic { get; set; }
@@ -44,8 +43,6 @@ namespace NINA.View.Equipment {
                 return QhyCcd;
             } else if (item is GPCamera) {
                 return Canon;
-            } else if (item is NikonCamera) {
-                return Nikon ?? Default;
             } else if (item is AtikCamera) {
                 return Atik;
             } else if (item is ASICamera) {

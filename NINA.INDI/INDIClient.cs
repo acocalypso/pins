@@ -866,7 +866,6 @@ namespace NINA.INDI {
 
         private async Task StartServerInFifoMode() {
             try {
-                /*
                 // Kill any existing indiserver processes
                 KillExistingServer();
 
@@ -893,7 +892,7 @@ namespace NINA.INDI {
                     _serverReadyTcs.SetResult(false);
                     return;
                 }
-*/
+
                 // Wait for server to be ready with retries
                 bool connected = false;
                 for (int attempt = 1; attempt <= 10; attempt++) {
