@@ -376,8 +376,20 @@ namespace NINA.INDI {
             SendMessage(prop.ToXml());
         }
 
+        public void EnableBLOB(string deviceName) {
+            var element = new XElement("enableBLOB",
+                new XAttribute("device", deviceName),
+                "Also");
+            SendMessage(element);
+            Logger.Debug($"Sent enableBLOB for device '{deviceName}'");
+        }
+
+        // State for the O(n) large-element fast path in ProcessXmlMessage.
+        private string _pendingBigTagName = null;
+        private int _pendingBigTagSearchFrom = 0;
+
         private async Task ReceiveLoop(CancellationToken ct) {
-            var buffer = new byte[65536]; // 64KB buffer - good balance for INDI messages and BLOBs
+            var buffer = new byte[1024 * 1024]; // 1 MB — fewer iterations for multi-MB BLOBs
             var xmlBuffer = new StringBuilder();
 
             while (!ct.IsCancellationRequested && _stream != null) {
@@ -575,102 +587,125 @@ namespace NINA.INDI {
             if (string.IsNullOrEmpty(xmlString)) {
                 return string.Empty;
             }
-            return new string(xmlString.Where(XmlConvert.IsXmlChar).ToArray());
+
+            // Avoid allocation for the common case where every character is already valid.
+            // INDI traffic (ASCII XML + base64 BLOB data) almost never contains invalid chars.
+            foreach (char c in xmlString)
+                if (!XmlConvert.IsXmlChar(c))
+                    return new string(xmlString.Where(XmlConvert.IsXmlChar).ToArray());
+            return xmlString;
         }
 
         private void ProcessXmlMessage(StringBuilder message) {
-            var xmlString = message.ToString();
+            if (message.Length == 0) return;
 
-            // Check for valid string
-            if (string.IsNullOrEmpty(xmlString)) {
+            // ── Fast path: waiting for the end of a large element (e.g. setBLOBVector ──────
+            // containing a multi-megabyte BLOB). Each call converts only the newly-arrived
+            // tail of the buffer instead of the entire thing, turning O(n²) into O(n).
+            if (_pendingBigTagName != null) {
+                var endTag = "</" + _pendingBigTagName + ">";
+                var bufLen = message.Length;
+                var from = _pendingBigTagSearchFrom;
+
+                if (bufLen - from <= 0) return;
+
+                var tail = message.ToString(from, bufLen - from);
+                var endInTail = tail.IndexOf(endTag, StringComparison.Ordinal);
+
+                if (endInTail == -1) {
+                    // Still incomplete — advance the search pointer so the next call
+                    // only scans the new bytes (minus a small overlap for boundary cases).
+                    _pendingBigTagSearchFrom = Math.Max(0, bufLen - endTag.Length);
+                    return;
+                }
+
+                var elementLength = from + endInTail + endTag.Length;
+                var xmlText = message.ToString(0, elementLength);
+                message.Remove(0, elementLength);
+                _pendingBigTagName = null;
+                _pendingBigTagSearchFrom = 0;
+
+                try { ProcessElement(XElement.Parse(xmlText)); } catch (System.Xml.XmlException ex) {
+                    if (!ex.Message.Contains("Unexpected end of file") &&
+                        !ex.Message.Contains("Unexpected end tag") &&
+                        !ex.Message.Contains("not closed"))
+                        Logger.Error($"XML parse error in large element: {ex.Message}");
+                } catch (Exception ex) {
+                    Logger.Error($"Error processing large element: {ex.Message}");
+                }
+
+                if (message.Length > 0) ProcessXmlMessage(message);
                 return;
             }
 
+            // ── Normal path: parse small/complete elements ────────────────────────────────
+            var xmlString = message.ToString();
+            if (string.IsNullOrEmpty(xmlString)) return;
+
             int lastProcessed = 0;
             var elementsToProcess = new List<string>();
+            string pendingTagName = null;
+            int pendingFrom = 0;
 
             while (lastProcessed < xmlString.Length) {
-                // Find the next complete xml element
                 var startTag = xmlString.IndexOf('<', lastProcessed);
-                if (startTag == -1) {
-                    break;
-                }
+                if (startTag == -1) { lastProcessed = xmlString.Length; break; }
 
-                // Find the tag name
                 var tagNameEnd = -1;
                 for (int i = startTag + 1; i < xmlString.Length; i++) {
                     var c = xmlString[i];
-                    if (c == ' ' || c == '>' || c == '/') {
-                        tagNameEnd = i;
-                        break;
-                    }
+                    if (c == ' ' || c == '>' || c == '/') { tagNameEnd = i; break; }
                 }
-
-                if (tagNameEnd == -1) {
-                    Logger.Debug("Tag name end not found, waiting for more data");
-                    break;
-                }
+                if (tagNameEnd == -1) break;
 
                 var tagNameLength = tagNameEnd - startTag - 1;
-                if (tagNameLength <= 0) {
-                    Logger.Warning("Invalid tag name length, skipping");
-                    lastProcessed = startTag + 1;
-                    continue;
-                }
+                if (tagNameLength <= 0) { lastProcessed = startTag + 1; continue; }
 
                 var tagName = xmlString.Substring(startTag + 1, tagNameLength);
 
-                // Check for self-closing tags first (most common for INDI property updates)
-                var selfClosingEnd = xmlString.IndexOf("/>", startTag, StringComparison.Ordinal);
-                if (selfClosingEnd != -1) {
-                    // Make sure this /> belongs to our tag (not nested inside)
-                    var nextOpenTag = xmlString.IndexOf('<', startTag + 1);
-                    if (nextOpenTag == -1 || selfClosingEnd < nextOpenTag) {
-                        var elementEnd = selfClosingEnd + 2;
-                        var xmlText = xmlString.Substring(startTag, elementEnd - startTag);
-                        Logger.Debug($"Found self-closing element: {xmlText.Substring(0, Math.Min(100, xmlText.Length))}");
-                        elementsToProcess.Add(xmlText);
-                        lastProcessed = elementEnd;
+                // Self-closing tag check (most common for INDI property updates)
+                var scEnd = xmlString.IndexOf("/>", startTag, StringComparison.Ordinal);
+                if (scEnd != -1) {
+                    var nextOpen = xmlString.IndexOf('<', startTag + 1);
+                    if (nextOpen == -1 || scEnd < nextOpen) {
+                        elementsToProcess.Add(xmlString.Substring(startTag, scEnd + 2 - startTag));
+                        lastProcessed = scEnd + 2;
                         continue;
                     }
                 }
 
-                // Try to find matching end tag
                 var endTagStr = "</" + tagName + ">";
                 var endIndex = xmlString.IndexOf(endTagStr, startTag + tagNameLength, StringComparison.Ordinal);
 
                 if (endIndex == -1) {
-                    // Incomplete element, wait for more data
-                    Logger.Debug($"End tag {endTagStr} not found, waiting for more data");
+                    // Large incomplete element — switch to fast path for subsequent reads.
+                    lastProcessed = startTag;
+                    pendingTagName = tagName;
+                    pendingFrom = Math.Max(0, xmlString.Length - startTag - endTagStr.Length);
                     break;
                 }
 
-                var elementEnd2 = endIndex + endTagStr.Length;
-                var xmlText2 = xmlString.Substring(startTag, elementEnd2 - startTag);
-                Logger.Debug($"Found complete element: {xmlText2.Substring(0, Math.Min(100, xmlText2.Length))}");
-                elementsToProcess.Add(xmlText2);
-                lastProcessed = elementEnd2;
+                var elementEnd = endIndex + endTagStr.Length;
+                elementsToProcess.Add(xmlString.Substring(startTag, elementEnd - startTag));
+                lastProcessed = elementEnd;
             }
 
-            // Remove processed data from buffer BEFORE parallel processing
-            if (lastProcessed > 0) {
-                message.Remove(0, lastProcessed);
+            if (lastProcessed > 0) message.Remove(0, lastProcessed);
+
+            if (pendingTagName != null) {
+                _pendingBigTagName = pendingTagName;
+                _pendingBigTagSearchFrom = pendingFrom;
             }
 
-            // Now process all collected elements in parallel
             if (elementsToProcess.Count > 0) {
                 Parallel.ForEach(elementsToProcess, xmlText => {
                     try {
-                        Logger.Debug($"Parsing XML element: {xmlText.Substring(0, Math.Min(100, xmlText.Length))}...");
-                        var element = XElement.Parse(xmlText);
-                        ProcessElement(element);
+                        ProcessElement(XElement.Parse(xmlText));
                     } catch (System.Xml.XmlException ex) {
-                        // Silently ignore incomplete buffer errors
                         if (!ex.Message.Contains("Unexpected end of file") &&
                             !ex.Message.Contains("Unexpected end tag") &&
-                            !ex.Message.Contains("not closed")) {
+                            !ex.Message.Contains("not closed"))
                             Logger.Error($"XML parse error: {ex.Message}");
-                        }
                     } catch (Exception ex) {
                         Logger.Error($"Error processing element: {ex.Message}");
                     }
@@ -809,7 +844,10 @@ namespace NINA.INDI {
                         }
                     case "message": {
                             var message = element.Attribute("message")?.Value ?? element.Value;
-                            Logger.Trace($"[INDI Message][{deviceName}] {message}");
+                            // DIAGNOSTIC (rejected-coordinates investigation): surface driver messages
+                            // at Info. A genuine slew refusal (e.g. 10micron below horizon / past limits)
+                            // is accompanied by a message here; a phantom rejection will not be.
+                            Logger.Info($"[INDI Message][{deviceName}] {message}");
                             break;
                         }
                 }

@@ -600,7 +600,9 @@ namespace NINA.Equipment.Equipment.MyTelescope {
         public async Task<bool> SlewToCoordinates(Coordinates coordinates, CancellationToken token) {
             if (ShouldBeConnected && !AtPark) {
                 try {
-                    TrackingEnabled = true;
+                    if (!TrackingEnabled) {
+                        TrackingEnabled = true;
+                    }
                     TargetCoordinates = coordinates.Transform(EquatorialSystem);
 
                     if (CanSlewAsync) {

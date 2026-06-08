@@ -47,18 +47,10 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (!Connected) {
                     return false;
                 }
-                var err = GetFocuserStatus(_uniqueId, out var status);
-                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
-                    return status.moving == 1;
-                } else {
-                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
-                        Logger.Error($"Nitecrawler communication error to get moving state {err}");
-                        DisconnectOnRemovedError();
-                    } else {
-                        Logger.Error($"Nitecrawler error to get moving state {err}");
-                    }
+                if (!TryGetStatus("get moving state", out var status)) {
                     return false;
                 }
+                return status.moving == 1;
             }
         }
 
@@ -97,18 +89,10 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (!Connected) {
                     return -1;
                 }
-                var err = GetFocuserStatus(_uniqueId, out var status);
-                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
-                    return status.position;
-                } else {
-                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
-                        Logger.Error($"Nitecrawler communication error to get Position state {err}");
-                        DisconnectOnRemovedError();
-                    } else {
-                        Logger.Error($"Nitecrawler error to get Position {err}");
-                    }
+                if (!TryGetStatus("get Position", out var status)) {
                     return -1;
                 }
+                return status.position;
             }
         }
 
@@ -122,23 +106,71 @@ namespace NINA.Equipment.Equipment.MyFocuser {
             }
         }
 
+        // A single transient serial glitch (e.g. a polled GP/GM/GT status read timing out under
+        // USB load) must not tear down the whole connection. We only treat NC_ERROR_COMMUNICATION
+        // as a removal once we can confirm it - either the device is no longer enumerated, or it
+        // has failed this many consecutive times despite still being present (e.g. firmware hung).
+        private const int _maxConsecutiveCommErrors = 3;
+        private int _consecutiveCommErrors = 0;
+
+        /// <summary>
+        /// Reads the focuser status, tolerating transient communication errors instead of
+        /// disconnecting on the first glitch. Returns true on success; on failure the caller
+        /// should fall back to a safe value and the connection is only dropped on a confirmed removal.
+        /// </summary>
+        private bool TryGetStatus(string context, out NC_FOCUSER_STATUS status) {
+            var err = GetFocuserStatus(_uniqueId, out status);
+            if (err == NC_ERROR_TYPE.NC_SUCCESS) {
+                System.Threading.Interlocked.Exchange(ref _consecutiveCommErrors, 0);
+                return true;
+            }
+
+            if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
+                HandleCommunicationError(context);
+            } else {
+                Logger.Error($"Nitecrawler error during {context} {err}");
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Decides whether an NC_ERROR_COMMUNICATION is transient or a genuine removal.
+        /// Returns true if it was handled as transient (connection kept); false if the device
+        /// was removed/disconnected.
+        /// </summary>
+        private bool HandleCommunicationError(string context) {
+            // Definitive check: is the device still physically enumerated? ScanFocusers reports
+            // already-open ports without re-handshaking, so it is safe to call while connected.
+            int[] ids = new int[NC_MAX_NUM];
+            var scanErr = ScanFocusers(out var count, ids);
+            bool stillPresent = scanErr == NC_ERROR_TYPE.NC_SUCCESS && ids.Take(count).Contains(_uniqueId);
+
+            if (!stillPresent) {
+                Logger.Error($"Nitecrawler communication error during {context}; device no longer enumerated - treating as removed");
+                DisconnectOnRemovedError();
+                return false;
+            }
+
+            var consecutive = System.Threading.Interlocked.Increment(ref _consecutiveCommErrors);
+            if (consecutive >= _maxConsecutiveCommErrors) {
+                Logger.Error($"Nitecrawler communication error during {context}; {consecutive} consecutive failures while device still present - disconnecting");
+                DisconnectOnRemovedError();
+                return false;
+            }
+
+            Logger.Warning($"Nitecrawler transient communication error during {context} ({consecutive}/{_maxConsecutiveCommErrors}); device still present, keeping connection");
+            return true;
+        }
+
         public double StepSize {
             get {
                 if (!Connected) {
                     return float.NaN;
                 }
-                var err = GetFocuserStatus(_uniqueId, out var status);
-                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
-                    return status.micronsPerStep;
-                } else {
-                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
-                        Logger.Error($"Nitecrawler communication error to get step size state {err}");
-                        DisconnectOnRemovedError();
-                    } else {
-                        Logger.Error($"Nitecrawler error to get Position {err}");
-                    }
+                if (!TryGetStatus("get step size", out var status)) {
                     return -1;
                 }
+                return status.micronsPerStep;
             }
         }
 
@@ -147,23 +179,14 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 if (!Connected) {
                     return double.NaN;
                 }
-                var err = GetFocuserStatus(_uniqueId, out var status);
-                if (err == NC_ERROR_TYPE.NC_SUCCESS) {
-                    if (status.temperatureDetection == 0 || (uint)status.temperatureExt == TEMPERATURE_INVALID) {
-                        // Ambient probe not connected
-                        return double.NaN;
-                    } else {
-                        return status.temperatureExt / 100.0;
-                    }
-                } else {
-                    if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
-                        Logger.Error($"Nitecrawler communication error to get Temperature {err}");
-                        DisconnectOnRemovedError();
-                    } else {
-                        Logger.Error($"Nitecrawler error to get Temperature {err}");
-                    }
+                if (!TryGetStatus("get Temperature", out var status)) {
                     return double.NaN;
                 }
+                if (status.temperatureDetection == 0 || (uint)status.temperatureExt == TEMPERATURE_INVALID) {
+                    // Ambient probe not connected
+                    return double.NaN;
+                }
+                return status.temperatureExt / 100.0;
             }
         }
 
@@ -285,22 +308,26 @@ namespace NINA.Equipment.Equipment.MyFocuser {
                 }
 
                 await CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
-                NC_FOCUSER_STATUS status;
+                NC_FOCUSER_STATUS status = default;
+                bool moving;
                 do {
                     err = GetFocuserStatus(_uniqueId, out status);
 
-                    if (err != NC_ERROR_TYPE.NC_SUCCESS) {
-                        if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
-                            DisconnectOnRemovedError();
-                        } else {
+                    if (err == NC_ERROR_TYPE.NC_SUCCESS) {
+                        System.Threading.Interlocked.Exchange(ref _consecutiveCommErrors, 0);
+                        moving = status.moving == 1;
+                    } else if (err == NC_ERROR_TYPE.NC_ERROR_COMMUNICATION && HandleCommunicationError("move status poll")) {
+                        // Transient glitch and the device is still present - keep polling rather than aborting the move
+                        moving = true;
+                    } else {
+                        if (err != NC_ERROR_TYPE.NC_ERROR_COMMUNICATION) {
                             Logger.Error($"Nitecrawler error to get moving state {err}");
                         }
-
                         throw new Exception($"Focuser error {err}");
                     }
 
                     await CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
-                } while (status.moving == 1 && !ct.IsCancellationRequested);
+                } while (moving && !ct.IsCancellationRequested);
 
                 if (lastPosition == Position) {
                     ++samePositionCount;
