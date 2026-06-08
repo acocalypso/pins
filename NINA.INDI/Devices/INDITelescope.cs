@@ -691,16 +691,10 @@ namespace NINA.INDI.Devices {
                 // Slew
                 await SlewToCoordinates(ra, dec);
 
-                // Check the actual property state
-                var coordProp = GetProperty("EQUATORIAL_EOD_COORD");
-
                 // Wait for slew to finish
                 while (Slewing && !ct.IsCancellationRequested) {
-                    // Check slewing status
-                    if (coordProp?.State == PropertyState.Idle) {
-                        // Done
-                        break;
-                    } else if (coordProp?.State == PropertyState.Alert) {
+                    var coordState = GetProperty("EQUATORIAL_EOD_COORD")?.State;
+                    if (coordState == PropertyState.Alert) {
                         Logger.Error("EQUATORIAL_EOD_COORD in Alert state - slew rejected by mount");
                         throw new InvalidOperationException("Slew rejected by mount - check mount limits and target accessibility");
                     }

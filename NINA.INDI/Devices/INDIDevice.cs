@@ -207,11 +207,18 @@ namespace NINA.INDI.Devices
                 // Create a unique operation ID for this async set
                 var operationId = $"{propertyName}_{Guid.NewGuid()}";
 
+                // Capture pre-send state before registering the TCS so the timestamp comparison
+                // in OnNumberPropertyUpdated can tell a stale Alert from a real rejection.
+                var preSendProp = GetProperty(propertyName);
+                var preSendTimestamp = preSendProp?.Timestamp ?? string.Empty;
+                Logger.Info($"SetNumberValuesAsync ({propertyName}) sending [{string.Join(", ", values.Select(v => $"{v.elementName}={v.value}"))}]; " +
+                            $"pre-send state={preSendProp?.State.ToString() ?? "null"}, timestamp={(string.IsNullOrEmpty(preSendTimestamp) ? "n/a" : preSendTimestamp)}");
+
                 // Create and register the TaskCompletionSource
                 var tcs = new TaskCompletionSource<bool>();
                 lock (_asyncOperationsLock)
                 {
-                    _pendingAsyncOperations[operationId] = tcs;
+                    _pendingAsyncOperations[operationId] = (tcs, preSendTimestamp);
                 }
 
                 try
@@ -268,11 +275,13 @@ namespace NINA.INDI.Devices
                 // Create a unique operation ID for this async set
                 var operationId = $"{propertyName}_{Guid.NewGuid()}";
 
+                var preSendTimestamp = GetProperty(propertyName)?.Timestamp ?? string.Empty;
+
                 // Create and register the TaskCompletionSource
                 var tcs = new TaskCompletionSource<bool>();
                 lock (_asyncOperationsLock)
                 {
-                    _pendingAsyncOperations[operationId] = tcs;
+                    _pendingAsyncOperations[operationId] = (tcs, preSendTimestamp);
                 }
 
                 try
@@ -434,11 +443,13 @@ namespace NINA.INDI.Devices
                 // Create a unique operation ID for this async set
                 var operationId = $"{propertyName}_{Guid.NewGuid()}";
 
+                var preSendTimestamp = GetProperty(propertyName)?.Timestamp ?? string.Empty;
+
                 // Create and register the TaskCompletionSource
                 var tcs = new TaskCompletionSource<bool>();
                 lock (_asyncOperationsLock)
                 {
-                    _pendingAsyncOperations[operationId] = tcs;
+                    _pendingAsyncOperations[operationId] = (tcs, preSendTimestamp);
                 }
 
                 try
@@ -489,8 +500,10 @@ namespace NINA.INDI.Devices
         }
 
 
-        // For tracking multiple concurrent SetNumberValuesAsync operations
-        private readonly Dictionary<string, TaskCompletionSource<bool>> _pendingAsyncOperations = new();
+        // For tracking multiple concurrent SetXxxAsync operations.
+        // The tuple carries the TCS plus the pre-send property timestamp so that a stale Alert
+        // (property already in Alert before we sent) can be distinguished from a real rejection.
+        private readonly Dictionary<string, (TaskCompletionSource<bool> Tcs, string PreSendTimestamp)> _pendingAsyncOperations = new();
         private readonly object _asyncOperationsLock = new();
 
         public Task<bool> Connect(CancellationToken ct)
@@ -901,12 +914,12 @@ namespace NINA.INDI.Devices
                 foreach (var kvp in operationsForProperty)
                 {
                     var operationId = kvp.Key;
-                    var tcs = kvp.Value;
+                    var (tcs, preSendTimestamp) = kvp.Value;
 
                     // Resolve based on property state:
                     // - Busy: server has acknowledged the command and is processing it
                     // - Ok: operation completed successfully (some drivers skip Busy and go straight to Ok)
-                    // - Alert: server rejected the command
+                    // - Alert: server rejected the command (but see stale-Alert guard below)
                     // - Idle: operation still pending, keep waiting
                     if (p.State == PropertyState.Busy)
                     {
@@ -918,7 +931,13 @@ namespace NINA.INDI.Devices
                     }
                     else if (p.State == PropertyState.Ok)
                     {
-                        if (!tcs.Task.IsCompleted)
+                        // Guard against stale Ok: the server may re-broadcast the Ok from a
+                        // previous operation while the new command is still being queued.
+                        if (!string.IsNullOrEmpty(preSendTimestamp) && p.Timestamp == preSendTimestamp)
+                        {
+                            Logger.Debug($"Async operation {operationId} ignoring stale Ok (unchanged timestamp: {p.Timestamp})");
+                        }
+                        else if (!tcs.Task.IsCompleted)
                         {
                             Logger.Debug($"Async operation {operationId} completed by server (state: Ok)");
                             tcs.TrySetResult(true);
@@ -926,7 +945,13 @@ namespace NINA.INDI.Devices
                     }
                     else if (p.State == PropertyState.Alert)
                     {
-                        if (!tcs.Task.IsCompleted)
+                        // Guard against stale Alerts: if the timestamp hasn't changed the server
+                        // is re-broadcasting a pre-existing Alert state, not rejecting our command.
+                        if (!string.IsNullOrEmpty(preSendTimestamp) && p.Timestamp == preSendTimestamp)
+                        {
+                            Logger.Debug($"Async operation {operationId} ignoring stale Alert (unchanged timestamp: {p.Timestamp})");
+                        }
+                        else if (!tcs.Task.IsCompleted)
                         {
                             Logger.Warning($"Async operation {operationId} rejected by server (state: Alert)");
                             tcs.TrySetResult(false);
@@ -956,12 +981,12 @@ namespace NINA.INDI.Devices
                 foreach (var kvp in operationsForProperty)
                 {
                     var operationId = kvp.Key;
-                    var tcs = kvp.Value;
+                    var (tcs, preSendTimestamp) = kvp.Value;
 
                     // Resolve based on property state:
                     // - Busy: server has acknowledged the command and is processing it
                     // - Ok: operation completed successfully (some drivers skip Busy and go straight to Ok)
-                    // - Alert: server rejected the command
+                    // - Alert: server rejected the command (but see stale-Alert guard below)
                     // - Idle: operation still pending, keep waiting
                     if (p.State == PropertyState.Busy)
                     {
@@ -973,7 +998,13 @@ namespace NINA.INDI.Devices
                     }
                     else if (p.State == PropertyState.Ok)
                     {
-                        if (!tcs.Task.IsCompleted)
+                        // Guard against stale Ok: the server may re-broadcast the Ok from a
+                        // previous operation while the new command is still being queued.
+                        if (!string.IsNullOrEmpty(preSendTimestamp) && p.Timestamp == preSendTimestamp)
+                        {
+                            Logger.Debug($"Async operation {operationId} ignoring stale Ok (unchanged timestamp: {p.Timestamp})");
+                        }
+                        else if (!tcs.Task.IsCompleted)
                         {
                             Logger.Debug($"Async operation {operationId} completed by server (state: Ok)");
                             tcs.TrySetResult(true);
@@ -981,7 +1012,13 @@ namespace NINA.INDI.Devices
                     }
                     else if (p.State == PropertyState.Alert)
                     {
-                        if (!tcs.Task.IsCompleted)
+                        // Guard against stale Alerts: if the timestamp hasn't changed the server
+                        // is re-broadcasting a pre-existing Alert state, not rejecting our command.
+                        if (!string.IsNullOrEmpty(preSendTimestamp) && p.Timestamp == preSendTimestamp)
+                        {
+                            Logger.Debug($"Async operation {operationId} ignoring stale Alert (unchanged timestamp: {p.Timestamp})");
+                        }
+                        else if (!tcs.Task.IsCompleted)
                         {
                             Logger.Warning($"Async operation {operationId} rejected by server (state: Alert)");
                             tcs.TrySetResult(false);
@@ -1011,12 +1048,12 @@ namespace NINA.INDI.Devices
                 foreach (var kvp in operationsForProperty)
                 {
                     var operationId = kvp.Key;
-                    var tcs = kvp.Value;
+                    var (tcs, preSendTimestamp) = kvp.Value;
 
                     // Resolve based on property state:
                     // - Busy: server has acknowledged the command and is processing it
                     // - Ok: operation completed successfully (some drivers skip Busy and go straight to Ok)
-                    // - Alert: server rejected the command
+                    // - Alert: server rejected the command (but see stale-Alert guard below)
                     // - Idle: operation still pending, keep waiting
                     if (p.State == PropertyState.Busy)
                     {
@@ -1028,7 +1065,13 @@ namespace NINA.INDI.Devices
                     }
                     else if (p.State == PropertyState.Ok)
                     {
-                        if (!tcs.Task.IsCompleted)
+                        // Guard against stale Ok: the server may re-broadcast the Ok from a
+                        // previous operation while the new command is still being queued.
+                        if (!string.IsNullOrEmpty(preSendTimestamp) && p.Timestamp == preSendTimestamp)
+                        {
+                            Logger.Debug($"Async operation {operationId} ignoring stale Ok (unchanged timestamp: {p.Timestamp})");
+                        }
+                        else if (!tcs.Task.IsCompleted)
                         {
                             Logger.Debug($"Async operation {operationId} completed by server (state: Ok)");
                             tcs.TrySetResult(true);
@@ -1036,7 +1079,13 @@ namespace NINA.INDI.Devices
                     }
                     else if (p.State == PropertyState.Alert)
                     {
-                        if (!tcs.Task.IsCompleted)
+                        // Guard against stale Alerts: if the timestamp hasn't changed the server
+                        // is re-broadcasting a pre-existing Alert state, not rejecting our command.
+                        if (!string.IsNullOrEmpty(preSendTimestamp) && p.Timestamp == preSendTimestamp)
+                        {
+                            Logger.Debug($"Async operation {operationId} ignoring stale Alert (unchanged timestamp: {p.Timestamp})");
+                        }
+                        else if (!tcs.Task.IsCompleted)
                         {
                             Logger.Warning($"Async operation {operationId} rejected by server (state: Alert)");
                             tcs.TrySetResult(false);
