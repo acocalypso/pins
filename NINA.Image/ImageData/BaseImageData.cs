@@ -327,7 +327,7 @@ namespace NINA.Image.ImageData {
             var pattern = fileSaveInfo.FilePattern;
             string actualPath = string.Empty;
             try {
-                if (pattern.Contains(ImagePatternKeys.SensorTemp) && double.IsNaN(MetaData.Camera.Temperature) && !string.IsNullOrEmpty(Data.RAWType)) {
+                if (pattern.Contains(ImagePatternKeys.SensorTemp) && double.IsNaN(MetaData.Camera.Temperature) && ShouldSaveNativeRaw(fileSaveInfo, forceFileType)) {
                     // For DSLRs we need to retrieve the temperature after the file is written. Hence we replace the pattern with this special placeholder
                     pattern = pattern.Replace(ImagePatternKeys.SensorTemp, "$$DSLR_SENSORTEMP$$");
                 }
@@ -399,7 +399,7 @@ namespace NINA.Image.ImageData {
                     throw new InvalidOperationException(msg);
                 }
 
-                if (!forceFileType && Data.RAWData != null) {
+                if (ShouldSaveNativeRaw(fileSaveInfo, forceFileType)) {
                     fileSaveInfo.FileType = FileTypeEnum.RAW;
                     path = SaveRAW(fileSaveInfo.FilePath);
                 } else {
@@ -421,6 +421,13 @@ namespace NINA.Image.ImageData {
 
                 return path;
             }, cancelToken);
+        }
+
+        private bool ShouldSaveNativeRaw(FileSaveInfo fileSaveInfo, bool forceFileType) {
+            return !forceFileType
+                && fileSaveInfo.SaveNativeCameraRaw
+                && Data.RAWData != null
+                && !string.IsNullOrWhiteSpace(Data.RAWType);
         }
 
         private string SaveRAW(string path) {
@@ -657,7 +664,7 @@ namespace NINA.Image.ImageData {
                 using (var ms = new MemoryStream()) {
                     await fs.CopyToAsync(ms);
                     var rawType = Path.GetExtension(path).ToLower().Substring(1);
-                    var data = await rawConverter.Convert(s: ms, bitDepth: bitDepth, rawType: rawType, metaData: new ImageMetaData(), token: ct);
+                    var data = await rawConverter.Convert(s: ms, bitDepth: bitDepth, bitScaling: false, rawType: rawType, metaData: new ImageMetaData(), token: ct);
                     return data;
                 }
             }
