@@ -214,11 +214,14 @@ namespace NINA.INDI.Devices
                 Logger.Info($"SetNumberValuesAsync ({propertyName}) sending [{string.Join(", ", values.Select(v => $"{v.elementName}={v.value}"))}]; " +
                             $"pre-send state={preSendProp?.State.ToString() ?? "null"}, timestamp={(string.IsNullOrEmpty(preSendTimestamp) ? "n/a" : preSendTimestamp)}");
 
-                // Create and register the TaskCompletionSource
+                // Create and register the TaskCompletionSource.
+                // Numbers keep the timestamp-only behaviour (no value predicate): a number
+                // reaching its target value does not necessarily mean the operation is done
+                // (e.g. a slew passes through the target), so we leave the predicate null.
                 var tcs = new TaskCompletionSource<bool>();
                 lock (_asyncOperationsLock)
                 {
-                    _pendingAsyncOperations[operationId] = (tcs, preSendTimestamp);
+                    _pendingAsyncOperations[operationId] = (tcs, preSendTimestamp, null);
                 }
 
                 try
@@ -277,11 +280,26 @@ namespace NINA.INDI.Devices
 
                 var preSendTimestamp = GetProperty(propertyName)?.Timestamp ?? string.Empty;
 
+                // Predicate to detect that the requested value was actually applied. INDI
+                // timestamps only have 1-second resolution, so a fast driver can answer within
+                // the same second the property was defined — which the timestamp-only stale
+                // guard would mistake for a re-broadcast. If the desired value is present we
+                // accept the Ok regardless of the (unchanged) timestamp.
+                Func<INDIProperty, bool> desiredReached = prop =>
+                {
+                    if (prop is INDISwitchProperty sw)
+                    {
+                        var s = sw.Switches.FirstOrDefault(x => x.Name == elementName);
+                        return s != null && s.Value == value;
+                    }
+                    return false;
+                };
+
                 // Create and register the TaskCompletionSource
                 var tcs = new TaskCompletionSource<bool>();
                 lock (_asyncOperationsLock)
                 {
-                    _pendingAsyncOperations[operationId] = (tcs, preSendTimestamp);
+                    _pendingAsyncOperations[operationId] = (tcs, preSendTimestamp, desiredReached);
                 }
 
                 try
@@ -445,11 +463,23 @@ namespace NINA.INDI.Devices
 
                 var preSendTimestamp = GetProperty(propertyName)?.Timestamp ?? string.Empty;
 
+                // Predicate to detect that the requested value was actually applied (see the
+                // note in SetSwitchValueAsync about the 1-second INDI timestamp resolution).
+                Func<INDIProperty, bool> desiredReached = prop =>
+                {
+                    if (prop is INDITextProperty tp)
+                    {
+                        var t = tp.Texts.FirstOrDefault(x => x.Name == elementName);
+                        return t != null && t.Value == value;
+                    }
+                    return false;
+                };
+
                 // Create and register the TaskCompletionSource
                 var tcs = new TaskCompletionSource<bool>();
                 lock (_asyncOperationsLock)
                 {
-                    _pendingAsyncOperations[operationId] = (tcs, preSendTimestamp);
+                    _pendingAsyncOperations[operationId] = (tcs, preSendTimestamp, desiredReached);
                 }
 
                 try
@@ -501,9 +531,12 @@ namespace NINA.INDI.Devices
 
 
         // For tracking multiple concurrent SetXxxAsync operations.
-        // The tuple carries the TCS plus the pre-send property timestamp so that a stale Alert
-        // (property already in Alert before we sent) can be distinguished from a real rejection.
-        private readonly Dictionary<string, (TaskCompletionSource<bool> Tcs, string PreSendTimestamp)> _pendingAsyncOperations = new();
+        // The tuple carries the TCS, the pre-send property timestamp (so that a stale Alert/Ok
+        // already present before we sent can be distinguished from a real response), and an
+        // optional DesiredReached predicate. The predicate lets us accept a same-second "Ok"
+        // (INDI timestamps have only 1-second resolution) when the property actually reflects
+        // the value we requested, instead of discarding it as a stale re-broadcast.
+        private readonly Dictionary<string, (TaskCompletionSource<bool> Tcs, string PreSendTimestamp, Func<INDIProperty, bool> DesiredReached)> _pendingAsyncOperations = new();
         private readonly object _asyncOperationsLock = new();
 
         public Task<bool> Connect(CancellationToken ct)
@@ -914,7 +947,7 @@ namespace NINA.INDI.Devices
                 foreach (var kvp in operationsForProperty)
                 {
                     var operationId = kvp.Key;
-                    var (tcs, preSendTimestamp) = kvp.Value;
+                    var (tcs, preSendTimestamp, desiredReached) = kvp.Value;
 
                     // Resolve based on property state:
                     // - Busy: server has acknowledged the command and is processing it
@@ -933,7 +966,14 @@ namespace NINA.INDI.Devices
                     {
                         // Guard against stale Ok: the server may re-broadcast the Ok from a
                         // previous operation while the new command is still being queued.
-                        if (!string.IsNullOrEmpty(preSendTimestamp) && p.Timestamp == preSendTimestamp)
+                        // INDI timestamps only have 1-second resolution, so a genuine fast
+                        // response can carry the same timestamp as the pre-send state —
+                        // in that case we fall back to checking whether the requested value has
+                        // actually been applied (DesiredReached) before discarding it.
+                        bool timestampChanged = string.IsNullOrEmpty(preSendTimestamp) || p.Timestamp != preSendTimestamp;
+                        bool reached = desiredReached != null && desiredReached(p);
+
+                        if (!timestampChanged && !reached)
                         {
                             Logger.Debug($"Async operation {operationId} ignoring stale Ok (unchanged timestamp: {p.Timestamp})");
                         }
@@ -981,7 +1021,7 @@ namespace NINA.INDI.Devices
                 foreach (var kvp in operationsForProperty)
                 {
                     var operationId = kvp.Key;
-                    var (tcs, preSendTimestamp) = kvp.Value;
+                    var (tcs, preSendTimestamp, desiredReached) = kvp.Value;
 
                     // Resolve based on property state:
                     // - Busy: server has acknowledged the command and is processing it
@@ -998,9 +1038,11 @@ namespace NINA.INDI.Devices
                     }
                     else if (p.State == PropertyState.Ok)
                     {
-                        // Guard against stale Ok: the server may re-broadcast the Ok from a
-                        // previous operation while the new command is still being queued.
-                        if (!string.IsNullOrEmpty(preSendTimestamp) && p.Timestamp == preSendTimestamp)
+                        // Guard against stale Ok (see OnSwitchPropertyUpdated for details).
+                        bool timestampChanged = string.IsNullOrEmpty(preSendTimestamp) || p.Timestamp != preSendTimestamp;
+                        bool reached = desiredReached != null && desiredReached(p);
+
+                        if (!timestampChanged && !reached)
                         {
                             Logger.Debug($"Async operation {operationId} ignoring stale Ok (unchanged timestamp: {p.Timestamp})");
                         }
@@ -1048,7 +1090,7 @@ namespace NINA.INDI.Devices
                 foreach (var kvp in operationsForProperty)
                 {
                     var operationId = kvp.Key;
-                    var (tcs, preSendTimestamp) = kvp.Value;
+                    var (tcs, preSendTimestamp, desiredReached) = kvp.Value;
 
                     // Resolve based on property state:
                     // - Busy: server has acknowledged the command and is processing it
@@ -1065,9 +1107,11 @@ namespace NINA.INDI.Devices
                     }
                     else if (p.State == PropertyState.Ok)
                     {
-                        // Guard against stale Ok: the server may re-broadcast the Ok from a
-                        // previous operation while the new command is still being queued.
-                        if (!string.IsNullOrEmpty(preSendTimestamp) && p.Timestamp == preSendTimestamp)
+                        // Guard against stale Ok (see OnSwitchPropertyUpdated for details).
+                        bool timestampChanged = string.IsNullOrEmpty(preSendTimestamp) || p.Timestamp != preSendTimestamp;
+                        bool reached = desiredReached != null && desiredReached(p);
+
+                        if (!timestampChanged && !reached)
                         {
                             Logger.Debug($"Async operation {operationId} ignoring stale Ok (unchanged timestamp: {p.Timestamp})");
                         }
