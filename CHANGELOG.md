@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Retry mechanism for failing Nitecrawler serial comm
 - Share invalid chars across platforms
+- NULL char in DSLR image string
 
 ## 1.1.34 - 2026-06-02
 ### Added

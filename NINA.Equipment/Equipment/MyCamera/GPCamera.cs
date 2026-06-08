@@ -871,8 +871,8 @@ namespace NINA.Equipment.Equipment.MyCamera {
                     Logger.Error($"Failed to trigger capture: {result}");
                     return (false, null, null);
                 }
-                string folder = Encoding.UTF8.GetString(path.folder).TrimEnd('\0');
-                string filename = Encoding.UTF8.GetString(path.name).TrimEnd('\0');
+                string folder = ReadNullTerminatedString(path.folder);
+                string filename = ReadNullTerminatedString(path.name);
                 Logger.Info($"Image captured: {folder}/{filename}");
                 return (true, folder, filename);
             } catch (Exception ex) {
@@ -905,8 +905,8 @@ namespace NINA.Equipment.Equipment.MyCamera {
                         if (result == GP_ERROR_CODE.GP_OK && eventType == CameraEventType.GP_EVENT_FILE_ADDED) {
                             try {
                                 var filePath = (CameraFilePath)Marshal.PtrToStructure(eventData, typeof(CameraFilePath));
-                                string folder = Encoding.UTF8.GetString(filePath.folder).TrimEnd('\0');
-                                string filename = Encoding.UTF8.GetString(filePath.name).TrimEnd('\0');
+                                string folder = ReadNullTerminatedString(filePath.folder);
+                                string filename = ReadNullTerminatedString(filePath.name);
                                 Logger.Debug($"WaitForFileEvent: File event detected: {folder}/{filename}");
                                 stopwatch.Stop();
                                 return (true, folder, filename);
@@ -1165,6 +1165,17 @@ namespace NINA.Equipment.Equipment.MyCamera {
                     GpWidgetFree(widget);
                 }
             } // lock (_gpLock)
+        }
+
+        private static string ReadNullTerminatedString(byte[] bytes) {
+            if (bytes == null) return string.Empty;
+            int len = Array.IndexOf(bytes, (byte)0);
+            if (len < 0) len = bytes.Length;
+            try {
+                return Encoding.UTF8.GetString(bytes, 0, len).Trim();
+            } catch {
+                return Encoding.ASCII.GetString(bytes, 0, len).Trim();
+            }
         }
 
         private static bool CheckError(GP_ERROR_CODE err, [CallerMemberName] string memberName = "") {
