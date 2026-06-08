@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -20,6 +20,7 @@ using System.Configuration;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -29,6 +30,14 @@ namespace NINA.Core.Utility {
 
     public static class CoreUtil {
         public static char[] PATHSEPARATORS = new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+
+        // Union of platform-specific and Windows-invalid filename chars so that paths remain
+        // valid on SMB shares even when NINA runs on Linux (where '*', ':', '?' etc. are legal
+        // on the native filesystem but get mangled by Samba).
+        private static readonly char[] s_invalidFileNameChars =
+            Path.GetInvalidFileNameChars()
+                .Union(new char[] { '"', '<', '>', '|', ':', '*', '?' })
+                .ToArray();
         public static string APPLICATIONDIRECTORY = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
         public static string APPLICATIONTEMPPATH = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NINA");
         public static DateTime ApplicationStartDate = DateTime.Now;
@@ -264,7 +273,7 @@ namespace NINA.Core.Utility {
         /// <param name="str"></param>
         /// <returns></returns>
         public static string ReplaceInvalidFilenameChars(string str) {
-            return string.Join("_", str.Split(Path.GetInvalidFileNameChars()));
+            return string.Join("_", str.Split(s_invalidFileNameChars));
         }
 
         /// <summary>
