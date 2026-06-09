@@ -72,7 +72,11 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
             get => device.LightOn;
             set {
                 try {
-                    if (SupportsOnOff && (CoverState == CoverState.Closed || CoverState == CoverState.NotPresent)) {
+                    if (SupportsOnOff) {
+                        if (value && SupportsOpenClose && CoverState != CoverState.Closed) {
+                            Logger.Warning("Cannot turn light on while cover is not closed");
+                            return;
+                        }
                         if (value) {
                             Logger.Debug("Switching cover calibrator on");
                             // switch the light on with the last saved value, if any
