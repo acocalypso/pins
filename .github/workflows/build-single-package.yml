@@ -288,6 +288,8 @@ jobs:
             cp scripts/ensure-required-packages.sh build/usr/local/bin/
             cp scripts/manage-plugin.sh build/usr/local/bin/
             cp scripts/collect-diagnostics.sh build/usr/local/bin/
+            cp scripts/install-astap-star-database.sh build/usr/local/bin/
+
 
 
 
