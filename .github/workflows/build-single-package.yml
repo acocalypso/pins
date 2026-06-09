@@ -504,12 +504,28 @@ jobs:
             popd >/dev/null
             rm -rf "$meteostation_sdk_tmp"
 
+            lenscontrol_sdk_tmp="$(mktemp -d)"
+            git clone --recursive https://github.com/nitr57/pins.lenscontrol.sdk "$lenscontrol_sdk_tmp"
+            pushd "$lenscontrol_sdk_tmp" >/dev/null
+            mkdir -p build
+            cd build
+            cmake ..
+            make
+            mkdir -p "$plugin_dir_abs/extra-libs"
+            find . -name 'libLensControlSDK.so' -exec cp {} "$plugin_dir_abs/extra-libs/LensControlSDK.dll" \;
+            popd >/dev/null
+            rm -rf "$lenscontrol_sdk_tmp"
+
             if [ ! -f "$plugin_dir_abs/extra-libs/PowerBoxSDK.dll" ]; then
               echo "CRITICAL: PowerBoxSDK.dll missing in extra-libs" >&2
               return 1
             fi
             if [ ! -f "$plugin_dir_abs/extra-libs/MeteoStationSDK.dll" ]; then
               echo "CRITICAL: MeteoStationSDK.dll missing in extra-libs" >&2
+              return 1
+            fi
+            if [ ! -f "$plugin_dir_abs/extra-libs/LensControlSDK.dll" ]; then
+              echo "CRITICAL: LensControlSDK.dll missing in extra-libs" >&2
               return 1
             fi
           }

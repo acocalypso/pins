@@ -1334,6 +1334,26 @@ jobs:
             popd >/dev/null
             rm -rf "$meteostation_sdk_tmp"
 
+            # Build pins.lenscontrol.sdk
+            echo "Building pins.lenscontrol.sdk..."
+            lenscontrol_sdk_tmp="$(mktemp -d)"
+            git clone --recursive https://github.com/nitr57/pins.lenscontrol.sdk "$lenscontrol_sdk_tmp"
+            pushd "$lenscontrol_sdk_tmp" >/dev/null
+            mkdir -p build && cd build
+            cmake ..
+            make
+            mkdir -p "$plugin_dir_abs/extra-libs"
+            echo "Listing build directory contents for pins.lenscontrol.sdk:"
+            ls -l
+            echo "Copying to $plugin_dir_abs/extra-libs/LensControlSDK.dll"
+            find . -name "libLensControlSDK.so" -exec cp {} "$plugin_dir_abs/extra-libs/LensControlSDK.dll" \;
+            if [ ! -f "$plugin_dir_abs/extra-libs/LensControlSDK.dll" ]; then
+              echo "Error: LensControlSDK.dll was not created!"
+              exit 1
+            fi
+            popd >/dev/null
+            rm -rf "$lenscontrol_sdk_tmp"
+
             assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
             if [ ! -f "$assembly_info" ]; then
               assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
@@ -1398,6 +1418,10 @@ jobs:
                   echo "CRITICAL: MeteoStationSDK.dll missing in extra-libs!"
                   exit 1
               fi
+                if [ ! -f "$extra_libs/LensControlSDK.dll" ]; then
+                  echo "CRITICAL: LensControlSDK.dll missing in extra-libs!"
+                  exit 1
+                fi
 
               find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp -v {} "$install_root/" \;
             else
