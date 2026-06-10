@@ -40,7 +40,6 @@ namespace NINA.Equipment.Equipment.MyCamera {
     public class GPCamera : BaseINPC, ICamera, IDisposable {
 
         private readonly IntPtr _context;
-        private readonly IntPtr _portInfo;
         private readonly IntPtr _camera;
 
         private readonly string _name;
@@ -63,47 +62,56 @@ namespace NINA.Equipment.Equipment.MyCamera {
             // Create context
             _context = GpContextNew();
 
-            // Get port info list
+            // Build the camera handle. On any failure, release whatever was already
+            // allocated and throw so the chooser does not list a half-constructed camera.
             IntPtr portInfoList = IntPtr.Zero;
-            if (CheckError(GpPortInfoListNew(ref portInfoList))) {
-                Logger.Error($"Failed to create port info list");
-                return;
-            }
+            try {
+                // Get port info list
+                if (CheckError(GpPortInfoListNew(ref portInfoList))) {
+                    throw new Exception("Failed to create port info list");
+                }
 
-            // Load port list
-            if (CheckError(GpPortInfoListLoad(portInfoList))) {
-                Logger.Error($"Failed to load port list");
-                GpPortInfoListFree(portInfoList);
-                return;
-            }
+                // Load port list
+                if (CheckError(GpPortInfoListLoad(portInfoList))) {
+                    throw new Exception("Failed to load port list");
+                }
 
-            // Look up our path
-            var portNumber = GpPortInfoListLookupPath(portInfoList, _path);
-            if (portNumber < 0) {
-                Logger.Error($"Failed to lookup port path '{_path}': {portNumber}");
-                GpPortInfoListFree(portInfoList);
-                return;
-            }
+                // Look up our path
+                var portNumber = GpPortInfoListLookupPath(portInfoList, _path);
+                if (portNumber < 0) {
+                    throw new Exception($"Failed to lookup port path '{_path}': {portNumber}");
+                }
 
-            // Fetch the corresponding port info
-            if (CheckError(GpPortInfoListGetInfo(portInfoList, portNumber, out _portInfo))) {
-                Logger.Error($"Failed to get port info at index {portNumber}");
-                GpPortInfoListFree(portInfoList);
-                return;
-            }
+                // Fetch the corresponding port info. This points into portInfoList's memory;
+                // gp_camera_set_port_info below copies what it needs, so it is only valid as a
+                // local for the lifetime of portInfoList and must not be stored.
+                if (CheckError(GpPortInfoListGetInfo(portInfoList, portNumber, out var portInfo))) {
+                    throw new Exception($"Failed to get port info at index {portNumber}");
+                }
 
-            // Create camera
-            if (CheckError(GpCameraNew(ref _camera))) {
-                Logger.Error("Failed to create camera");
-                GpPortInfoListFree(portInfoList);
-                return;
-            }
+                // Create camera
+                if (CheckError(GpCameraNew(ref _camera))) {
+                    throw new Exception("Failed to create camera");
+                }
 
-            // Set port info
-            if (CheckError(GpCameraSetPortInfo(_camera, _portInfo))) {
-                Logger.Error($"Failed to set port info");
-                GpPortInfoListFree(portInfoList);
-                return;
+                // Set port info
+                if (CheckError(GpCameraSetPortInfo(_camera, portInfo))) {
+                    throw new Exception("Failed to set port info");
+                }
+            } catch {
+                // Release native resources allocated so far. Mark disposed so the finalizer
+                // does not attempt to free the same handles again.
+                if (_camera != IntPtr.Zero) {
+                    GpCameraFree(_camera);
+                }
+                if (_context != IntPtr.Zero) {
+                    GpContextUnref(_context);
+                }
+                if (portInfoList != IntPtr.Zero) {
+                    GpPortInfoListFree(portInfoList);
+                }
+                _disposed = true;
+                throw;
             }
 
             if (CheckError(GpPortInfoListFree(portInfoList))) {
@@ -200,20 +208,9 @@ namespace NINA.Equipment.Equipment.MyCamera {
 
         public string DriverVersion => GpLibraryVersion();
 
-        public bool CanShowLiveView {
-            get {
-                if (Connected) {
-                    if (GetProperty("viewfinder", out _) == GP_ERROR_CODE.GP_OK) {
-                        return true;
-                    } else if (GetProperty("eosremoterelease", out _) == GP_ERROR_CODE.GP_OK) {
-                        return true;
-                    } else if (GetProperty("liveview", out _) == GP_ERROR_CODE.GP_OK) {
-                        return true;
-                    }
-                }
-                return false;
-            }
-        }
+        // Live view is not implemented yet (StartLiveView/StopLiveView/DownloadLiveView throw).
+        // Always report false so the UI does not offer a button that would throw on click.
+        public bool CanShowLiveView => false;
 
         public string SensorName => string.Empty;
 
@@ -472,8 +469,10 @@ namespace NINA.Equipment.Equipment.MyCamera {
                 }
             }
 
-            // Check if camera is in Manual mode with bulb shutter speed
-            if (!CheckError(GetProperty("shutterspeed", out var shutterspeed), "shutterspeed-get")) {
+            // Check if camera is in Manual mode with bulb shutter speed. Use a plain status
+            // check (not CheckError) so cameras without a 'shutterspeed' widget do not spam
+            // the error log on every call.
+            if (GetProperty("shutterspeed", out var shutterspeed) == GP_ERROR_CODE.GP_OK) {
                 if (shutterspeed.Equals("bulb", StringComparison.OrdinalIgnoreCase)) {
                     return true;
                 }
@@ -790,8 +789,11 @@ namespace NINA.Equipment.Equipment.MyCamera {
                 Logger.Info($"Camera is in bulb mode but exposure time is {exposureTime}s (< 1s). Attempting to set shutter speed.");
                 GetShutterSpeeds();
                 if (!SetExposureTime(exposureTime)) {
-                    Logger.Warning($"Could not set exposure time to {exposureTime}s. Camera may need to be switched from Bulb mode manually.");
-                    Notification.ShowWarning($"Camera is in Bulb mode. For exposures < 1s, please switch to Manual mode or use exposure time >= 1s.");
+                    // If we cannot leave bulb, the timed capture path (gp_camera_capture) would
+                    // block indefinitely waiting for a shutter release it never issues. Fail fast.
+                    Logger.Error($"Could not set exposure time to {exposureTime}s while camera is in Bulb mode.");
+                    Notification.ShowError("Camera is in Bulb mode. For exposures < 1s, switch to Manual mode or use exposure time >= 1s.");
+                    throw new Exception("Cannot take a sub-second exposure while the camera is in Bulb mode");
                 }
             }
         }
@@ -799,6 +801,9 @@ namespace NINA.Equipment.Equipment.MyCamera {
         private Task bulbCompletionTask = null;
         private CancellationTokenSource bulbCompletionCTS = null;
         private bool _currentExposureIsBulb = false;
+        // Guards against releasing the bulb shutter more than once per exposure (the completion
+        // timer, StopExposure and an abort can all reach ReleaseShutter). Reset when pressed.
+        private bool _shutterReleased = true;
 
         public void StartExposure(CaptureSequence sequence) {
             if (downloadExposure?.Task?.Status <= TaskStatus.Running) {
@@ -900,7 +905,10 @@ namespace NINA.Equipment.Equipment.MyCamera {
                         result = GpCameraWaitForEvent(_camera, remainingMs, out eventType, out eventData, _context);
                     }
 
-                    // libgphoto2 heap-allocates eventData for all event types; caller must always free it.
+                    // For FILE_ADDED/FOLDER_ADDED/UNKNOWN, libgphoto2 malloc()s eventData and the
+                    // caller must free() it; for TIMEOUT/CAPTURE_COMPLETE it is NULL. GpFree() no-ops
+                    // on NULL, so freeing unconditionally is safe. Uses libc free(), matching the
+                    // allocator the bundled libgphoto2 was built against.
                     try {
                         if (result == GP_ERROR_CODE.GP_OK && eventType == CameraEventType.GP_EVENT_FILE_ADDED) {
                             try {
@@ -955,6 +963,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
                         return false;
                     }
                     Logger.Debug("libgphoto2: Shutter pressed for bulb exposure");
+                    _shutterReleased = false;
                     return true;
                 } else {
                     Logger.Debug("libgphoto2: Initiating timed exposure");
@@ -999,6 +1008,11 @@ namespace NINA.Equipment.Equipment.MyCamera {
         }
 
         private void ReleaseShutter() {
+            if (_shutterReleased) {
+                Logger.Debug("libgphoto2: Shutter already released, skipping");
+                return;
+            }
+            _shutterReleased = true;
             try {
                 // Use "Release" first; fall back to "Release Full" if unsupported.
                 var releaseResult = SetProperty("eosremoterelease", "Release");
@@ -1279,9 +1293,15 @@ namespace NINA.Equipment.Equipment.MyCamera {
                 return; // Already running
             }
 
-            // Poll every 5 minutes
+            // Poll once per minute
             _batteryPolling = new System.Timers.Timer(TimeSpan.FromMinutes(1));
             _batteryPolling.Elapsed += (sender, e) => {
+                // Skip while an exposure is in progress. Reading camera config mid-capture
+                // (in particular during an open-shutter bulb exposure) can disturb or fail it.
+                var dl = downloadExposure;
+                if (dl != null && !dl.Task.IsCompleted) {
+                    return;
+                }
                 GetBatteryLevel();
             };
             _batteryPolling.AutoReset = true;
