@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -834,13 +834,16 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
         }
 
         public void AbortExposure() {
-            if (CameraInfo.Connected == true) {
-                Cam?.AbortExposure();
-                BroadcastCameraInfo();
-            }
-
+            // Update the exposure state before broadcasting, otherwise consumers (e.g. web clients
+            // fed through broadcast events) keep showing an exposure that was already aborted.
             CameraInfo.IsExposing = false;
             CameraInfo.ExposureEndTime = DateTime.Now;
+
+            if (CameraInfo.Connected == true) {
+                Cam?.AbortExposure();
+            }
+
+            BroadcastCameraInfo();
         }
 
         private void SetGain(int gain) {

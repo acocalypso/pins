@@ -712,7 +712,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
             } catch (Exception ex) {
                 Logger.Error($"Exception in CancelDownloadExposure: {ex.Message}");
             }
-            downloadExposure.TrySetCanceled();
+            downloadExposure?.TrySetCanceled();
         }
 
         public void SetBinning(short x, short y) {
@@ -773,14 +773,13 @@ namespace NINA.Equipment.Equipment.MyCamera {
                 if (exposureTime <= 30.0) {
                     SetExposureTime(exposureTime);
                 } else {
-                    // Need bulb mode for exposures > 30s
-                    // Try to set shutterspeed to "bulb"
-                    Logger.Info($"Exposure time {exposureTime}s > 30s, attempting to set shutter speed to bulb");
-                    if (CheckError(SetProperty("shutterspeed", "bulb"), "shutterspeed-bulb")) {
-                        Notification.ShowError("Camera must be set to BULB mode for exposures > 30s. Please set shutterspeed to 'bulb' manually.");
-                        Logger.Error("Could not set shutterspeed to bulb for long exposure");
-                        throw new Exception("Invalid camera mode [Manual] for taking bulb exposures");
-                    }
+                    // Exposures > 30s need the camera's bulb mode. Writing shutterspeed=bulb is not
+                    // reliable: e.g. a Canon 5D Mark IV accepts the write and even reads back 'bulb',
+                    // yet still exposes only 30s because bulb is only reachable via the mode dial.
+                    // Refuse to expose instead of capturing a truncated frame.
+                    Notification.ShowError("For exposures > 30s, please switch the camera to BULB mode manually.");
+                    Logger.Error($"Exposure time {exposureTime}s > 30s requested while camera is in Manual mode; the camera must be switched to BULB mode manually");
+                    throw new Exception("Camera requires manual BULB mode for exposures > 30s");
                 }
             }
 
@@ -811,12 +810,16 @@ namespace NINA.Equipment.Equipment.MyCamera {
                 CancelDownloadExposure();
             }
 
-            downloadExposure = new TaskCompletionSource<object>();
             var exposureTime = sequence.ExposureTime;
+
+            // Validate before any exposure state is touched: if this throws, no exposure has
+            // started and a subsequent AbortExposure must find the camera idle instead of
+            // releasing the shutter and hunting for a file event that will never come.
+            ValidateModeForExposure(exposureTime);
+
+            downloadExposure = new TaskCompletionSource<object>();
             bool useBulb = (IsManualMode() && exposureTime > 30.0) || (IsBulbMode() && exposureTime >= 1.0);
             _currentExposureIsBulb = useBulb;
-
-            ValidateModeForExposure(exposureTime);
 
             // Set exposure time first if not using bulb mode
             if (!useBulb) {
