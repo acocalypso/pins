@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.37 - 2026-06-10
+### Fixed
+- LibRaw: Reverted from hardcoded struct offsets to libraw C API (libraw_raw2image, libraw_get_iwidth, libraw_get_iheight) for improved compatibility with system-installed libraw versions
+- LibRaw: Fixed pixel layout handling for correct CFA sample extraction from multi-channel output
+- libgphoto2: Wrapped constructor initialization in try-catch with proper cleanup; failures now throw instead of silently returning half-initialized cameras
+- libgphoto2: Fixed unreliable shutterspeed property write for bulb mode; now refuses captures > 30s in Manual mode instead of truncating
+- libgphoto2: Added shutter release guard to prevent multiple releases per bulb exposure
+- libgphoto2: Added error checks for abilities list load/creation; gracefully skips device-type filtering if unavailable
+- libgphoto2: Disabled CanShowLiveView (feature not implemented); property checks were unreliable
+- libgphoto2: Use plain status checks instead of logging errors for optional properties like shutterspeed
+- libgphoto2: Skip battery polling during active exposures to avoid disturbing captures
+- libgphoto2: Fixed gp_port_info_list_lookup_path P/Invoke marshaling to use [MarshalAs(UnmanagedType.LPStr)] string
+- libgphoto2: Catch per-camera initialization failures individually instead of aborting all enumeration
+- Camera: AbortExposure now updates exposure state before broadcasting to ensure consumers see correct state
+
 ## 1.1.36 - 2026-06-09
 ### Fixed
 - Fixed non-motorized INDI Flat panels
