@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -239,17 +239,6 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                     }
                 }
 
-                /* INDIGO camera */
-                /*                try {
-                                    var indigoInteraction = new INDIGOInteraction(profileService);
-                                    var indigoCameras = indigoInteraction.GetCameras(exposureDataFactory);
-                                    devices.AddRange(indigoCameras);
-                                    Logger.Info($"Found {indigoCameras?.Count} INDIGO Cameras");
-                                } catch (Exception ex) {
-                                    Logger.Error(ex);
-                                }
-                */
-
                 /* Alpaca */
                 try {
                     var alpacaInteraction = new AlpacaInteraction(profileService);
@@ -267,7 +256,11 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                     var gpCameras = GPSDK.GPSDK.Enum();
                     Logger.Info($"Found {gpCameras.Count} libgphoto2 Cameras");
                     foreach (var cam in gpCameras) {
-                        devices.Add(new GPCamera(cam.Key, cam.Value, profileService, exposureDataFactory));
+                        try {
+                            devices.Add(new GPCamera(cam.Key, cam.Value, profileService, exposureDataFactory));
+                        } catch (Exception ex) {
+                            Logger.Error($"Failed to initialize libgphoto2 camera '{cam.Key}': {ex.Message}");
+                        }
                     }
                 } catch (Exception ex) {
                     Logger.Error(ex);

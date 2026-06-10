@@ -27,17 +27,18 @@ namespace NINA.Image.RawConverter {
     internal class LibRawConverter : IRawConverter {
         private const string LibRawDllName = "libraw.so";
 
-        // These offsets read LibRaw structs directly because not every needed field has a stable C getter.
-        // Keep them in sync with the bundled DLL and LibRaw 0.22.1's public libraw/libraw_types.h:
-        // https://github.com/LibRaw/LibRaw/blob/0.22.1/libraw/libraw_types.h
-        // LibRaw 0.22.1 source release: https://www.libraw.org/download
+        // Unlike upstream N.I.N.A., which pins a bundled libraw_0_22_1.dll and reads rawdata.raw_image
+        // through offsets valid only for that exact build, this converter may end up loading whatever
+        // system libraw is installed (DllLoader falls back to LD_LIBRARY_PATH). It therefore relies only
+        // on layout guarantees that hold across LibRaw releases:
+        // - imgdata.image is the first member of libraw_data_t (offset 0), filled by libraw_raw2image
+        // - the offsets below index the libraw_iparams_t returned by the libraw_get_iparams C getter;
+        //   that layout is unchanged since LibRaw 0.20: https://github.com/LibRaw/LibRaw/blob/0.22.1/libraw/libraw_types.h
         // LibRaw iparams field semantics: https://www.libraw.org/docs/API-datastruct.html
-        private const int ImageSizesOffset = 8;
-        private const int RawDataOffset = 193768;
-        private const int RawImageOffset = 8;
         private const int ImageParamsColorsOffset = 340;
         private const int ImageParamsFiltersOffset = 344;
         private const int ImageParamsColorDescriptionOffset = 420;
+        private const int ImageChannelCount = 4;
         private const uint LeafCatchlightFilters = 1;
         private const uint XTransFilters = 9;
 
@@ -107,21 +108,31 @@ namespace NINA.Image.RawConverter {
         }
 
         private IImageData CreateImageData(IntPtr processor, byte[] rawBytes, string rawType, int bitDepth, bool bitScaling, ImageMetaData metaData) {
-            var sizes = Marshal.PtrToStructure<LibRawImageSizes>(IntPtr.Add(processor, ImageSizesOffset));
-            var frame = GetActiveFrame(sizes);
+            ThrowIfError(LibRawNative.Raw2Image(processor), "LibRaw raw2image");
 
-            var rawImage = ReadRawDataPointer(processor, RawImageOffset);
-            if (rawImage != IntPtr.Zero) {
-                var copiedFrame = CopyUshortFrame(rawImage, frame, bitDepth, bitScaling);
-                if (copiedFrame.EffectiveBitDepth != bitDepth) {
-                    Logger.Warning($"LibRaw RAW bit depth setting {bitDepth} adjusted to {copiedFrame.EffectiveBitDepth}; maximum unpacked pixel value is {copiedFrame.MaxPixelValue}.");
-                }
-
-                ApplyBayerPatternMetadata(processor, metaData);
-                return CreateImageData(copiedFrame.Pixels, rawBytes, rawType, frame.Width, frame.Height, copiedFrame.OutputBitDepth, metaData);
+            var width = LibRawNative.GetIWidth(processor);
+            var height = LibRawNative.GetIHeight(processor);
+            if (width <= 0 || height <= 0) {
+                throw new InvalidOperationException("LibRaw returned invalid RAW image dimensions.");
             }
 
-            throw new NotSupportedException("LibRaw did not return an unpacked CFA RAW image buffer.");
+            // raw2image fills imgdata.image with the visible area (margins already cropped) as 4 ushort
+            // channel slots per pixel of which only the pixel's CFA channel is populated.
+            var image = Marshal.ReadIntPtr(processor, 0);
+            if (image == IntPtr.Zero) {
+                throw new NotSupportedException("LibRaw did not return an unpacked RAW image buffer.");
+            }
+
+            var frame = new ActiveFrame(left: 0, top: 0, width: width, height: height, rowStride: width, pixelStride: ImageChannelCount);
+            var copiedFrame = CopyUshortFrame(image, frame, bitDepth, bitScaling);
+            LibRawNative.FreeImage(processor);
+
+            if (copiedFrame.EffectiveBitDepth != bitDepth) {
+                Logger.Warning($"LibRaw RAW bit depth setting {bitDepth} adjusted to {copiedFrame.EffectiveBitDepth}; maximum unpacked pixel value is {copiedFrame.MaxPixelValue}.");
+            }
+
+            ApplyBayerPatternMetadata(processor, metaData);
+            return CreateImageData(copiedFrame.Pixels, rawBytes, rawType, frame.Width, frame.Height, copiedFrame.OutputBitDepth, metaData);
         }
 
         private IImageData CreateImageData(ushort[] pixels, byte[] rawBytes, string rawType, int width, int height, int bitDepth, ImageMetaData metaData) {
@@ -133,25 +144,6 @@ namespace NINA.Image.RawConverter {
                 bitDepth: bitDepth,
                 isBayered: true,
                 metaData: metaData);
-        }
-
-        private static ActiveFrame GetActiveFrame(LibRawImageSizes sizes) {
-            var sourceWidth = sizes.RawWidth;
-            var sourceHeight = sizes.RawHeight;
-            var rowStride = sizes.RawPitch > 0 ? Math.Max(sourceWidth, (int)sizes.RawPitch / sizeof(ushort)) : sourceWidth;
-            var width = FirstPositive(sizes.Width, sizes.IWidth, sourceWidth);
-            var height = FirstPositive(sizes.Height, sizes.IHeight, sourceHeight);
-            var left = Math.Min(sizes.LeftMargin, rowStride);
-            var top = Math.Min(sizes.TopMargin, sourceHeight);
-
-            width = Math.Min(width, rowStride - left);
-            height = Math.Min(height, sourceHeight - top);
-
-            if (width <= 0 || height <= 0 || rowStride <= 0) {
-                throw new InvalidOperationException("LibRaw returned invalid RAW image dimensions.");
-            }
-
-            return new ActiveFrame(left, top, width, height, rowStride);
         }
 
         private static void ApplyBayerPatternMetadata(IntPtr processor, ImageMetaData metaData) {
@@ -239,20 +231,6 @@ namespace NINA.Image.RawConverter {
             return bitDepth >= 16 ? ushort.MaxValue : (ushort)((1 << bitDepth) - 1);
         }
 
-        private static int FirstPositive(params ushort[] values) {
-            foreach (var value in values) {
-                if (value > 0) {
-                    return value;
-                }
-            }
-
-            return 0;
-        }
-
-        private static IntPtr ReadRawDataPointer(IntPtr processor, int rawDataFieldOffset) {
-            return Marshal.ReadIntPtr(processor, RawDataOffset + rawDataFieldOffset);
-        }
-
         private static void ThrowIfError(int result, string operation) {
             if (result == 0) {
                 return;
@@ -277,10 +255,18 @@ namespace NINA.Image.RawConverter {
 
             fixed (ushort* destination = pixels) {
                 for (var y = 0; y < frame.Height; y++) {
-                    var sourceRow = source + ((frame.Top + y) * frame.RowStride) + frame.Left;
+                    var sourceRow = source + ((long)(frame.Top + y) * frame.RowStride + frame.Left) * frame.PixelStride;
                     var destinationRow = destination + (y * frame.Width);
                     for (var x = 0; x < frame.Width; x++) {
-                        var value = sourceRow[x];
+                        // Only one channel slot per pixel carries the CFA sample, the others stay zero,
+                        // so the maximum across the slots recovers the mosaiced value.
+                        var sourcePixel = sourceRow + ((long)x * frame.PixelStride);
+                        var value = sourcePixel[0];
+                        for (var channel = 1; channel < frame.PixelStride; channel++) {
+                            if (sourcePixel[channel] > value) {
+                                value = sourcePixel[channel];
+                            }
+                        }
                         if (value > maxPixelValue) {
                             maxPixelValue = value;
                         }
@@ -313,43 +299,18 @@ namespace NINA.Image.RawConverter {
             }
         }
 
-        [StructLayout(LayoutKind.Explicit, Size = 184)]
-        private struct LibRawImageSizes {
-            [FieldOffset(0)]
-            public ushort RawHeight;
-
-            [FieldOffset(2)]
-            public ushort RawWidth;
-
-            [FieldOffset(4)]
-            public ushort Height;
-
-            [FieldOffset(6)]
-            public ushort Width;
-
-            [FieldOffset(8)]
-            public ushort TopMargin;
-
-            [FieldOffset(10)]
-            public ushort LeftMargin;
-
-            [FieldOffset(12)]
-            public ushort IHeight;
-
-            [FieldOffset(14)]
-            public ushort IWidth;
-
-            [FieldOffset(16)]
-            public uint RawPitch;
-        }
-
         private readonly struct ActiveFrame {
-            public ActiveFrame(int left, int top, int width, int height, int rowStride) {
+            public ActiveFrame(int left, int top, int width, int height, int rowStride)
+                : this(left, top, width, height, rowStride, 1) {
+            }
+
+            public ActiveFrame(int left, int top, int width, int height, int rowStride, int pixelStride) {
                 Left = left;
                 Top = top;
                 Width = width;
                 Height = height;
                 RowStride = rowStride;
+                PixelStride = pixelStride;
             }
 
             public int Left { get; }
@@ -357,6 +318,9 @@ namespace NINA.Image.RawConverter {
             public int Width { get; }
             public int Height { get; }
             public int RowStride { get; }
+
+            // Number of ushort slots per pixel; 4 for libraw's imgdata.image channel layout.
+            public int PixelStride { get; }
         }
 
         private readonly struct CopiedFrame {
@@ -386,6 +350,18 @@ namespace NINA.Image.RawConverter {
 
             [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_unpack")]
             public static extern int Unpack(IntPtr processor);
+
+            [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_raw2image")]
+            public static extern int Raw2Image(IntPtr processor);
+
+            [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_free_image")]
+            public static extern void FreeImage(IntPtr processor);
+
+            [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_get_iwidth")]
+            public static extern int GetIWidth(IntPtr processor);
+
+            [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_get_iheight")]
+            public static extern int GetIHeight(IntPtr processor);
 
             [DllImport(LibRawDllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "libraw_get_iparams")]
             public static extern IntPtr GetImageParams(IntPtr processor);

@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Security;
-using System.Text;
 
 namespace GPSDK {
 
@@ -80,10 +79,18 @@ namespace GPSDK {
                 return devices;
             }
 
-            // Load abilities list once (contains all camera models gphoto2 knows about)
+            // Load abilities list once (contains all camera models gphoto2 knows about).
+            // If this fails, the device-type filter below is skipped and every detected
+            // device is returned.
             IntPtr abilitiesList = IntPtr.Zero;
-            GpAbilitiesListNew(ref abilitiesList);
-            GpAbilitiesListLoad(abilitiesList, ctx);
+            if (GpAbilitiesListNew(ref abilitiesList) != GP_ERROR_CODE.GP_OK) {
+                Logger.Warning("Could not create abilities list; skipping device-type filtering");
+                abilitiesList = IntPtr.Zero;
+            } else if (GpAbilitiesListLoad(abilitiesList, ctx) != GP_ERROR_CODE.GP_OK) {
+                Logger.Warning("Could not load abilities list; skipping device-type filtering");
+                GpAbilitiesListFree(abilitiesList);
+                abilitiesList = IntPtr.Zero;
+            }
 
             // Fetch number of items
             for (int i = 0; i < count; i++) {
@@ -94,14 +101,16 @@ namespace GPSDK {
                 GpListGetValue(list, i, out path);
 
                 // Look up this specific camera model in the abilities list by name
-                int abilityIdx = GpAbilitiesListLookupModel(abilitiesList, name);
-                if (abilityIdx >= 0) {
-                    CameraAbilities abilities = new();
-                    GpAbilitiesListGetAbilities(abilitiesList, abilityIdx, out abilities);
+                if (abilitiesList != IntPtr.Zero) {
+                    int abilityIdx = GpAbilitiesListLookupModel(abilitiesList, name);
+                    if (abilityIdx >= 0) {
+                        CameraAbilities abilities = new();
+                        GpAbilitiesListGetAbilities(abilitiesList, abilityIdx, out abilities);
 
-                    // Skip non-still-camera devices (e.g. audio players)
-                    if (abilities.device_type != GphotoDeviceType.GP_DEVICE_STILL_CAMERA) {
-                        continue;
+                        // Skip non-still-camera devices (e.g. audio players)
+                        if (abilities.device_type != GphotoDeviceType.GP_DEVICE_STILL_CAMERA) {
+                            continue;
+                        }
                     }
                 }
 
@@ -110,7 +119,9 @@ namespace GPSDK {
             }
 
             // Clean up
-            GpAbilitiesListFree(abilitiesList);
+            if (abilitiesList != IntPtr.Zero) {
+                GpAbilitiesListFree(abilitiesList);
+            }
             GpListFree(list);
             GpContextUnref(ctx);
 
@@ -540,8 +551,7 @@ namespace GPSDK {
 
         [SecurityCritical]
         public static int GpPortInfoListLookupPath(IntPtr list, string path) {
-            byte[] pathArray = Encoding.ASCII.GetBytes(path);
-            return gp_port_info_list_lookup_path(list, Array.ConvertAll(pathArray, x => Convert.ToByte(x)));
+            return gp_port_info_list_lookup_path(list, path);
         }
 
         [SecurityCritical]
@@ -714,7 +724,7 @@ namespace GPSDK {
         private static extern int gp_port_info_list_load(IntPtr list);
 
         [DllImport(GPHOTO2PORT, EntryPoint = "gp_port_info_list_lookup_path", CallingConvention = CallingConvention.Cdecl)]
-        private static extern int gp_port_info_list_lookup_path(IntPtr list, [In] byte[] path);
+        private static extern int gp_port_info_list_lookup_path(IntPtr list, [MarshalAs(UnmanagedType.LPStr)] string path);
 
         [DllImport(GPHOTO2PORT, EntryPoint = "gp_port_info_list_get_info", CallingConvention = CallingConvention.Cdecl)]
         private static extern int gp_port_info_list_get_info(IntPtr list, int index, out IntPtr info);
