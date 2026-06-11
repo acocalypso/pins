@@ -385,10 +385,19 @@ namespace NINA.INDI.Devices {
             }
             set {
                 try {
-                    // Set UTC time via TIME_UTC property in ISO 8601 format
+                    // UTC and OFFSET must be sent together in ONE vector update.
+                    // INDI drivers (e.g. indi_lx200am5 for the ZWO AM5) apply the whole
+                    // TIME_UTC vector atomically. If only UTC is written, the cached OFFSET
+                    // (0 after mount power-on — the AM5 has no RTC) is re-sent, the mount
+                    // computes a wrong Local Sidereal Time and every GOTO fails.
+                    //
+                    // INDI convention: OFFSET = hours EAST of UTC (e.g. +2 for CEST).
+                    // The LX200 sign inversion is handled inside the driver.
                     var utcString = value.ToString("yyyy-MM-ddTHH:mm:ss");
-                    SetTextValue("TIME_UTC", "UTC", utcString);
-                    Logger.Debug($"Set mount UTC time to {utcString}");
+                    var utcOffsetHours = TimeZoneInfo.Local.GetUtcOffset(value).TotalHours;
+                    var offsetString = utcOffsetHours.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                    SetTextValues("TIME_UTC", ("UTC", utcString), ("OFFSET", offsetString));
+                    Logger.Debug($"Set mount UTC time to {utcString}, UTC offset to {offsetString}h");
                 } catch (Exception ex) {
                     Logger.Error($"Could not set TIME_UTC: {ex.Message}");
                     throw;
