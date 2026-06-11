@@ -82,6 +82,7 @@ namespace NINA.Profile {
 
             zwoAsiMonoBinMode = false;
 
+            indiDriver = "None";
         }
 
         private string id;
@@ -816,6 +817,22 @@ namespace NINA.Profile {
             set {
                 if (touptekAlikeLEDLights != value) {
                     touptekAlikeLEDLights = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        #endregion
+
+        #region INDI
+
+        private string indiDriver;
+        [DataMember]
+        public string IndiDriver {
+            get => indiDriver;
+            set {
+                if (indiDriver != value) {
+                    indiDriver = value;
                     RaisePropertyChanged();
                 }
             }

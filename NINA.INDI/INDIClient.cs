@@ -412,13 +412,23 @@ namespace NINA.INDI {
             }
         }
 
+        /// <summary>
+        /// Enumerates devices for the given interface, loading <paramref name="driver"/> if needed.
+        /// Note: only ONE driver is tracked per <paramref name="deviceTypeCategory"/> — requesting a
+        /// different driver for the same category evicts (unloads) the previously loaded one. Two
+        /// devices of the same category served by different drivers cannot be connected concurrently.
+        /// </summary>
         public async Task<IReadOnlyList<INDIDeviceInfo>> GetDevices(DeviceInterface deviceInterface, string driver, string deviceTypeCategory = null, CancellationToken ct = default) {
+            // Wait (bounded) for the server to be ready before proceeding. A missing or
+            // broken INDI server must not hang device enumeration indefinitely.
+            if (!await WaitForServerReadyAsync(TimeSpan.FromSeconds(15), ct)) {
+                Logger.Debug($"INDI server not ready - skipping {deviceTypeCategory ?? deviceInterface.ToString()} enumeration");
+                return [];
+            }
+
             // Serialize GetDevices calls to prevent concurrent driver load/unload operations
             await _getDriversSemaphore.WaitAsync(ct);
             try {
-                // Wait for the server to be ready before proceeding
-                await _serverReadyTcs.Task;
-
                 // Device list
                 var devices = new Dictionary<string, INDIDeviceInfo>();
 
@@ -456,12 +466,16 @@ namespace NINA.INDI {
                         }
                     }
 
-                    // Fetch all discovered devices
-                    foreach (var dev in _discoveredDevices) {
-                        if ((dev.Value.Interface & deviceInterface) != 0) {
-                            if (!devices.ContainsKey(dev.Key)) {
-                                Logger.Info($"Found device {dev.Key}");
-                                devices.Add(dev.Key, dev.Value);
+                    // Fetch all discovered devices. Hold _driverLock while enumerating —
+                    // the reader thread adds (DRIVER_INFO) and removes (device-level
+                    // delProperty) entries under the same lock.
+                    lock (_driverLock) {
+                        foreach (var dev in _discoveredDevices) {
+                            if ((dev.Value.Interface & deviceInterface) != 0) {
+                                if (!devices.ContainsKey(dev.Key)) {
+                                    Logger.Info($"Found device {dev.Key}");
+                                    devices.Add(dev.Key, dev.Value);
+                                }
                             }
                         }
                     }
@@ -836,7 +850,20 @@ namespace NINA.INDI {
                             break;
                         }
                     case "delProperty": {
-                            if (_registeredDevices.TryGetValue(deviceName, out var delDevices)) {
+                            // Per the INDI spec, a delProperty without a name attribute deletes the
+                            // ENTIRE device (e.g. a hot-unplugged camera, or a driver shutting down).
+                            // Drop it from discovery so rescans don't keep listing stale devices.
+                            if (string.IsNullOrEmpty(propertyName)) {
+                                lock (_driverLock) {
+                                    if (_discoveredDevices.Remove(deviceName)) {
+                                        Logger.Info($"Device '{deviceName}' was deleted by its driver - removed from discovered devices");
+                                    }
+                                }
+                                if (_registeredDevices.TryGetValue(deviceName, out var deletedDevices)) {
+                                    foreach (var deviceInstance in deletedDevices)
+                                        deviceInstance.RemoveAllProperties();
+                                }
+                            } else if (_registeredDevices.TryGetValue(deviceName, out var delDevices)) {
                                 foreach (var deviceInstance in delDevices)
                                     deviceInstance.RemoveProperty(propertyName);
                             }

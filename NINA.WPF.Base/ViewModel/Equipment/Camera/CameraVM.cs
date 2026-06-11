@@ -939,7 +939,12 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
 
         public void SetSubSambleRectangle(ObservableRectangle observableRectangle) {
             SetSubSampleArea((int)observableRectangle.X, (int)observableRectangle.Y, (int)observableRectangle.Width, (int)observableRectangle.Height);
-            Cam.UpdateSubSampleArea();
+            try {
+                Cam.UpdateSubSampleArea();
+            } catch (NotImplementedException) {
+                // Most cameras apply the sub sample area at exposure start and do not
+                // support pushing an updated region to the device immediately.
+            }
         }
 
         public bool AtTargetTemp => Math.Abs(cameraInfo.Temperature - TargetTemp) <= 2;

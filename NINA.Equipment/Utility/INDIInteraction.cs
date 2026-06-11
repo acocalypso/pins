@@ -16,11 +16,11 @@ using NINA.INDI;
 using NINA.INDI.Devices;
 using NINA.INDI.Enums;
 using NINA.Equipment.Equipment.MyFocuser;
+using NINA.Equipment.Equipment.MyCamera;
 using NINA.Equipment.Interfaces;
 using NINA.Image.Interfaces;
 using NINA.Profile.Interfaces;
 using System;
-using NINA.Core.Utility;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NINA.Equipment.Equipment.MyTelescope;
@@ -37,17 +37,24 @@ namespace NINA.Equipment.Utility {
     public class INDIInteraction(IProfileService profileService) {
         private readonly IProfileService profileService = profileService;
 
-        public List<ICamera> GetCameras(IExposureDataFactory exposureDataFactory) {
+        // Server readiness is awaited (bounded) inside INDIClient.GetDevices, so the
+        // enumeration methods below can call it directly.
+
+        public async Task<List<ICamera>> GetCameras(IExposureDataFactory exposureDataFactory, IImageDataFactory imageDataFactory) {
             var l = new List<ICamera>();
+
+            // Fetch the INDI driver that is supposed to be used from profile
+            string driver = profileService.ActiveProfile.CameraSettings.IndiDriver;
+
+            // Query devices for this driver
+            foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.CCD_INTERFACE, driver, "Camera")) {
+                l.Add(new IndiCamera(device, profileService, exposureDataFactory, imageDataFactory));
+            }
             return l;
         }
 
         public async Task<List<IFocuser>> GetFocusers() {
             var l = new List<IFocuser>();
-            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI focuser enumeration");
-                return l;
-            }
 
             // Fetch the INDI driver that is supposed to be used from profile
             string driver = profileService.ActiveProfile.FocuserSettings.IndiDriver;
@@ -62,10 +69,6 @@ namespace NINA.Equipment.Utility {
 
         public async Task<List<ITelescope>> GetTelescopes() {
             var l = new List<ITelescope>();
-            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI telescope enumeration");
-                return l;
-            }
 
             // Fetch the INDI driver that is supposed to be used from profile
             string driver = profileService.ActiveProfile.TelescopeSettings.IndiDriver;
@@ -80,10 +83,6 @@ namespace NINA.Equipment.Utility {
 
         public async Task<List<IRotator>> GetRotators() {
             var l = new List<IRotator>();
-            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI rotator enumeration");
-                return l;
-            }
 
             // Fetch the INDI driver that is supposed to be used from profile
             string driver = profileService.ActiveProfile.RotatorSettings.IndiDriver;
@@ -98,10 +97,6 @@ namespace NINA.Equipment.Utility {
 
         public async Task<List<IFilterWheel>> GetFilterWheels() {
             var l = new List<IFilterWheel>();
-            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI filterwheel enumeration");
-                return l;
-            }
 
             // Fetch the INDI driver that is supposed to be used from profile
             string driver = profileService.ActiveProfile.FilterWheelSettings.IndiDriver;
@@ -116,10 +111,6 @@ namespace NINA.Equipment.Utility {
 
         public async Task<List<IFlatDevice>> GetFlatDevices() {
             var l = new List<IFlatDevice>();
-            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI flat device enumeration");
-                return l;
-            }
 
             // Fetch the INDI driver that is supposed to be used from profile
             string driver = profileService.ActiveProfile.FlatDeviceSettings.IndiDriver;
@@ -134,10 +125,6 @@ namespace NINA.Equipment.Utility {
 
         public async Task<List<IWeatherData>> GetWeatherData() {
             var l = new List<IWeatherData>();
-            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI weather data enumeration");
-                return l;
-            }
 
             // Fetch the INDI driver that is supposed to be used from profile
             string driver = profileService.ActiveProfile.WeatherDataSettings.IndiDriver;
@@ -152,13 +139,11 @@ namespace NINA.Equipment.Utility {
 
         public async Task<List<ISwitchHub>> GetSwitches() {
             var l = new List<ISwitchHub>();
-            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI switch hub enumeration");
-                return l;
-            }
 
+            // Fetch the INDI driver that is supposed to be used from profile
             string driver = profileService.ActiveProfile.SwitchSettings.IndiDriver;
 
+            // Query devices for this driver
             foreach (var device in await INDIClient.Instance.GetDevices(DeviceInterface.AUX_INTERFACE, driver, "Switch")) {
                 l.Add(new IndiSwitchHub(device, profileService));
             }
@@ -167,10 +152,6 @@ namespace NINA.Equipment.Utility {
 
         public async Task<List<ISafetyMonitor>> GetSafetyMonitors() {
             var l = new List<ISafetyMonitor>();
-            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI safety monitor enumeration");
-                return l;
-            }
 
             // Fetch the INDI driver that is supposed to be used from profile
             string driver = profileService.ActiveProfile.SafetyMonitorSettings.IndiDriver;
@@ -185,10 +166,6 @@ namespace NINA.Equipment.Utility {
 
         public async Task<List<IDome>> GetDomes() {
             var l = new List<IDome>();
-            if (!await INDIClient.Instance.WaitForServerReadyAsync(TimeSpan.FromSeconds(15))) {
-                Logger.Debug("INDI server not ready - skipping INDI dome enumeration");
-                return l;
-            }
 
             // Fetch the INDI driver that is supposed to be used from profile
             string driver = profileService.ActiveProfile.DomeSettings.IndiDriver;

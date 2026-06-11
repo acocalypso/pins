@@ -239,6 +239,16 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Camera {
                     }
                 }
 
+                /* INDI cameras */
+                try {
+                    var indiInteraction = new INDIInteraction(profileService);
+                    var indiCameras = await indiInteraction.GetCameras(exposureDataFactory, imageDataFactory);
+                    devices.AddRange(indiCameras);
+                    Logger.Info($"Found {indiCameras.Count} INDI Cameras");
+                } catch (Exception ex) {
+                    Logger.Error(ex);
+                }
+
                 /* Alpaca */
                 try {
                     var alpacaInteraction = new AlpacaInteraction(profileService);
