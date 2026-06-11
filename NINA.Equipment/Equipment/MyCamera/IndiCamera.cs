@@ -72,12 +72,15 @@ namespace NINA.Equipment.Equipment.MyCamera {
             _subSampleWidth = device.CameraXSize;
             _subSampleHeight = device.CameraYSize;
 
-            // Apply toupbase-specific profile settings if the driver exposes them.
-            // Mirrors what ToupTekAlikeCamera does in its Connect() method.
+            // Apply toupbase-specific profile settings. These switches may not have arrived
+            // yet when PostConnect runs — QueueProfileSwitch applies immediately if present,
+            // or defers until the switch's defSwitchVector arrives.
+            // Property names must match exactly what the toupbase INDI driver sends:
+            // TC_HIGHFULLWELL and TC_TAILLIGHT have no internal underscore.
             var s = profileService.ActiveProfile.CameraSettings;
-            if (device.HasLowNoiseMode) device.LowNoiseMode = s.TouptekAlikeUltraMode;
-            if (device.HasHighFullwell) device.HighFullwellMode = s.TouptekAlikeHighFullwell;
-            if (device.HasTailLight) device.TailLight = s.TouptekAlikeLEDLights;
+            device.QueueProfileSwitch("TC_LOW_NOISE", s.TouptekAlikeUltraMode);
+            device.QueueProfileSwitch("TC_HIGHFULLWELL", s.TouptekAlikeHighFullwell);
+            device.QueueProfileSwitch("TC_TAILLIGHT", s.TouptekAlikeLEDLights);
 
             return Task.CompletedTask;
         }
@@ -165,7 +168,9 @@ namespace NINA.Equipment.Equipment.MyCamera {
         public bool HasLowNoiseMode => GetProperty(nameof(IINDICamera.HasLowNoiseMode), false);
 
         public bool LowNoiseMode {
-            get => GetProperty(nameof(IINDICamera.LowNoiseMode), false);
+            // Profile is the source of truth — applied at PostConnect and saved on every
+            // toggle, so it stays in sync even before the INDI echo updates the property cache.
+            get => ShouldBeConnected && profileService.ActiveProfile.CameraSettings.TouptekAlikeUltraMode;
             set {
                 if (ShouldBeConnected && HasLowNoiseMode) {
                     SetProperty(nameof(IINDICamera.LowNoiseMode), value);
@@ -177,7 +182,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
         public bool HasHighFullwell => GetProperty(nameof(IINDICamera.HasHighFullwell), false);
 
         public bool HighFullwellMode {
-            get => GetProperty(nameof(IINDICamera.HighFullwellMode), false);
+            get => ShouldBeConnected && profileService.ActiveProfile.CameraSettings.TouptekAlikeHighFullwell;
             set {
                 if (ShouldBeConnected && HasHighFullwell) {
                     SetProperty(nameof(IINDICamera.HighFullwellMode), value);
@@ -189,7 +194,7 @@ namespace NINA.Equipment.Equipment.MyCamera {
         public bool CanSetLEDLights => GetProperty(nameof(IINDICamera.HasTailLight), false);
 
         public bool LEDLights {
-            get => GetProperty(nameof(IINDICamera.TailLight), false);
+            get => ShouldBeConnected && profileService.ActiveProfile.CameraSettings.TouptekAlikeLEDLights;
             set {
                 if (ShouldBeConnected && CanSetLEDLights) {
                     SetProperty(nameof(IINDICamera.TailLight), value);

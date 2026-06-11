@@ -160,6 +160,16 @@ namespace NINA.INDI.Devices {
             GetNumberProperty("GUIDE_RATE") is { } p &&
             p.Permission != PropertyPermission.ReadOnly;
 
+        /// <summary>
+        /// Returns true only when the driver exposes HORIZONTAL_COORD as writable (rw/wo).
+        /// Many mounts (e.g. EQMod and most GEMs) report HORIZONTAL_COORD read-only - they
+        /// publish the current alt/az but reject gotos through it. Reporting false here lets
+        /// callers fall back to an equatorial slew, which those mounts do accept.
+        /// </summary>
+        public bool CanSlewAltAz =>
+            GetNumberProperty("HORIZONTAL_COORD") is { } p &&
+            p.Permission != PropertyPermission.ReadOnly;
+
         public double GuideRateDeclination {
             get {
                 var val = GetNumberPropertyValue("GUIDE_RATE", "GUIDE_RATE_NS");

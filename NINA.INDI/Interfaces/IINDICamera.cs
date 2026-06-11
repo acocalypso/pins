@@ -64,6 +64,7 @@ namespace NINA.INDI.Interfaces {
         string[] ReadoutModes { get; }
         short ReadoutMode { get; set; }
 
+        void QueueProfileSwitch(string propertyName, bool enable);
         void SetBinning(short x, short y);
         void StartExposure(double exposureTime, short binX, short binY, bool enableSubSample, int subSampleX, int subSampleY, int subSampleWidth, int subSampleHeight, int gain, int offset);
         Task WaitUntilExposureIsReady(CancellationToken token);

@@ -17,6 +17,7 @@ using NINA.INDI.Enums;
 using NINA.INDI.Interfaces;
 using NINA.INDI.Protocol;
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -33,6 +34,12 @@ namespace NINA.INDI.Devices {
         private string _lastBlobFormat;
         private double _temperatureSetPoint = double.NaN;
         private bool _coolerOn;
+
+        // Profile values to apply the first time each switch property arrives.
+        // Populated by IndiCamera.PostConnect() before properties are guaranteed
+        // to have arrived; applied (and removed) in OnSwitchPropertyUpdated on
+        // first receipt of the matching defSwitchVector/setSwitchVector.
+        private readonly ConcurrentDictionary<string, bool> _pendingProfileSwitches = new();
 
         public INDICamera(INDIDeviceInfo device) : base(device) {
         }
@@ -56,14 +63,37 @@ namespace NINA.INDI.Devices {
             }
         }
 
+        /// <summary>
+        /// Queue a profile-backed switch value to be applied when the named INDI
+        /// switch property first arrives from the driver. If the property is already
+        /// present in the cache the value is applied immediately instead.
+        /// </summary>
+        public void QueueProfileSwitch(string propertyName, bool enable) {
+            if (GetSwitchProperty(propertyName) != null) {
+                Logger.Debug($"[{DeviceName}] Applying profile switch {propertyName}={enable} immediately (already present)");
+                SetIndiEnabled(propertyName, enable);
+            } else {
+                Logger.Debug($"[{DeviceName}] Queuing profile switch {propertyName}={enable} for deferred apply");
+                _pendingProfileSwitches[propertyName] = enable;
+            }
+        }
+
         public override void OnSwitchPropertyUpdated(INDISwitchProperty p) {
             base.OnSwitchPropertyUpdated(p);
+
             // Sync local cooler state from CCD_COOLER updates — but only when the vector
             // is readable. On write-only drivers (e.g. toupbase) the switch values are
             // definition defaults (COOLER_ON=On), not actual TEC state.
             if (p.Name == "CCD_COOLER" && p.Permission != PropertyPermission.WriteOnly) {
                 var on = p.Switches.FirstOrDefault(s => s.Name == "COOLER_ON");
                 if (on != null) _coolerOn = on.Value;
+            }
+
+            // Apply any queued profile value on first receipt of a deferred switch.
+            // Remove before applying so a driver echo of the change doesn't loop.
+            if (_pendingProfileSwitches.TryRemove(p.Name, out var pendingEnable)) {
+                Logger.Debug($"[{DeviceName}] Applying deferred profile switch {p.Name}={pendingEnable}");
+                SetIndiEnabled(p.Name, pendingEnable);
             }
         }
 
@@ -291,7 +321,12 @@ namespace NINA.INDI.Devices {
             }
         }
 
-        public double CoolerPower => GetNumberPropertyValue("CCD_COOLER_POWER", "COOLER_POWER") ?? double.NaN;
+        // indi_asi_ccd names the element "CCD_COOLER_VALUE"; toupbase and the INDI
+        // standard use "COOLER_POWER". Try both so either driver works.
+        public double CoolerPower =>
+            GetNumberPropertyValue("CCD_COOLER_POWER", "COOLER_POWER") ??
+            GetNumberPropertyValue("CCD_COOLER_POWER", "CCD_COOLER_VALUE") ??
+            double.NaN;
 
         // Most drivers expose gain via the standard CCD_GAIN/GAIN vector; the toupbase
         // family (indi_toupcam_ccd etc.) publishes it as the "Gain" element of the
@@ -353,25 +388,37 @@ namespace NINA.INDI.Devices {
             }
         }
 
-        public bool CanSetOffset => GetNumberProperty("CCD_OFFSET") != null;
+        // Standard INDI: CCD_OFFSET/OFFSET. Older indi_asi_ccd and toupbase variants
+        // publish offset as "Offset" or "Brightness" inside the CCD_CONTROLS vector.
+        private (string Property, string Element)? OffsetElement {
+            get {
+                if (GetNumberElement("CCD_OFFSET", "OFFSET") != null) return ("CCD_OFFSET", "OFFSET");
+                if (GetNumberElement("CCD_CONTROLS", "Offset") != null) return ("CCD_CONTROLS", "Offset");
+                if (GetNumberElement("CCD_CONTROLS", "Brightness") != null) return ("CCD_CONTROLS", "Brightness");
+                return null;
+            }
+        }
+
+        public bool CanSetOffset => OffsetElement != null;
 
         public int Offset {
-            get => (int)(GetNumberPropertyValue("CCD_OFFSET", "OFFSET") ?? 0.0);
+            get => OffsetElement is { } e ? (int)(GetNumberPropertyValue(e.Property, e.Element) ?? 0.0) : 0;
             set {
-                if (Connected) {
-                    TrySetNumber("CCD_OFFSET", "OFFSET", value);
+                if (Connected && OffsetElement is { } e) {
+                    TrySetNumber(e.Property, e.Element, value);
                 }
             }
         }
 
-        public int OffsetMin => (int)(GetNumberElement("CCD_OFFSET", "OFFSET")?.Min ?? 0.0);
-        public int OffsetMax => (int)(GetNumberElement("CCD_OFFSET", "OFFSET")?.Max ?? 0.0);
+        public int OffsetMin => OffsetElement is { } e ? (int)(GetNumberElement(e.Property, e.Element)?.Min ?? 0.0) : 0;
+        public int OffsetMax => OffsetElement is { } e ? (int)(GetNumberElement(e.Property, e.Element)?.Max ?? 0.0) : 0;
 
-        // USB bandwidth/speed control. The toupbase family exposes it as the "Speed"
-        // element of CCD_CONTROLS (0..model->maxspeed). Extend for other drivers as needed.
+        // USB bandwidth/speed control. Toupbase calls the element "Speed";
+        // indi_asi_ccd calls it "BandWidth".
         private (string Property, string Element)? UsbLimitElement {
             get {
                 if (GetNumberElement("CCD_CONTROLS", "Speed") != null) return ("CCD_CONTROLS", "Speed");
+                if (GetNumberElement("CCD_CONTROLS", "BandWidth") != null) return ("CCD_CONTROLS", "BandWidth");
                 return null;
             }
         }
@@ -434,20 +481,34 @@ namespace NINA.INDI.Devices {
             }
         }
 
-        // The toupbase heat control is a one-of-many switch: INDI_DISABLED plus either a
-        // single INDI_ENABLED level or HEAT1..HEATn strength levels.
-        public bool HasDewHeater => GetSwitchProperty("TC_HEAT_CONTROL") != null;
+        // Toupbase heat control: one-of-many switch TC_HEAT_CONTROL with INDI_DISABLED
+        // plus HEAT1..HEATn strength levels.
+        // indi_asi_ccd anti-dew: numeric "AntiDewHeater" element in CCD_CONTROLS (0=off, 1=on).
+        public bool HasDewHeater =>
+            GetSwitchProperty("TC_HEAT_CONTROL") != null ||
+            GetNumberElement("CCD_CONTROLS", "AntiDewHeater") != null;
 
         public bool DewHeaterOn {
             get {
-                var active = GetSwitchProperty("TC_HEAT_CONTROL")?.Switches.FirstOrDefault(s => s.Value);
-                return active != null && active.Name != "INDI_DISABLED";
+                var heatSwitch = GetSwitchProperty("TC_HEAT_CONTROL");
+                if (heatSwitch != null) {
+                    var active = heatSwitch.Switches.FirstOrDefault(s => s.Value);
+                    return active != null && active.Name != "INDI_DISABLED";
+                }
+                return (GetNumberPropertyValue("CCD_CONTROLS", "AntiDewHeater") ?? 0.0) > 0;
             }
         }
 
         public int DewHeaterMaxStrength => GetSwitchProperty("TC_HEAT_CONTROL")?.Switches.Count(s => s.Name != "INDI_DISABLED") ?? 0;
 
         public void SetDewHeater(bool on, int strength) {
+            // indi_asi_ccd: numeric 0/1 anti-dew control
+            if (GetNumberElement("CCD_CONTROLS", "AntiDewHeater") != null) {
+                TrySetNumber("CCD_CONTROLS", "AntiDewHeater", on ? 1.0 : 0.0);
+                return;
+            }
+
+            // Toupbase: one-of-many switch
             var prop = GetSwitchProperty("TC_HEAT_CONTROL");
             if (prop == null) return;
 
