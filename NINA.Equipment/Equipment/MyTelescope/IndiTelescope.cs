@@ -104,7 +104,11 @@ namespace NINA.Equipment.Equipment.MyTelescope {
         public bool CanSlew => canSlew;
 
         private bool canSlewAltAz = true;
-        public bool CanSlewAltAz => canSlewAltAz;
+        // Delegates to INDITelescope.CanSlewAltAz which checks the HORIZONTAL_COORD property
+        // permission. Mounts that publish HORIZONTAL_COORD read-only report false here so the
+        // caller falls back to an equatorial slew instead of a silently-ignored alt/az goto.
+        // canSlewAltAz is kept as a fallback that flips false on NotImplementedException.
+        public bool CanSlewAltAz => canSlewAltAz && GetProperty("CanSlewAltAz", false);
 
         private bool canSlewAltAzAsync = true;
         public bool CanSlewAltAzAsync => canSlewAltAzAsync;

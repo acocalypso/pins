@@ -34,8 +34,11 @@ namespace NINA.Equipment.Equipment {
             this.Category = "INDI";
             _device = info;
             Id = info.Id;
-            indiRegistrationName = info.Name;
-            DisplayName = $"{info.Name} ({Category})";
+            // Display the INDI device name (e.g. "ToupTek G3M178M") rather than the
+            // generic driver name from DRIVER_INFO (e.g. "ToupTek"). The device name
+            // is unique per INDI server and distinguishes multiple cameras.
+            indiRegistrationName = info.Id;
+            DisplayName = $"{info.Id} ({Category})";
         }
 
         protected DeviceT device;
@@ -210,8 +213,9 @@ namespace NINA.Equipment.Equipment {
 
                         if (name == null) {
                             try {
-                                // Update name of INDI after connection
-                                name = string.IsNullOrEmpty(device?.Name) ? indiRegistrationName : device?.Name;
+                                // Update name of INDI after connection — keep the unique
+                                // device name, not the driver name reported by DRIVER_INFO.
+                                name = string.IsNullOrEmpty(device?.Id) ? indiRegistrationName : device?.Id;
                                 DisplayName = $"{name} (INDI)";
                             } catch {
                                 name = indiRegistrationName;

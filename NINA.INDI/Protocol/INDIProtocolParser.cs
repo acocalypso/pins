@@ -151,6 +151,16 @@ namespace NINA.INDI.Protocol {
                 var name = oneNum.Attribute("name")?.Value ?? string.Empty;
                 var number = prop.Numbers.FirstOrDefault(n => n.Name == name);
                 if (number != null) {
+                    // Drivers can change an element's range at runtime via IUUpdateMinMax(),
+                    // which attaches min/max/step attributes to the oneNumber elements
+                    // (e.g. toupbase widening the gain range after connect). Honor them.
+                    var min = oneNum.Attribute("min");
+                    if (min != null) number.Min = double.Parse(min.Value, CultureInfo.InvariantCulture);
+                    var max = oneNum.Attribute("max");
+                    if (max != null) number.Max = double.Parse(max.Value, CultureInfo.InvariantCulture);
+                    var step = oneNum.Attribute("step");
+                    if (step != null) number.Step = double.Parse(step.Value, CultureInfo.InvariantCulture);
+
                     number.Value = double.Parse(oneNum.Value, CultureInfo.InvariantCulture);
                 }
             }

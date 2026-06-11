@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright Â© 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -82,5 +82,7 @@ namespace NINA.Profile.Interfaces {
         bool ASCOMCreate32BitData { get; set; }
         bool BadPixelCorrection { get; set; }
         int BadPixelCorrectionThreshold { get; set; }
+
+        string IndiDriver { get; set; }
     }
 }

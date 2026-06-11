@@ -76,6 +76,7 @@ namespace NINA.INDI.Devices
 
         private bool _connected;
         private bool _connectionAttemptFailed;  // Track if the last connection attempt failed
+        private volatile Task _disconnectTask;  // In-flight graceful disconnect (see Disconnect/Dispose)
 
         public bool Connected
         {
@@ -126,6 +127,14 @@ namespace NINA.INDI.Devices
                 {
                     _properties.Remove(propertyName);
                 }
+            }
+        }
+
+        public void RemoveAllProperties()
+        {
+            lock (_properties)
+            {
+                _properties.Clear();
             }
         }
 
@@ -454,6 +463,22 @@ namespace NINA.INDI.Devices
             INDIClient.Instance.SendProperty(prop);
         }
 
+        // Sends multiple elements of the same text vector in one update.
+        // Use when the driver acts on all elements atomically (e.g. TIME_UTC: UTC + OFFSET).
+        public void SetTextValues(string propertyName, params (string elementName, string value)[] values)
+        {
+            var prop = GetTextProperty(propertyName) ?? throw new ArgumentException($"Text property '{propertyName}' not found");
+
+            foreach (var (elementName, value) in values)
+            {
+                var text = prop.Texts.FirstOrDefault(t => t.Name == elementName);
+                if (text != null)
+                    text.Value = value;
+            }
+
+            INDIClient.Instance.SendProperty(prop);
+        }
+
         public async Task<bool> SetTextValueAsync(string propertyName, string elementName, string value, TimeSpan timeout)
         {
             try
@@ -684,8 +709,10 @@ namespace NINA.INDI.Devices
 
         public void Disconnect()
         {
-            // Use async variant as fire-and-forget for Dispose compatibility
-            _ = Task.Run(async () =>
+            // Use async variant as fire-and-forget for Dispose compatibility. Keep a
+            // handle on the task so Dispose can defer unregistration until the server
+            // acknowledged the DISCONNECT (see Dispose).
+            _disconnectTask = Task.Run(async () =>
             {
                 try
                 {
@@ -705,8 +732,19 @@ namespace NINA.INDI.Devices
                 Disconnect();
             }
 
-            // Unregister device from client
-            INDIClient.Instance.UnregisterDevice(this);
+            // Unregister device from client. If a graceful disconnect is still in flight,
+            // defer unregistration until it finishes — unregistering immediately would cut
+            // off property-update routing to this instance, so the CONNECTION ack could
+            // never resolve the pending operation and would always hit the 60s timeout.
+            var disconnectTask = _disconnectTask;
+            if (disconnectTask != null && !disconnectTask.IsCompleted)
+            {
+                _ = disconnectTask.ContinueWith(_ => INDIClient.Instance.UnregisterDevice(this));
+            }
+            else
+            {
+                INDIClient.Instance.UnregisterDevice(this);
+            }
         }
 
         /// <summary>
@@ -997,6 +1035,18 @@ namespace NINA.INDI.Devices
                             tcs.TrySetResult(false);
                         }
                     }
+                    else if (p.State == PropertyState.Idle)
+                    {
+                        // libindi acks a successful DISCONNECT with state=Idle, not Ok
+                        // (defaultdevice.cpp: "Disconnection is successful, set it IDLE").
+                        // Idle alone is ambiguous (it is also the resting state), so only
+                        // complete when the requested value is verifiably applied.
+                        if (desiredReached != null && desiredReached(p) && !tcs.Task.IsCompleted)
+                        {
+                            Logger.Debug($"Async operation {operationId} completed by server (state: Idle, desired value reached)");
+                            tcs.TrySetResult(true);
+                        }
+                    }
                 }
             }
         }
@@ -1064,6 +1114,17 @@ namespace NINA.INDI.Devices
                         {
                             Logger.Warning($"Async operation {operationId} rejected by server (state: Alert)");
                             tcs.TrySetResult(false);
+                        }
+                    }
+                    else if (p.State == PropertyState.Idle)
+                    {
+                        // Some drivers ack with state=Idle (libindi uses it for successful
+                        // disconnects). Idle alone is ambiguous, so only complete when the
+                        // requested value is verifiably applied.
+                        if (desiredReached != null && desiredReached(p) && !tcs.Task.IsCompleted)
+                        {
+                            Logger.Debug($"Async operation {operationId} completed by server (state: Idle, desired value reached)");
+                            tcs.TrySetResult(true);
                         }
                     }
                 }
