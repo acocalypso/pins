@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.38 - 2026-06-11
+### Added
+- INDI Camera: Native INDI camera support, including a per-profile INDI camera driver setting and camera enumeration in the camera chooser
+- INDI Camera: Broader driver compatibility by probing alternate property/element names for cooler power, offset, USB bandwidth, and dew heater control
+- INDI Camera: Camera mode switches (low-noise/ultra, high-fullwell, tail-light LED) are applied from the profile on connect, deferring until the corresponding property arrives if it is not yet present
+### Fixed
+- INDI Mount: Send UTC time and UTC offset together as one atomic update; previously only the time was written, leaving a stale offset after power-on so the mount computed the wrong sidereal time and slews could fail
+- INDI Mount: Alt/Az slew capability now reflects whether the mount actually accepts alt/az gotos; mounts that only publish alt/az read-only fall back to an equatorial slew instead of a silently-ignored command
+- INDI: Defer device unregistration until a graceful disconnect is acknowledged, and recognize the idle-state disconnect acknowledgement, to avoid spurious disconnect timeouts
+- INDI: A device-level property deletion (hot-unplug or driver shutdown) now removes the entire device so rescans no longer list stale devices
+- INDI: Honor runtime element range changes (min/max/step) on number property updates
+- INDI: The bounded server-ready wait is now performed inside device enumeration so a missing or broken INDI server cannot hang the device scan
+
 ## 1.1.37 - 2026-06-10
 ### Fixed
 - LibRaw: Reverted from hardcoded struct offsets to libraw C API (libraw_raw2image, libraw_get_iwidth, libraw_get_iheight) for improved compatibility with system-installed libraw versions
