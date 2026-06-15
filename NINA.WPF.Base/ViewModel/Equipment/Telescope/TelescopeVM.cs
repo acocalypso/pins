@@ -418,12 +418,31 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Telescope {
                                 Notification.ShowWarning(string.Format(Loc.Instance["LblUnknownEpochWarning"], Telescope.EquatorialSystem));
                             }
 
-                            if (Math.Abs(Telescope.SiteLatitude - profileService.ActiveProfile.AstrometrySettings.Latitude) > LAT_LONG_TOLERANCE
+                            TelescopeLocationSyncDirection syncMode = profileService.ActiveProfile.TelescopeSettings.TelescopeLocationSyncDirection;
+
+                            if (syncMode == TelescopeLocationSyncDirection.TOTELESCOPE) {
+                                Logger.Info($"Importing coordinates from N.I.N.A. into Mount - N.I.N.A. latitude {profileService.ActiveProfile.AstrometrySettings.Latitude} , longitude {profileService.ActiveProfile.AstrometrySettings.Longitude}, elevation {profileService.ActiveProfile.AstrometrySettings.Elevation} -> Mount latitude {Telescope.SiteLatitude} , longitude {Telescope.SiteLongitude}, elevation {Telescope.SiteElevation}");
+                                var targetLatitude = profileService.ActiveProfile.AstrometrySettings.Latitude;
+                                var targetLongitude = profileService.ActiveProfile.AstrometrySettings.Longitude;
+                                var targetElevation = profileService.ActiveProfile.AstrometrySettings.Elevation;
+                                Telescope.SiteLatitude = targetLatitude;
+                                Telescope.SiteLongitude = targetLongitude;
+                                Telescope.SiteElevation = targetElevation;
+
+                                if (Math.Abs(Telescope.SiteLatitude - targetLatitude) > LAT_LONG_TOLERANCE
+                                    || Math.Abs(Telescope.SiteLongitude - targetLongitude) > LAT_LONG_TOLERANCE) {
+                                    Logger.Error(string.Format("Unable to set mount latitude to {0} and longitude to {1}!", Math.Round(targetLatitude, 3), Math.Round(targetLongitude, 3)));
+                                    Notification.ShowError(string.Format(Loc.Instance["LblUnableToSetMountLatLong"], Math.Round(targetLatitude, 3), Math.Round(targetLongitude, 3)));
+                                }
+                                if (Math.Abs(Telescope.SiteElevation - targetElevation) > SITE_ELEVATION_TOLERANCE) {
+                                    Logger.Error(string.Format("Unable to set mount elevation to {0}!", targetElevation));
+                                    Notification.ShowError(string.Format(Loc.Instance["LblUnableToSetMountElevation"], Math.Round(targetElevation, 3)));
+                                }
+                            } else if (Math.Abs(Telescope.SiteLatitude - profileService.ActiveProfile.AstrometrySettings.Latitude) > LAT_LONG_TOLERANCE
                                 || Math.Abs(Telescope.SiteLongitude - profileService.ActiveProfile.AstrometrySettings.Longitude) > LAT_LONG_TOLERANCE
                                 || Math.Abs(Telescope.SiteElevation - profileService.ActiveProfile.AstrometrySettings.Elevation) >= SITE_ELEVATION_TOLERANCE) {
 
-                                TelescopeLocationSyncDirection syncMode = profileService.ActiveProfile.TelescopeSettings.TelescopeLocationSyncDirection;
-                                if (profileService.ActiveProfile.TelescopeSettings.TelescopeLocationSyncDirection == TelescopeLocationSyncDirection.PROMPT) {
+                                if (syncMode == TelescopeLocationSyncDirection.PROMPT) {
                                     var syncVM = new TelescopeLatLongSyncVM(
                                         profileService.ActiveProfile.AstrometrySettings.Latitude,
                                         profileService.ActiveProfile.AstrometrySettings.Longitude,
@@ -442,24 +461,6 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Telescope {
                                     profileService.ChangeLatitude(Telescope.SiteLatitude);
                                     profileService.ChangeLongitude(Telescope.SiteLongitude);
                                     profileService.ChangeElevation(Telescope.SiteElevation);
-                                } else if (syncMode == TelescopeLocationSyncDirection.TOTELESCOPE) {
-                                    Logger.Info($"Importing coordinates from N.I.N.A. into Mount - N.I.N.A. latitude {profileService.ActiveProfile.AstrometrySettings.Latitude} , longitude {profileService.ActiveProfile.AstrometrySettings.Longitude}, elevation {profileService.ActiveProfile.AstrometrySettings.Elevation} -> Mount latitude {Telescope.SiteLatitude} , longitude {Telescope.SiteLongitude}, elevation {Telescope.SiteElevation}");
-                                    var targetLatitude = profileService.ActiveProfile.AstrometrySettings.Latitude;
-                                    var targetLongitude = profileService.ActiveProfile.AstrometrySettings.Longitude;
-                                    var targetElevation = profileService.ActiveProfile.AstrometrySettings.Elevation;
-                                    Telescope.SiteLatitude = targetLatitude;
-                                    Telescope.SiteLongitude = targetLongitude;
-                                    Telescope.SiteElevation = targetElevation;
-
-                                    if (Math.Abs(Telescope.SiteLatitude - targetLatitude) > LAT_LONG_TOLERANCE
-                                        || Math.Abs(Telescope.SiteLongitude - targetLongitude) > LAT_LONG_TOLERANCE) {
-                                        Logger.Error(string.Format("Unable to set mount latitude to {0} and longitude to {1}!", Math.Round(targetLatitude, 3), Math.Round(targetLongitude, 3)));
-                                        Notification.ShowError(string.Format(Loc.Instance["LblUnableToSetMountLatLong"], Math.Round(targetLatitude, 3), Math.Round(targetLongitude, 3)));
-                                    }
-                                    if (Math.Abs(Telescope.SiteElevation - targetElevation) > SITE_ELEVATION_TOLERANCE) {
-                                        Logger.Error(string.Format("Unable to set mount elevation to {0}!", targetElevation));
-                                        Notification.ShowError(string.Format(Loc.Instance["LblUnableToSetMountElevation"], Math.Round(targetElevation, 3)));
-                                    }
                                 } else if (syncMode == TelescopeLocationSyncDirection.NOSYNC) {
                                     Logger.Info("Location sync disabled by user choice.");
                                 }
