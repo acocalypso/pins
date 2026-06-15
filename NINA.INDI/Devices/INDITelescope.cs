@@ -228,9 +228,13 @@ namespace NINA.INDI.Devices {
             }
         }
         public double SiteLongitude {
-            get => GetNumberPropertyValue("GEOGRAPHIC_COORD", "LONG") ?? double.NaN;
+            get {
+                var raw = GetNumberPropertyValue("GEOGRAPHIC_COORD", "LONG");
+                if (raw == null) return double.NaN;
+                return raw > 180.0 ? raw - 360.0 : raw.Value;
+            }
             set {
-                SetNumberValue("GEOGRAPHIC_COORD", "LONG", value);
+                SetNumberValue("GEOGRAPHIC_COORD", "LONG", value < 0.0 ? value + 360.0 : value);
             }
         }
         public int SlewSettleTime { get; }
