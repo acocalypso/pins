@@ -367,7 +367,7 @@ jobs:
           sha256sum "$dev_output_file" > "$dev_output_file.sha256"
 
       - name: Publish INDI GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: success()
         with:
           tag_name: ${{ steps.release_tag.outputs.value }}
