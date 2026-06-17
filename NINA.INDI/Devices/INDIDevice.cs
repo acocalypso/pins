@@ -881,17 +881,45 @@ namespace NINA.INDI.Devices
             else if (IsUsingHttpMode)
             {
                 Logger.Info($"[{DeviceName}] Configuring HTTP mode connection");
-                // HTTP drivers (e.g. indi_starbook_ten) expose DEVICE_ADDRESS with only an ADDRESS
-                // element — no PORT element and no serial properties.
+                // After switching CONNECTION_MODE, the driver may publish its address property
+                // asynchronously. Wait briefly for either variant to appear.
                 if (HasAddress)
                 {
-                    Logger.Info($"[{DeviceName}] Setting DEVICE_ADDRESS to {_address}");
-                    if (!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10)))
+                    var addrPropStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    while (!HasProperties(["DEVICE_BASE_URL"]) && !HasProperties(["DEVICE_ADDRESS"]) && addrPropStopwatch.Elapsed < TimeSpan.FromSeconds(10))
                     {
-                        Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS to {_address}");
+                        await CoreUtil.Wait(TimeSpan.FromMilliseconds(200));
+                    }
+
+                    if (HasProperties(["DEVICE_BASE_URL"]))
+                    {
+                        // Drivers like indi_starbook_ten use DEVICE_BASE_URL.BASE_URL with a full URL value.
+                        var baseUrl = _address.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || _address.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                            ? _address
+                            : $"http://{_address}";
+                        Logger.Info($"[{DeviceName}] Setting DEVICE_BASE_URL to {baseUrl}");
+                        if (!await SetTextValueAsync("DEVICE_BASE_URL", "BASE_URL", baseUrl, TimeSpan.FromSeconds(10)))
+                        {
+                            Logger.Error($"[{DeviceName}] Failed to set DEVICE_BASE_URL to {baseUrl}");
+                            return false;
+                        }
+                        Logger.Info($"[{DeviceName}] HTTP mode configuration complete - BASE_URL={baseUrl}");
+                    }
+                    else if (HasProperties(["DEVICE_ADDRESS"]))
+                    {
+                        Logger.Info($"[{DeviceName}] Setting DEVICE_ADDRESS to {_address}");
+                        if (!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10)))
+                        {
+                            Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS to {_address}");
+                            return false;
+                        }
+                        Logger.Info($"[{DeviceName}] HTTP mode configuration complete - ADDRESS={_address}");
+                    }
+                    else
+                    {
+                        Logger.Error($"[{DeviceName}] Neither DEVICE_BASE_URL nor DEVICE_ADDRESS appeared after switching to HTTP mode");
                         return false;
                     }
-                    Logger.Info($"[{DeviceName}] HTTP mode configuration complete - ADDRESS={_address}");
                 }
             }
             else
