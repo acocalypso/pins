@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - INDI: Control panel
 ### Fixed
 - INDI: Supporting CONNECTION_HTTP on mounts
+- INDI: Homing on some mounts
 
 ## 1.1.39 - 2026-06-15
 ### Fixed

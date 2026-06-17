@@ -813,18 +813,21 @@ namespace NINA.INDI.Devices {
                     throw new NotImplementedException("TELESCOPE_HOME property not found");
                 }
 
-                // Find which switch to activate
-                var goSwitch = homeProp.Switches.FirstOrDefault(s => s.Name == "GO");
-                var findSwitch = homeProp.Switches.FirstOrDefault(s => s.Name == "FIND");
+                // Drivers name the "go home" action element differently, e.g. the Starbook Ten
+                // uses "FindHome" while libindi's standard uses "GoHome" and others use "FIND"/"GO".
+                // Pick the first recognized action element; if the vector has a single switch, use
+                // that (most TELESCOPE_HOME vectors expose only the go-home action).
+                string[] homeActionNames = ["FindHome", "GoHome", "FIND", "GO", "HOME", "Home", "SLEW"];
+                var homeSwitch = homeProp.Switches.FirstOrDefault(s => homeActionNames.Contains(s.Name, StringComparer.OrdinalIgnoreCase))
+                                 ?? (homeProp.Switches.Count == 1 ? homeProp.Switches[0] : null);
 
-                if (goSwitch != null) {
-                    SetSwitchValue("TELESCOPE_HOME", "GO", true);
-                } else if (findSwitch != null) {
-                    SetSwitchValue("TELESCOPE_HOME", "FIND", true);
-                } else {
-                    Logger.Warning("TELESCOPE_HOME switch not found");
+                if (homeSwitch == null) {
+                    Logger.Warning($"TELESCOPE_HOME has no recognized action switch (elements: {string.Join(", ", homeProp.Switches.Select(s => s.Name))})");
                     throw new NotImplementedException("TELESCOPE_HOME switch not found");
                 }
+
+                Logger.Info($"Sending home command via TELESCOPE_HOME.{homeSwitch.Name}");
+                SetSwitchValue("TELESCOPE_HOME", homeSwitch.Name, true);
 
                 // Wait for property to become busy then return to idle/ok
                 await Task.Delay(1000, ct);
