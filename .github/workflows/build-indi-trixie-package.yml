@@ -370,7 +370,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         if: success()
         with:
-          tag_name: ${{ steps.release_tag.outputs.value }}
+          tag_name: indi-${{ steps.release_tag.outputs.value }}
           name: Release ${{ steps.release_tag.outputs.value }}
           body: |
             Automated INDI release ${{ steps.release_tag.outputs.value }} containing Debian packages for INDI runtime, libraries, data, and development files.
