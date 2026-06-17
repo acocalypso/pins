@@ -19,6 +19,7 @@ using NINA.INDI.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
@@ -84,6 +85,15 @@ namespace NINA.INDI {
         // the driver previously loaded for the SAME category, so two categories that share an
         // INDI interface flag (e.g. WEATHER_INTERFACE) never evict each other's drivers.
         private readonly Dictionary<string, string> _lastDriverPerCategory = [];
+
+        // Global property store: deviceName -> (propertyName -> property). Captures every property
+        // for every device currently visible to indiserver, regardless of whether a NINA equipment
+        // adapter (INDIDevice) registered for it. This is what powers the generic INDI control panel,
+        // which must be able to inspect/modify devices NINA itself never connected (e.g. a guide
+        // camera driven by PHD2). Property objects are the SAME references handed to registered
+        // INDIDevice instances, so in-place set* updates are reflected here automatically.
+        // Guarded by _lock (same lock ProcessElement already holds while mutating routing state).
+        private readonly Dictionary<string, Dictionary<string, INDIProperty>> _allProperties = [];
 
         public INDIClient(int port) {
             if (port < 1 || port > 65535) {
@@ -157,6 +167,12 @@ namespace NINA.INDI {
                 _tcpClient?.Close();
                 _stream = null;
                 _tcpClient = null;
+
+                // Drop the cached property snapshot — once the receive loop is cancelled no more
+                // delProperty messages will arrive to evict stale devices from the control panel.
+                lock (_lock) {
+                    _allProperties.Clear();
+                }
                 Logger.Info("INDI client disconnected");
             } catch (Exception ex) {
                 Logger.Error($"Exception disconnecting from INDI server: {ex.Message}");
@@ -595,6 +611,226 @@ namespace NINA.INDI {
             }
         }
 
+        #region Global property store
+
+        // Must be called while holding _lock.
+        private void StoreProperty(INDIProperty p) {
+            if (p == null || string.IsNullOrEmpty(p.DeviceName)) {
+                return;
+            }
+            if (!_allProperties.TryGetValue(p.DeviceName, out var dict)) {
+                dict = [];
+                _allProperties[p.DeviceName] = dict;
+            }
+            dict[p.Name] = p;
+        }
+
+        // Must be called while holding _lock.
+        private INDIProperty GetStoredProperty(string device, string name) {
+            if (!string.IsNullOrEmpty(device)
+                && _allProperties.TryGetValue(device, out var dict)
+                && dict.TryGetValue(name, out var p)) {
+                return p;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Returns a snapshot of every device currently visible to indiserver together with all of
+        /// its known properties. Built under lock so the result is safe to serialize off-thread.
+        /// Pass <paramref name="deviceFilter"/> to limit the result to a single device.
+        /// </summary>
+        public List<INDIDeviceSnapshot> GetDeviceSnapshots(string deviceFilter = null) {
+            var result = new List<INDIDeviceSnapshot>();
+
+            // Copy driver metadata first (guarded by its own lock).
+            var driverInfo = new Dictionary<string, INDIDeviceInfo>();
+            lock (_driverLock) {
+                foreach (var kvp in _discoveredDevices) {
+                    driverInfo[kvp.Key] = kvp.Value;
+                }
+            }
+
+            lock (_lock) {
+                foreach (var (device, props) in _allProperties) {
+                    if (!string.IsNullOrEmpty(deviceFilter) && device != deviceFilter) {
+                        continue;
+                    }
+
+                    driverInfo.TryGetValue(device, out var info);
+                    var snapshot = new INDIDeviceSnapshot {
+                        Device = device,
+                        DriverExec = info?.Driver ?? string.Empty,
+                        DriverName = info?.Name ?? string.Empty,
+                        Version = info?.Version ?? string.Empty,
+                        Interface = (int)(info?.Interface ?? 0),
+                        Connected = IsDeviceConnected(props)
+                    };
+
+                    foreach (var prop in props.Values) {
+                        snapshot.Properties.Add(BuildPropertySnapshot(prop));
+                    }
+
+                    result.Add(snapshot);
+                }
+            }
+
+            return result;
+        }
+
+        // Derives the connection state from the CONNECTION switch vector (CONNECT=On). Caller holds _lock.
+        private static bool IsDeviceConnected(Dictionary<string, INDIProperty> props) {
+            if (props.TryGetValue("CONNECTION", out var p) && p is INDISwitchProperty sw) {
+                return sw.Switches.FirstOrDefault(s => s.Name == "CONNECT")?.Value == true;
+            }
+            return false;
+        }
+
+        // Caller holds _lock.
+        private static INDIPropertySnapshot BuildPropertySnapshot(INDIProperty prop) {
+            var snap = new INDIPropertySnapshot {
+                Device = prop.DeviceName,
+                Name = prop.Name,
+                Label = prop.Label,
+                Group = prop.Group,
+                State = prop.State.ToString(),
+                Permission = prop.Permission.ToString(),
+                Timestamp = prop.Timestamp
+            };
+
+            switch (prop) {
+                case INDINumberProperty np:
+                    snap.Type = "number";
+                    foreach (var n in np.Numbers) {
+                        snap.Elements.Add(new INDIElementSnapshot {
+                            Name = n.Name, Label = n.Label, Value = n.Value,
+                            Min = n.Min, Max = n.Max, Step = n.Step, Format = n.Format
+                        });
+                    }
+                    break;
+                case INDISwitchProperty swp:
+                    snap.Type = "switch";
+                    snap.Rule = swp.Rule.ToString();
+                    foreach (var s in swp.Switches) {
+                        snap.Elements.Add(new INDIElementSnapshot { Name = s.Name, Label = s.Label, Value = s.Value });
+                    }
+                    break;
+                case INDITextProperty tp:
+                    snap.Type = "text";
+                    foreach (var t in tp.Texts) {
+                        snap.Elements.Add(new INDIElementSnapshot { Name = t.Name, Label = t.Label, Value = t.Value });
+                    }
+                    break;
+                case INDILightProperty lp:
+                    snap.Type = "light";
+                    foreach (var l in lp.Lights) {
+                        snap.Elements.Add(new INDIElementSnapshot { Name = l.Name, Label = l.Label, Value = l.State.ToString() });
+                    }
+                    break;
+                case INDIBlobProperty bp:
+                    snap.Type = "blob";
+                    foreach (var b in bp.Blobs) {
+                        snap.Elements.Add(new INDIElementSnapshot { Name = b.Name, Label = b.Label, Format = b.Format });
+                    }
+                    break;
+            }
+
+            return snap;
+        }
+
+        /// <summary>
+        /// Generic write to any writable property of any device. Looks the property up in the global
+        /// store, applies the requested element values (honoring switch rules), and sends the update
+        /// to the INDI server. Returns false with a reason when the property is missing, read-only or
+        /// the supplied values are invalid.
+        /// </summary>
+        public bool SetProperty(string device, string name, IDictionary<string, object> elements, out string error) {
+            error = null;
+            INDIProperty prop;
+            lock (_lock) {
+                prop = GetStoredProperty(device, name);
+            }
+
+            if (prop == null) {
+                error = $"Property '{name}' not found on device '{device}'";
+                return false;
+            }
+            if (prop.Permission == PropertyPermission.ReadOnly) {
+                error = $"Property '{name}' on device '{device}' is read-only";
+                return false;
+            }
+            if (elements == null || elements.Count == 0) {
+                error = "No element values supplied";
+                return false;
+            }
+
+            try {
+                lock (_lock) {
+                    switch (prop) {
+                        case INDINumberProperty np:
+                            foreach (var (elementName, value) in elements) {
+                                var n = np.Numbers.FirstOrDefault(x => x.Name == elementName)
+                                    ?? throw new ArgumentException($"Number element '{elementName}' not found");
+                                n.Value = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+                            }
+                            break;
+                        case INDITextProperty tp:
+                            foreach (var (elementName, value) in elements) {
+                                var t = tp.Texts.FirstOrDefault(x => x.Name == elementName)
+                                    ?? throw new ArgumentException($"Text element '{elementName}' not found");
+                                t.Value = value?.ToString() ?? string.Empty;
+                            }
+                            break;
+                        case INDISwitchProperty sp:
+                            ApplySwitchValues(sp, elements);
+                            break;
+                        default:
+                            throw new ArgumentException($"Property '{name}' of type '{prop.GetType().Name}' is not writable");
+                    }
+                }
+            } catch (Exception ex) {
+                error = ex.Message;
+                return false;
+            }
+
+            // Send outside the lock; SendProperty serializes the (now-mutated) property to XML.
+            SendProperty(prop);
+            return true;
+        }
+
+        // Applies switch element values honoring the vector's rule. Caller holds _lock.
+        private static void ApplySwitchValues(INDISwitchProperty sp, IDictionary<string, object> elements) {
+            bool ToBool(object v) => v switch {
+                bool b => b,
+                string s => s.Trim().ToLowerInvariant() is "on" or "true" or "1",
+                _ => Convert.ToBoolean(v, CultureInfo.InvariantCulture)
+            };
+
+            // Validate element names up front.
+            foreach (var name in elements.Keys) {
+                if (sp.Switches.All(s => s.Name != name)) {
+                    throw new ArgumentException($"Switch element '{name}' not found");
+                }
+            }
+
+            bool turningOn = elements.Values.Any(ToBool);
+
+            if ((sp.Rule == SwitchRule.OneOfMany || sp.Rule == SwitchRule.AtMostOne) && turningOn) {
+                // Radio behavior: only the explicitly enabled element stays on.
+                var enabled = elements.Where(kvp => ToBool(kvp.Value)).Select(kvp => kvp.Key).ToHashSet();
+                foreach (var s in sp.Switches) {
+                    s.Value = enabled.Contains(s.Name);
+                }
+            } else {
+                foreach (var (elementName, value) in elements) {
+                    var s = sp.Switches.First(x => x.Name == elementName);
+                    s.Value = ToBool(value);
+                }
+            }
+        }
+
+        #endregion
+
         #region XML
 
         private static string TrimXml(string xmlString) {
@@ -736,6 +972,7 @@ namespace NINA.INDI {
                 switch (element.Name.LocalName) {
                     case "defNumberVector": {
                             property = INDIProtocolParser.ParseDefNumberVector(element);
+                            StoreProperty(property);
                             // Broadcast initial property definition to all registered devices with this name
                             if (_registeredDevices.TryGetValue(deviceName, out var defNumDevices)) {
                                 foreach (var deviceInstance in defNumDevices) {
@@ -748,6 +985,7 @@ namespace NINA.INDI {
                         }
                     case "defSwitchVector": {
                             property = INDIProtocolParser.ParseDefSwitchVector(element);
+                            StoreProperty(property);
                             // Broadcast initial property definition to all registered devices with this name
                             if (_registeredDevices.TryGetValue(deviceName, out var defSwDevices)) {
                                 foreach (var deviceInstance in defSwDevices) {
@@ -760,6 +998,7 @@ namespace NINA.INDI {
                         }
                     case "defTextVector": {
                             property = INDIProtocolParser.ParseDefTextVector(element);
+                            StoreProperty(property);
                             CheckForNewDevice(property);
                             // Broadcast initial property definition to all registered devices with this name
                             if (_registeredDevices.TryGetValue(deviceName, out var defTxtDevices)) {
@@ -773,6 +1012,7 @@ namespace NINA.INDI {
                         }
                     case "defBLOBVector": {
                             property = INDIProtocolParser.ParseDefBlobVector(element);
+                            StoreProperty(property);
                             // Broadcast initial property definition to all registered devices with this name
                             if (_registeredDevices.TryGetValue(deviceName, out var defBlobDevices)) {
                                 foreach (var deviceInstance in defBlobDevices) {
@@ -785,6 +1025,7 @@ namespace NINA.INDI {
                         }
                     case "defLightVector": {
                             property = INDIProtocolParser.ParseDefLightVector(element);
+                            StoreProperty(property);
                             if (_registeredDevices.TryGetValue(deviceName, out var defLightDevices)) {
                                 foreach (var deviceInstance in defLightDevices) {
                                     deviceInstance.AddProperty(property);
@@ -807,9 +1048,12 @@ namespace NINA.INDI {
                             break;
                         }
                     case "setLightVector": {
-                            if (_registeredDevices.TryGetValue(deviceName, out var setLightDevices) && setLightDevices.Count > 0) {
-                                if (setLightDevices[0].GetProperty(propertyName) is INDILightProperty lp) {
-                                    INDIProtocolParser.UpdateLightProperty(lp, element);
+                            // Update the canonical stored property (shared with any registered devices)
+                            // then notify them. Updating the store directly means devices NINA never
+                            // connected still get live updates for the control panel.
+                            if (GetStoredProperty(deviceName, propertyName) is INDILightProperty lp) {
+                                INDIProtocolParser.UpdateLightProperty(lp, element);
+                                if (_registeredDevices.TryGetValue(deviceName, out var setLightDevices)) {
                                     foreach (var deviceInstance in setLightDevices)
                                         deviceInstance.OnLightPropertyUpdated(lp);
                                 }
@@ -817,10 +1061,9 @@ namespace NINA.INDI {
                             break;
                         }
                     case "setTextVector": {
-                            // Update the property once then notify all registered devices.
-                            if (_registeredDevices.TryGetValue(deviceName, out var setTxtDevices) && setTxtDevices.Count > 0) {
-                                if (setTxtDevices[0].GetProperty(propertyName) is INDITextProperty tp) {
-                                    INDIProtocolParser.UpdateTextProperty(tp, element);
+                            if (GetStoredProperty(deviceName, propertyName) is INDITextProperty tp) {
+                                INDIProtocolParser.UpdateTextProperty(tp, element);
+                                if (_registeredDevices.TryGetValue(deviceName, out var setTxtDevices)) {
                                     foreach (var deviceInstance in setTxtDevices)
                                         deviceInstance.OnTextPropertyUpdated(tp);
                                 }
@@ -828,10 +1071,9 @@ namespace NINA.INDI {
                             break;
                         }
                     case "setNumberVector": {
-                            // Update the property once then notify all registered devices.
-                            if (_registeredDevices.TryGetValue(deviceName, out var setNumDevices) && setNumDevices.Count > 0) {
-                                if (setNumDevices[0].GetProperty(propertyName) is INDINumberProperty np) {
-                                    INDIProtocolParser.UpdateNumberProperty(np, element);
+                            if (GetStoredProperty(deviceName, propertyName) is INDINumberProperty np) {
+                                INDIProtocolParser.UpdateNumberProperty(np, element);
+                                if (_registeredDevices.TryGetValue(deviceName, out var setNumDevices)) {
                                     foreach (var deviceInstance in setNumDevices)
                                         deviceInstance.OnNumberPropertyUpdated(np);
                                 }
@@ -839,10 +1081,9 @@ namespace NINA.INDI {
                             break;
                         }
                     case "setSwitchVector": {
-                            // Update the property once then notify all registered devices.
-                            if (_registeredDevices.TryGetValue(deviceName, out var setSwDevices) && setSwDevices.Count > 0) {
-                                if (setSwDevices[0].GetProperty(propertyName) is INDISwitchProperty sp) {
-                                    INDIProtocolParser.UpdateSwitchProperty(sp, element);
+                            if (GetStoredProperty(deviceName, propertyName) is INDISwitchProperty sp) {
+                                INDIProtocolParser.UpdateSwitchProperty(sp, element);
+                                if (_registeredDevices.TryGetValue(deviceName, out var setSwDevices)) {
                                     foreach (var deviceInstance in setSwDevices)
                                         deviceInstance.OnSwitchPropertyUpdated(sp);
                                 }
@@ -859,13 +1100,19 @@ namespace NINA.INDI {
                                         Logger.Info($"Device '{deviceName}' was deleted by its driver - removed from discovered devices");
                                     }
                                 }
+                                _allProperties.Remove(deviceName);
                                 if (_registeredDevices.TryGetValue(deviceName, out var deletedDevices)) {
                                     foreach (var deviceInstance in deletedDevices)
                                         deviceInstance.RemoveAllProperties();
                                 }
-                            } else if (_registeredDevices.TryGetValue(deviceName, out var delDevices)) {
-                                foreach (var deviceInstance in delDevices)
-                                    deviceInstance.RemoveProperty(propertyName);
+                            } else {
+                                if (_allProperties.TryGetValue(deviceName, out var storedProps)) {
+                                    storedProps.Remove(propertyName);
+                                }
+                                if (_registeredDevices.TryGetValue(deviceName, out var delDevices)) {
+                                    foreach (var deviceInstance in delDevices)
+                                        deviceInstance.RemoveProperty(propertyName);
+                                }
                             }
                             break;
                         }
