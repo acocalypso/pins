@@ -9,6 +9,7 @@ concurrency:
 
 env:
   INDI_VERSION: 2.2.3.1
+  STRICT_WARNINGS: 0
   DEB_PACKAGE_RUNTIME: indi-bin
   DEB_PACKAGE_LIB: libindi1
   DEB_PACKAGE_DATA: libindi-data
@@ -66,7 +67,8 @@ jobs:
             libgsl-dev \
             libjpeg-dev \
             zlib1g-dev \
-            libev-dev
+            libev-dev \
+            libudev-dev
 
       - name: Clone INDI source
         shell: bash
@@ -79,9 +81,22 @@ jobs:
         working-directory: indi
         run: |
           set -euo pipefail
+
+          extra_c_flags=""
+          extra_cxx_flags=""
+
+          if [ "${{ env.STRICT_WARNINGS }}" != "1" ]; then
+            # Keep warnings visible, but do not fail package builds on known
+            # GCC diagnostics currently emitted by upstream sources on Trixie.
+            extra_c_flags="-Wno-error=stringop-truncation -Wno-error=stringop-overread"
+            extra_cxx_flags="-Wno-error=stringop-truncation -Wno-error=stringop-overread"
+          fi
+
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_C_FLAGS="$extra_c_flags" \
+            -DCMAKE_CXX_FLAGS="$extra_cxx_flags" \
             -DUDEVRULES_INSTALL_DIR=/lib/udev/rules.d \
             -DINDI_BUILD_SERVER=ON \
             -DINDI_BUILD_CLIENT=ON \
