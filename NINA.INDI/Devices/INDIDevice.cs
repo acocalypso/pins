@@ -781,9 +781,12 @@ namespace NINA.INDI.Devices
             bool IsAutoMode = _autoSearch && _hasAutoSearchProperty;
 
             // Determine actual connection mode
-            bool IsUsingSerialMode = HasConnectionMode && !_connectionMode.Equals("CONNECTION_TCP");
+            bool IsUsingSerialMode = HasConnectionMode &&
+                !_connectionMode.Equals("CONNECTION_TCP") &&
+                !_connectionMode.Equals("CONNECTION_HTTP");
+            bool IsUsingHttpMode = HasConnectionMode && _connectionMode.Equals("CONNECTION_HTTP");
 
-            Logger.Info($"[{DeviceName}] Connection config: HasConnectionMode={HasConnectionMode}, HasAddress={HasAddress}, HasPort={HasPort}, IsAutoMode={IsAutoMode}, IsUsingSerialMode={IsUsingSerialMode}");
+            Logger.Info($"[{DeviceName}] Connection config: HasConnectionMode={HasConnectionMode}, HasAddress={HasAddress}, HasPort={HasPort}, IsAutoMode={IsAutoMode}, IsUsingSerialMode={IsUsingSerialMode}, IsUsingHttpMode={IsUsingHttpMode}");
 
             // If no connection configuration is available or configured, skip pre-connect (e.g., direct USB devices)
             if (!HasConnectionMode && !HasAddress && !HasPort && !IsAutoMode)
@@ -801,9 +804,15 @@ namespace NINA.INDI.Devices
                     return false;
                 }
 
-                if (!IsUsingSerialMode && HasConnectionMode && (!HasAddress || !HasPort))
+                if (!IsUsingSerialMode && !IsUsingHttpMode && HasConnectionMode && (!HasAddress || !HasPort))
                 {
                     Logger.Error($"[{DeviceName}] OnPreConnect validation failed: TCP mode requires both address ({HasAddress}) and port ({HasPort})");
+                    return false;
+                }
+
+                if (IsUsingHttpMode && !HasAddress)
+                {
+                    Logger.Error($"[{DeviceName}] OnPreConnect validation failed: HTTP mode requires an address");
                     return false;
                 }
             }
@@ -868,6 +877,50 @@ namespace NINA.INDI.Devices
                     Logger.Info($"[{DeviceName}] DEVICE_BAUD_RATE set to {_baudRate}");
                 }
                 Logger.Info($"[{DeviceName}] Serial mode configuration complete - DEVICE_PORT={_port}, BAUD_RATE={_baudRate}");
+            }
+            else if (IsUsingHttpMode)
+            {
+                Logger.Info($"[{DeviceName}] Configuring HTTP mode connection");
+                // After switching CONNECTION_MODE, the driver may publish its address property
+                // asynchronously. Wait briefly for either variant to appear.
+                if (HasAddress)
+                {
+                    var addrPropStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    while (!HasProperties(["DEVICE_BASE_URL"]) && !HasProperties(["DEVICE_ADDRESS"]) && addrPropStopwatch.Elapsed < TimeSpan.FromSeconds(10))
+                    {
+                        await CoreUtil.Wait(TimeSpan.FromMilliseconds(200));
+                    }
+
+                    if (HasProperties(["DEVICE_BASE_URL"]))
+                    {
+                        // Drivers like indi_starbook_ten use DEVICE_BASE_URL.BASE_URL with a full URL value.
+                        var baseUrl = _address.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || _address.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                            ? _address
+                            : $"http://{_address}";
+                        Logger.Info($"[{DeviceName}] Setting DEVICE_BASE_URL to {baseUrl}");
+                        if (!await SetTextValueAsync("DEVICE_BASE_URL", "BASE_URL", baseUrl, TimeSpan.FromSeconds(10)))
+                        {
+                            Logger.Error($"[{DeviceName}] Failed to set DEVICE_BASE_URL to {baseUrl}");
+                            return false;
+                        }
+                        Logger.Info($"[{DeviceName}] HTTP mode configuration complete - BASE_URL={baseUrl}");
+                    }
+                    else if (HasProperties(["DEVICE_ADDRESS"]))
+                    {
+                        Logger.Info($"[{DeviceName}] Setting DEVICE_ADDRESS to {_address}");
+                        if (!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10)))
+                        {
+                            Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS to {_address}");
+                            return false;
+                        }
+                        Logger.Info($"[{DeviceName}] HTTP mode configuration complete - ADDRESS={_address}");
+                    }
+                    else
+                    {
+                        Logger.Error($"[{DeviceName}] Neither DEVICE_BASE_URL nor DEVICE_ADDRESS appeared after switching to HTTP mode");
+                        return false;
+                    }
+                }
             }
             else
             {
