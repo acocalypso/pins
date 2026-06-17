@@ -52,6 +52,17 @@ namespace NINA.INDI.Protocol {
     }
 
     /// <summary>
+    /// A human-readable message emitted by an INDI driver or the server (an INDI &lt;message&gt;
+    /// element). Carried with the driver-supplied timestamp and the originating device (which may
+    /// be empty for server-level messages).
+    /// </summary>
+    public class INDIMessage {
+        public string Timestamp { get; set; } = string.Empty;
+        public string Device { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// Snapshot of one element inside a property vector. <see cref="Value"/> carries the
     /// type-appropriate boxed value (double for numbers, bool for switches, string for text,
     /// the light state string for lights). Min/Max/Step/Format only apply to numbers.

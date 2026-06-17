@@ -95,6 +95,12 @@ namespace NINA.INDI {
         // Guarded by _lock (same lock ProcessElement already holds while mutating routing state).
         private readonly Dictionary<string, Dictionary<string, INDIProperty>> _allProperties = [];
 
+        // Rolling buffer of human-readable INDI <message> elements (driver/server log lines).
+        // Kept independent of the property store so the control panel can show a live log tail.
+        private const int MaxMessages = 500;
+        private readonly List<INDIMessage> _messages = [];
+        private readonly object _messagesLock = new();
+
         public INDIClient(int port) {
             if (port < 1 || port > 65535) {
                 throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 1 and 65535.");
@@ -829,6 +835,19 @@ namespace NINA.INDI {
             }
         }
 
+        /// <summary>
+        /// Returns the most recent human-readable INDI messages (driver/server log lines), oldest
+        /// first. Pass <paramref name="limit"/> to cap how many of the newest entries are returned.
+        /// </summary>
+        public List<INDIMessage> GetMessages(int limit = 200) {
+            lock (_messagesLock) {
+                if (limit <= 0 || _messages.Count <= limit) {
+                    return new List<INDIMessage>(_messages);
+                }
+                return _messages.GetRange(_messages.Count - limit, limit);
+            }
+        }
+
         #endregion
 
         #region XML
@@ -1122,6 +1141,21 @@ namespace NINA.INDI {
                             // at Info. A genuine slew refusal (e.g. 10micron below horizon / past limits)
                             // is accompanied by a message here; a phantom rejection will not be.
                             Logger.Info($"[INDI Message][{deviceName}] {message}");
+
+                            // Also retain it in the rolling buffer for the control panel log window.
+                            if (!string.IsNullOrWhiteSpace(message)) {
+                                var ts = element.Attribute("timestamp")?.Value;
+                                lock (_messagesLock) {
+                                    _messages.Add(new INDIMessage {
+                                        Timestamp = string.IsNullOrEmpty(ts) ? DateTime.UtcNow.ToString("o") : ts,
+                                        Device = deviceName,
+                                        Message = message
+                                    });
+                                    if (_messages.Count > MaxMessages) {
+                                        _messages.RemoveRange(0, _messages.Count - MaxMessages);
+                                    }
+                                }
+                            }
                             break;
                         }
                 }
