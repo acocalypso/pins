@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  INDI_VERSION: 2.1.9
+  INDI_VERSION: 2.2.3.1
   DEB_PACKAGE_RUNTIME: indi-bin
   DEB_PACKAGE_LIB: libindi1
   DEB_PACKAGE_DATA: libindi-data
@@ -19,7 +19,7 @@ env:
 
 jobs:
   build-indi-trixie:
-    name: Build INDI v2.1.9 (.deb)
+    name: Build INDI v2.2.3.1 (.deb)
     runs-on: ubuntu-24.04-arm
     container:
       image: debian:trixie
