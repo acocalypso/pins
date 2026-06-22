@@ -60,14 +60,44 @@ namespace NINA.INDI.Devices
                 CoreUtil.Wait(TimeSpan.FromMilliseconds(500)).Wait();
             }
 
+            // Record whether the driver actually described itself. If CONNECTION never
+            // arrived, the driver did not respond (crash, load failure, server gone) — this
+            // is NOT a USB device, it's "INDI returned nothing", and must not be treated as
+            // connectable-directly.
+            _connectionPropertyFound = HasProperties(["CONNECTION"]);
+
+            // Connection-plugin properties (DEVICE_PORT/DEVICE_ADDRESS/CONNECTION_MODE/...) are
+            // defined by the driver in the SAME initProperties() burst as CONNECTION, but the
+            // client may process them a few messages after CONNECTION. Settle briefly so the
+            // snapshot below reliably reflects the driver's full property set rather than a
+            // mid-burst race (otherwise a serial device could momentarily look port-less).
+            if (_connectionPropertyFound)
+            {
+                CoreUtil.Wait(TimeSpan.FromMilliseconds(600)).Wait();
+            }
+
             // Other connection properties
             _hasConnectionModeProperty = HasProperties(["CONNECTION_MODE"]);
             _hasDevicePortProperty = HasProperties(["DEVICE_PORT"]);
             _hasDeviceBaudRateProperty = HasProperties(["DEVICE_BAUD_RATE"]);
             _hasAutoSearchProperty = HasProperties(["DEVICE_AUTO_SEARCH"]);
             _hasDeviceAddressProperty = HasProperties(["DEVICE_ADDRESS"]);
+
+            // Positive identification of a direct-USB / SDK device (ASI camera, ZWO EAF,
+            // ZWO CAA, ...). INDI has no CONNECTION_USB property — USB drivers use libusb
+            // directly (INDI::USBDevice) and expose ONLY the base CONNECTION property. So a
+            // device is direct-USB iff it described itself (CONNECTION present) AND exposes
+            // none of the transport-configuration properties. This is deliberately gated on
+            // _connectionPropertyFound so a non-responding driver is never misclassified.
+            _isDirectUsbDevice = _connectionPropertyFound
+                && !_hasConnectionModeProperty
+                && !_hasDevicePortProperty
+                && !_hasDeviceAddressProperty
+                && !_hasAutoSearchProperty;
         }
 
+        private readonly bool _connectionPropertyFound;
+        private readonly bool _isDirectUsbDevice;
         private readonly bool _hasConnectionModeProperty;
         private readonly bool _hasDevicePortProperty;
         private readonly bool _hasDeviceBaudRateProperty;
@@ -788,6 +818,19 @@ namespace NINA.INDI.Devices
 
             Logger.Info($"[{DeviceName}] Connection config: HasConnectionMode={HasConnectionMode}, HasAddress={HasAddress}, HasPort={HasPort}, IsAutoMode={IsAutoMode}, IsUsingSerialMode={IsUsingSerialMode}, IsUsingHttpMode={IsUsingHttpMode}");
 
+            // Direct-USB / SDK device: the driver described itself (CONNECTION present) but
+            // exposes no transport-configuration property at all. There is nothing to set up —
+            // it connects via its own USB enumeration. Connect directly and ignore any stale
+            // address/port left in the profile (those properties don't exist on the device, so
+            // writing them would fail OnPreConnect). This is the same path USB cameras take.
+            // Note: gated on a positive _connectionPropertyFound, so a non-responding driver is
+            // NOT silently treated as connectable.
+            if (_isDirectUsbDevice)
+            {
+                Logger.Info($"[{DeviceName}] Direct-USB/SDK device (CONNECTION present, no transport properties) - connecting directly");
+                return true;
+            }
+
             // If no connection configuration is available or configured, skip pre-connect (e.g., direct USB devices)
             if (!HasConnectionMode && !HasAddress && !HasPort && !IsAutoMode)
             {
@@ -928,9 +971,13 @@ namespace NINA.INDI.Devices
                 // Process TCP mode
                 if (HasAddress)
                 {
-                    if (!_hasDeviceAddressProperty && DeviceName.Contains("Simulator", StringComparison.OrdinalIgnoreCase))
+                    if (!_hasDeviceAddressProperty)
                     {
-                        Logger.Info($"[{DeviceName}] Simulator device has no DEVICE_ADDRESS property - skipping TCP address configuration");
+                        // The driver does not expose DEVICE_ADDRESS at all (e.g. a simulator in
+                        // serial mode, or a device that reached this branch due to stale
+                        // address/port in the profile). Nothing to write — skip, mirroring how
+                        // the SERIAL branch gates writes on _hasDevicePortProperty.
+                        Logger.Info($"[{DeviceName}] Device has no DEVICE_ADDRESS property - skipping TCP address configuration");
                     }
                     else
                     {
