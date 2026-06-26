@@ -834,6 +834,12 @@ namespace NINA.INDI.Devices {
 
                 homeProp = GetSwitchProperty("TELESCOPE_HOME");
                 Logger.Debug($"Slewing state: {Slewing}");
+                // Completion is gated on the motion-based Slewing signal ONLY, NOT on the
+                // TELESCOPE_HOME property's own state. Many mounts never set TELESCOPE_HOME to
+                // Busy/Ok correctly while homing, so keying off homeProp.State would hang for
+                // them. This was changed deliberately (commit d2954ec70, "onstep homing") from
+                // `(Slewing || homeProp?.State == PropertyState.Busy)` to `Slewing` alone — do
+                // not re-add a TELESCOPE_HOME-state condition here.
                 while (Slewing == true && !ct.IsCancellationRequested) {
                     await Task.Delay(500, ct);
                     homeProp = GetSwitchProperty("TELESCOPE_HOME");
