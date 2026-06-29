@@ -466,6 +466,7 @@ namespace NINA.Equipment.Equipment.MyTelescope {
         public IList<(double, double)> GetAxisRates(TelescopeAxes axis) {
             List<(double, double)> axisRates = new List<(double, double)>();
             try {
+                RefreshMaxSlewRate();
                 var rates = device.AxisRates(axis);
                 foreach (IRate item in rates) {
                     axisRates.Add((item.Minimum, item.Maximum));
@@ -480,6 +481,7 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                 if (ShouldBeConnected) {
                     if (CanSlew) {
                         if (!AtPark) {
+                            RefreshMaxSlewRate();
                             var actualRate = rate;
                             try {
                                 if (axis == TelescopeAxes.Primary && !CanMovePrimaryAxis) {
@@ -1045,8 +1047,17 @@ namespace NINA.Equipment.Equipment.MyTelescope {
             var settings = profileService.ActiveProfile.TelescopeSettings;
             var instance = GetInstance();
             instance.ConfigureConnectionProperties(settings.IndiConnectionMode, settings.IndiAutoSearch, settings.IndiAddress, settings.IndiPort, settings.IndiBaudRate);
-            INDITelescope.ActualMaxSlewRateDps = settings.IndiMaxSlewRateDps;
+            RefreshMaxSlewRate();
             return base.PreConnect();
+        }
+
+        /// <summary>
+        /// Pushes the current profile's IndiMaxSlewRateDps into the INDITelescope static used
+        /// for °/s ↔ switch-index mapping. Called before every slew and axis-rate query so a
+        /// settings change in the UI takes effect immediately without reconnecting the mount.
+        /// </summary>
+        private void RefreshMaxSlewRate() {
+            INDITelescope.ActualMaxSlewRateDps = profileService.ActiveProfile.TelescopeSettings.IndiMaxSlewRateDps;
         }
 
         protected override Task PostConnect() {
