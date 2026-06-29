@@ -349,6 +349,24 @@ namespace NINA.INDI {
         }
 
         /// <summary>
+        /// Returns the live registered device of type <typeparamref name="T"/> (e.g.
+        /// <c>INDITelescope</c>), or null when none is registered. When
+        /// <paramref name="deviceName"/> is supplied, only a device whose name matches
+        /// (case-insensitive) is returned. Gives callers outside NINA.INDI a handle to the
+        /// concrete device adapter so they can use its typed API rather than the raw
+        /// property store.
+        /// </summary>
+        public T GetRegisteredDevice<T>(string deviceName = null) where T : INDIDevice {
+            lock (_lock) {
+                return _registeredDevices.Values
+                    .SelectMany(list => list)
+                    .OfType<T>()
+                    .FirstOrDefault(d => string.IsNullOrWhiteSpace(deviceName)
+                        || string.Equals(d.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        /// <summary>
         /// Returns true when the given device ID is still present in the discovered-devices
         /// table (i.e. the driver is still loaded and the device is visible to indiserver).
         /// Used by DisconnectAsync to bail out early when the driver was killed before

@@ -451,6 +451,76 @@ namespace NINA.INDI.Devices {
             return new AxisRates(0.0, 9.0);
         }
 
+        public SlewRateCapability GetSlewRateCapability() {
+            try {
+                // 1. Discrete switch-based rates (OnStep, EQMod, LX200, ...).
+                //    Counts and labels vary per driver, so we surface them verbatim.
+                var slewRateProp = GetSwitchProperty("TELESCOPE_SLEW_RATE");
+                if (slewRateProp != null && slewRateProp.Switches.Count > 0) {
+                    var options = new List<SlewRateOption>(slewRateProp.Switches.Count);
+                    for (int i = 0; i < slewRateProp.Switches.Count; i++) {
+                        var sw = slewRateProp.Switches[i];
+                        options.Add(new SlewRateOption {
+                            Index = i,
+                            Name = sw.Name,
+                            Label = string.IsNullOrWhiteSpace(sw.Label) ? sw.Name : sw.Label,
+                            IsSelected = sw.Value,
+                            EstimatedRateDps = TryParseSwitchRateDps(sw)
+                        });
+                    }
+                    return new SlewRateCapability {
+                        Kind = SlewRateKind.Discrete,
+                        PropertyName = "TELESCOPE_SLEW_RATE",
+                        Options = options
+                    };
+                }
+
+                // 2. Continuous numeric rate in °/s (simulators and some drivers).
+                var motionRateProp = GetNumberProperty("TELESCOPE_MOTION_RATE");
+                var motionRate = motionRateProp?.Numbers.FirstOrDefault(n => n.Name == "MOTION_RATE");
+                if (motionRate != null) {
+                    return new SlewRateCapability {
+                        Kind = SlewRateKind.Continuous,
+                        PropertyName = "TELESCOPE_MOTION_RATE",
+                        Min = motionRate.Min,
+                        Max = motionRate.Max,
+                        Step = motionRate.Step,
+                        Unit = "°/s",
+                        CurrentValue = motionRate.Value
+                    };
+                }
+            } catch (Exception ex) {
+                Logger.Debug($"GetSlewRateCapability failed: {ex.Message}");
+            }
+
+            // 3. Driver exposes no rate control; motion runs at its fixed internal rate.
+            return SlewRateCapability.None();
+        }
+
+        public void SetSlewRateIndex(int index) {
+            var prop = GetSwitchProperty("TELESCOPE_SLEW_RATE");
+            if (prop == null || prop.Switches.Count == 0) {
+                Logger.Warning("SetSlewRateIndex: TELESCOPE_SLEW_RATE not available");
+                return;
+            }
+
+            int clamped = Math.Max(0, Math.Min(index, prop.Switches.Count - 1));
+            foreach (var sw in prop.Switches) {
+                sw.Value = false;
+            }
+            prop.Switches[clamped].Value = true;
+            INDIClient.Instance.SendProperty(prop);
+            Logger.Debug($"SetSlewRateIndex: selected {clamped}/{prop.Switches.Count - 1} '{prop.Switches[clamped].Label}'");
+        }
+
+        public void SetSlewRateValue(double rateDps) {
+            try {
+                SetNumberValue("TELESCOPE_MOTION_RATE", "MOTION_RATE", Math.Abs(rateDps));
+            } catch (Exception ex) {
+                Logger.Warning($"SetSlewRateValue: TELESCOPE_MOTION_RATE not available ({ex.Message})");
+            }
+        }
+
         public void ConfigureJNOW() {
             try {
                 // INDI drivers may support different coordinate properties:
@@ -610,6 +680,46 @@ namespace NINA.INDI.Devices {
                         }
                         break;
                 }
+            } catch (ArgumentException) {
+                throw new NotImplementedException();
+            }
+        }
+
+        public void MoveAxisDirection(TelescopeAxes axis, int sign) {
+            // Direction-only motion for manual slew. Unlike MoveAxis this never touches the
+            // slew rate — the rate is selected separately via SetSlewRateIndex/SetSlewRateValue
+            // (the capability model). This keeps a user's discrete rate choice (e.g. "Guide")
+            // from being clobbered on every keepalive message.
+            try {
+                if (sign != 0) {
+                    atHome = false;
+                }
+
+                string property = axis == TelescopeAxes.Primary ? "TELESCOPE_MOTION_WE" : "TELESCOPE_MOTION_NS";
+                var prop = GetSwitchProperty(property);
+                if (prop == null) {
+                    return;
+                }
+
+                if (sign == 0) {
+                    // Stop this axis — only send if it was actually moving.
+                    if (prop.Switches.Any(sw => sw.Value)) {
+                        foreach (var sw in prop.Switches) {
+                            sw.Value = false;
+                        }
+                        INDIClient.Instance.SendProperty(prop);
+                    }
+                    return;
+                }
+
+                // Primary: positive=East, negative=West. Secondary: positive=North, negative=South.
+                string target = axis == TelescopeAxes.Primary
+                    ? (sign > 0 ? "MOTION_EAST" : "MOTION_WEST")
+                    : (sign > 0 ? "MOTION_NORTH" : "MOTION_SOUTH");
+                foreach (var sw in prop.Switches) {
+                    sw.Value = (sw.Name == target);
+                }
+                INDIClient.Instance.SendProperty(prop);
             } catch (ArgumentException) {
                 throw new NotImplementedException();
             }
@@ -834,6 +944,12 @@ namespace NINA.INDI.Devices {
 
                 homeProp = GetSwitchProperty("TELESCOPE_HOME");
                 Logger.Debug($"Slewing state: {Slewing}");
+                // Completion is gated on the motion-based Slewing signal ONLY, NOT on the
+                // TELESCOPE_HOME property's own state. Many mounts never set TELESCOPE_HOME to
+                // Busy/Ok correctly while homing, so keying off homeProp.State would hang for
+                // them. This was changed deliberately (commit d2954ec70, "onstep homing") from
+                // `(Slewing || homeProp?.State == PropertyState.Busy)` to `Slewing` alone — do
+                // not re-add a TELESCOPE_HOME-state condition here.
                 while (Slewing == true && !ct.IsCancellationRequested) {
                     await Task.Delay(500, ct);
                     homeProp = GetSwitchProperty("TELESCOPE_HOME");
