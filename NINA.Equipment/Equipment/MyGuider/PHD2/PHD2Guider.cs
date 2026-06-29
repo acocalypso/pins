@@ -290,6 +290,23 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                         await DisconnectPHD2Equipment();
                     }
 
+                    // PHD2's auto-restore calibration fires only at equipment connect time (gear_dialog.cpp).
+                    // Push auto_restore=true BEFORE connecting so PHD2 loads calibration at the connect.
+                    // If equipment is already up but calibration isn't in memory, disconnect first so
+                    // EnsurePHD2EquipmentConnected below re-connects and triggers the load.
+                    if (profileService.ActiveProfile.GuiderSettings.PHD2AutoRestoreCalibration == true) {
+                        Logger.Info("PHD2 - Pre-setting auto restore calibration before equipment connect");
+                        var preMsg = new Phd2SetAutoRestoreCalibration() { Parameters = new object[] { true } };
+                        var preResp = await SendMessage(preMsg);
+                        if (preResp.error != null)
+                            Logger.Warning($"PHD2 - Failed to pre-set auto restore calibration: {preResp.error.message}");
+
+                        if (await IsPHD2EquipmentConnected() && !await IsCalibrated()) {
+                            Logger.Info("PHD2 - Equipment connected but calibration not loaded; reconnecting to trigger auto-restore");
+                            await DisconnectPHD2Equipment();
+                        }
+                    }
+
                     await EnsurePHD2EquipmentConnected();
                     await ApplyPhd2ProfileSettings();
                     await TryRefreshShiftLockParams();
@@ -1336,6 +1353,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                         Logger.Warning($"Failed to restore focal length: {resp.error.message}");
                 }
                 if (s.PHD2AutoRestoreCalibration.HasValue) {
+                    Logger.Info($"Phd2 - Setting auto restore calibration: {s.PHD2AutoRestoreCalibration.Value}");
                     var msg = new Phd2SetAutoRestoreCalibration() { Parameters = new object[] { s.PHD2AutoRestoreCalibration.Value } };
                     var resp = await SendMessage(msg);
                     if (resp.error != null)
