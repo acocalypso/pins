@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - INDI: Explicitly enable tracking after slew on AltAz mounts
 - INDI: Fix first slew after connect being rejected as "below the horizon limit" (e.g. TPPA right after connecting) by awaiting the tracking-enable transition before the goto
+- Fixes Cfitsio with byte array
 
 ## 1.1.43 - 2026-06-29
 ### Fixed
