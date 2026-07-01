@@ -622,6 +622,12 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                         }
                     }
 
+                    // Some AltAz mount INDI drivers reset tracking state when a SLEW goto
+                    // completes. Re-enable it so the mount tracks the target after arrival.
+                    if (!TrackingEnabled) {
+                        TrackingEnabled = true;
+                    }
+
                     return true;
                 } catch (OperationCanceledException) {
                     throw;
@@ -640,7 +646,6 @@ namespace NINA.Equipment.Equipment.MyTelescope {
         public async Task<bool> SlewToAltAz(TopocentricCoordinates coordinates, CancellationToken token) {
             if (ShouldBeConnected && !AtPark && CanSlewAltAz) {
                 try {
-                    TrackingEnabled = false;
                     TargetCoordinates = coordinates.Transform(EquatorialSystem);
 
                     if (CanSlewAltAzAsync) {
