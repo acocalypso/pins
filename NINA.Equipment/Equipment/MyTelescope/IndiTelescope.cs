@@ -607,7 +607,10 @@ namespace NINA.Equipment.Equipment.MyTelescope {
             if (ShouldBeConnected && !AtPark) {
                 try {
                     if (!TrackingEnabled) {
-                        TrackingEnabled = true;
+                        // Await the tracking transition before slewing. A fire-and-forget enable
+                        // races the goto on the first slew after connect (mount not yet tracking),
+                        // and OnStep rejects it as "below the horizon limit". See EnableTrackingAsync.
+                        await device.EnableTrackingAsync(token);
                     }
                     TargetCoordinates = coordinates.Transform(EquatorialSystem);
 

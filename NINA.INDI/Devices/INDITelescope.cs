@@ -241,8 +241,10 @@ namespace NINA.INDI.Devices {
                 bool motionNorth = GetSwitchPropertyValue("TELESCOPE_MOTION_NS", "MOTION_NORTH") ?? false;
                 bool motionSouth = GetSwitchPropertyValue("TELESCOPE_MOTION_NS", "MOTION_SOUTH") ?? false;
                 var motionRaDec = GetProperty("EQUATORIAL_EOD_COORD")?.State == PropertyState.Busy;
-                var motionAltAz = GetProperty("HORIZONTAL_COORD")?.State == PropertyState.Busy;
-                return motionWest || motionEast || motionNorth || motionSouth || motionRaDec || motionAltAz;
+                // HORIZONTAL_COORD.State is deliberately excluded: AltAz mounts in tracking
+                // mode keep it Busy indefinitely (both axes move continuously to compensate
+                // for Earth's rotation), which would make Slewing permanently true.
+                return motionWest || motionEast || motionNorth || motionSouth || motionRaDec;
             }
         }
         public double TargetDeclination { get; }
@@ -262,6 +264,29 @@ namespace NINA.INDI.Devices {
                     atHome = false;
                 }
             }
+        }
+
+        public async Task<bool> EnableTrackingAsync(CancellationToken ct = default) {
+            // Already tracking: nothing to transition. Skipping the round-trip also preserves the
+            // fast path for gotos issued while the mount is already tracking.
+            if (Tracking) {
+                return true;
+            }
+
+            // Wait for the driver to acknowledge TRACK_ON rather than firing the switch and
+            // returning immediately. A goto sent microseconds after a fire-and-forget enable races
+            // the tracking transition, and OnStep (and similar mounts) reject that goto as "below
+            // the horizon limit" until tracking has started and a valid position is established.
+            var acknowledged = await SetSwitchValueAsync("TELESCOPE_TRACK_STATE", "TRACK_ON", true, TimeSpan.FromSeconds(10));
+
+            if (acknowledged) {
+                atHome = false;
+                // Give the mount a beat to settle on a valid tracked position before the caller
+                // issues the goto.
+                await Task.Delay(500, ct);
+            }
+
+            return acknowledged;
         }
 
         /// <summary>
@@ -816,16 +841,32 @@ namespace NINA.INDI.Devices {
         }
 
         public async Task SlewToCoordinatesTaskAsync(double ra, double dec, CancellationToken ct = default) {
+            const int maxSlewAttempts = 2;
             try {
-                // Slew
-                await SlewToCoordinates(ra, dec);
+                for (int attempt = 1; ; attempt++) {
+                    try {
+                        await SlewToCoordinates(ra, dec);
+                        break;
+                    } catch (InvalidOperationException) when (attempt < maxSlewAttempts && !ct.IsCancellationRequested && !AtPark) {
+                        // Mounts like OnStep transiently reject a goto issued while their state is
+                        // still settling (right after connect / a tracking-enable) as "below the
+                        // horizon limit". A single retry after a short wait clears it; a genuinely
+                        // unreachable target still fails on the second attempt.
+                        Logger.Warning($"Slew rejected on attempt {attempt}/{maxSlewAttempts}; retrying after settle");
+                        await Task.Delay(1000, ct);
+                    }
+                }
 
-                // Wait for slew to finish
-                while (Slewing && !ct.IsCancellationRequested) {
+                // Watch EQUATORIAL_EOD_COORD.State directly rather than the composite
+                // Slewing flag so that AltAz tracking motion cannot interfere.
+                while (!ct.IsCancellationRequested) {
                     var coordState = GetProperty("EQUATORIAL_EOD_COORD")?.State;
                     if (coordState == PropertyState.Alert) {
                         Logger.Error("EQUATORIAL_EOD_COORD in Alert state - slew rejected by mount");
                         throw new InvalidOperationException("Slew rejected by mount - check mount limits and target accessibility");
+                    }
+                    if (coordState != PropertyState.Busy) {
+                        break;
                     }
 
                     await Task.Delay(500, ct);
@@ -863,24 +904,24 @@ namespace NINA.INDI.Devices {
 
         public async Task SlewToAltAzTaskAsync(double azimuth, double altitude, CancellationToken ct = default) {
             try {
-                // Slew
                 SlewToAltAz(azimuth, altitude);
 
-                // Wait a bit for the slew to start
+                // Give the driver time to set HORIZONTAL_COORD to Busy before we poll.
                 await Task.Delay(1000, ct);
 
-                // Check the actual property state
+                // Watch HORIZONTAL_COORD.State directly. Slewing no longer includes
+                // HORIZONTAL_COORD.Busy (removed to fix AltAz tracking false-positive),
+                // so we cannot rely on the composite Slewing flag here.
+                // A completed goto reports Ok, not Idle, so we exit on any non-Busy state.
                 var coordProp = GetProperty("HORIZONTAL_COORD");
-
-                // Wait for slew to finish
-                while (Slewing && !ct.IsCancellationRequested) {
-                    // Check slewing status
-                    if (coordProp?.State == PropertyState.Idle) {
-                        // Done
-                        break;
-                    } else if (coordProp?.State == PropertyState.Alert) {
+                while (!ct.IsCancellationRequested) {
+                    var state = coordProp?.State;
+                    if (state == PropertyState.Alert) {
                         Logger.Error("HORIZONTAL_COORD in Alert state - slew rejected by mount");
                         throw new InvalidOperationException("Slew rejected by mount - check mount limits and target accessibility");
+                    }
+                    if (state != PropertyState.Busy) {
+                        break;
                     }
 
                     await Task.Delay(500, ct);
@@ -888,7 +929,7 @@ namespace NINA.INDI.Devices {
             } catch (ArgumentException) {
                 throw new NotImplementedException();
             } catch (Exception ex) {
-                Logger.Error($"Error in SlewToCoordinatesTaskAsync: {ex.Message}");
+                Logger.Error($"Error in SlewToAltAzTaskAsync: {ex.Message}");
                 throw;
             }
         }
