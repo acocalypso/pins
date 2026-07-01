@@ -92,6 +92,15 @@ namespace NINA.INDI.Interfaces {
         Task ParkAsync(CancellationToken ct = default);
         void SetPark();
         void SetTrackingMode(TrackingMode mode);
+
+        /// <summary>
+        /// Enables sidereal tracking and waits for the driver to acknowledge before returning
+        /// (no-op when already tracking). A fire-and-forget <see cref="Tracking"/> write races a
+        /// goto issued immediately after - e.g. the first slew right after connect, while the
+        /// mount is not yet tracking - and OnStep (and similar) reject that goto as "below the
+        /// horizon limit" until the tracking transition settles. Awaiting the switch closes the race.
+        /// </summary>
+        Task<bool> EnableTrackingAsync(CancellationToken ct = default);
         TrackingMode GetTrackingMode();
         IList<TrackingMode> GetSupportedTrackingModes();
         Task SlewToCoordinates(double ra, double dec);
