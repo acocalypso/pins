@@ -24,8 +24,8 @@ This project is pins-specific; it does not exist in upstream NINA. It is consume
   The contracts `NINA.Equipment` depends on: `IINDIDevice` plus one interface per device type.
 - `Enums/`
   Protocol and domain enums: `PropertyState` (Idle/Ok/Busy/Alert), `PropertyPermission` (ro/wo/rw), `PropertyRule` (switch rules), `DeviceInterface` (the INDI `DRIVER_INTERFACE` bit flags), plus device-domain enums (cover/shutter/tracking-rate).
-- `Model/`, `INDISwitchDescriptor.cs`, `Utility/ErrorCodes.cs`
-  Small supporting value types (axis rates, tracking rate, switch descriptors, error codes).
+- `Model/`, `INDISwitchDescriptor.cs`
+  Small supporting value types (axis rates, tracking rate, slew-rate capability, switch descriptors).
 
 ## Server Lifecycle (Linux-only)
 
@@ -76,7 +76,7 @@ Subclasses override `GetRequiredConnectionProperties`, `OnPreConnect`, and the `
 - `_driverLock` guards driver load/unload and the discovered-devices table.
 - `_getDriversSemaphore` serializes `GetDevices` so concurrent enumerations can't race driver load/unload.
 - `_operationLock` serializes socket writes; per-device `_asyncOperationsLock` guards the pending-async-operation map.
-- `ProcessXmlMessage` parses independent elements with `Parallel.ForEach`, but each `ProcessElement` takes `_lock`, so store mutations stay serialized.
+- `ProcessXmlMessage` processes elements strictly sequentially, in wire order. INDI is a stateful, ordered stream (a `defXxxVector` must be applied before the `setXxxVector` that follows it in the same batch; consecutive coordinate updates must apply oldest-first), so do not parallelize this loop.
 
 When adding behavior, respect which lock owns which state; the comments in `INDIClient.cs` document several non-obvious invariants (e.g. why driver eviction is scoped per NINA device-type category even when two categories share an INDI interface bit).
 
