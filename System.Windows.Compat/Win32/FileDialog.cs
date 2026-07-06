@@ -16,6 +16,7 @@ namespace Microsoft.Win32 {
     public class FileDialog {
         public string FileName { get; set; }
         public string InitialDirectory { get; set; }
+        public bool AddExtension { get; set; } = true;
         public bool? ShowDialog() => null;
         public bool? ShowDialog(System.Windows.Window owner) => ShowDialog();
     }
