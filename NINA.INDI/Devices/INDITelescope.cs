@@ -1007,10 +1007,12 @@ namespace NINA.INDI.Devices {
                     }
                 }
 
-                // Watch EQUATORIAL_EOD_COORD.State directly rather than the composite
-                // Slewing flag so that AltAz tracking motion cannot interfere. Bounded by
-                // MotionTimeout like every other completion wait — a driver that stops
-                // replying mid-slew must not park the caller forever on its own token.
+                // Watch EQUATORIAL_EOD_COORD.State, but also fall back to the coordinate-motion
+                // heuristic (via Slewing) rather than the raw state alone: OnStep frequently
+                // acks a goto with Ok/Idle instead of Busy — especially for short slews between
+                // nearby targets (e.g. alignment-model stars) — which would otherwise make this
+                // loop exit while the mount is still physically moving. HORIZONTAL_COORD is
+                // excluded from Slewing already, so AltAz tracking still cannot interfere here.
                 var started = DateTime.UtcNow;
                 while (!ct.IsCancellationRequested) {
                     var coordState = GetProperty("EQUATORIAL_EOD_COORD")?.State;
@@ -1018,7 +1020,7 @@ namespace NINA.INDI.Devices {
                         Logger.Error("EQUATORIAL_EOD_COORD in Alert state - slew rejected by mount");
                         throw new InvalidOperationException("Slew rejected by mount - check mount limits and target accessibility");
                     }
-                    if (coordState != PropertyState.Busy) {
+                    if (coordState != PropertyState.Busy && !Slewing) {
                         break;
                     }
                     if (DateTime.UtcNow - started > MotionTimeout) {

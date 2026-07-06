@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.47 - 2026-07-06
+### Fixed
+- INDI Telescope: Equatorial slew completion no longer exits early on mounts that ack a goto with Ok/Idle instead of Busy for short slews
+
 ## 1.1.46 - 2026-07-03
 ### Fixed
 - INDI: Drain indiserver's stdout/stderr so a chatty driver can no longer fill the pipe buffer and hang the server
