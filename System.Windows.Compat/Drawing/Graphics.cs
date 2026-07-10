@@ -81,6 +81,16 @@ namespace System.Drawing {
         public void DrawImage(Bitmap image, int x, int y) {
             if (image == null) return;
 
+            if (_hasTransform) {
+                // Route through the transform-aware overload so the image lands where the
+                // current TranslateTransform/RotateTransform composition puts it.
+                DrawImage(image,
+                    new RectangleF(x, y, image.Width, image.Height),
+                    new RectangleF(0, 0, image.Width, image.Height),
+                    GraphicsUnit.Pixel);
+                return;
+            }
+
             using (Mat srcMat = image.GetMat()) {
                 if (srcMat == null || srcMat.Empty()) return;
                 if (_canvas == null || _canvas.Empty()) return;
@@ -126,6 +136,16 @@ namespace System.Drawing {
             Bitmap bitmap = image as Bitmap;
             if (bitmap == null) return;
 
+            if (_hasTransform) {
+                // Route through the transform-aware overload so the image lands where the
+                // current TranslateTransform/RotateTransform composition puts it.
+                DrawImage(bitmap,
+                    new RectangleF(x, y, width, height),
+                    new RectangleF(0, 0, bitmap.Width, bitmap.Height),
+                    GraphicsUnit.Pixel);
+                return;
+            }
+
             using (Mat srcMat = bitmap.GetMat()) {
                 if (srcMat == null || srcMat.Empty()) return;
                 if (_canvas == null || _canvas.Empty()) return;
@@ -167,15 +187,32 @@ namespace System.Drawing {
         /// Draws a rectangle
         /// </summary>
         public void DrawRectangle(Pen pen, float x, float y, float width, float height) {
-            var rect = new Rect((int)x, (int)y, (int)width, (int)height);
-            Cv2.Rectangle(_canvas, rect, pen.Color, (int)pen.Width, pen.LineType);
+            if (!_hasTransform) {
+                var rect = new Rect((int)x, (int)y, (int)width, (int)height);
+                // Sub-pixel pen widths truncate to 0, which OpenCV rejects (and -1 would mean
+                // "filled") - clamp to the 1px hairline GDI+ draws, like DrawLine does.
+                Cv2.Rectangle(_canvas, rect, pen.Color, (int)Math.Max(1, pen.Width), pen.LineType);
+                return;
+            }
+
+            // A rotated rectangle can't be represented as an axis-aligned Cv2.Rectangle - draw
+            // the four transformed corners as a closed polyline instead.
+            var corners = new[] {
+                TransformPoint(x, y),
+                TransformPoint(x + width, y),
+                TransformPoint(x + width, y + height),
+                TransformPoint(x, y + height)
+            };
+            DrawPolylineRaw(pen, corners, true);
         }
 
         /// <summary>
         /// Draws a line
         /// </summary>
         public void DrawLine(Pen pen, float x1, float y1, float x2, float y2) {
-            Cv2.Line(_canvas, (int)x1, (int)y1, (int)x2, (int)y2, pen.Color, (int)Math.Max(1, pen.Width), pen.LineType);
+            var p1 = TransformPoint(x1, y1);
+            var p2 = TransformPoint(x2, y2);
+            Cv2.Line(_canvas, (int)p1.X, (int)p1.Y, (int)p2.X, (int)p2.Y, pen.Color, (int)Math.Max(1, pen.Width), pen.LineType);
         }
 
         /// <summary>
@@ -200,6 +237,7 @@ namespace System.Drawing {
         /// </summary>
         public void DrawString(string text, Font font, Brush brush, System.Drawing.PointF point) {
             if (string.IsNullOrEmpty(text)) return;
+            if (_canvas == null || _canvas.Empty()) return;
 
             // Convert font size to OpenCV scale
             double fontScale = font.Size / 20.0; // Approximate scaling
@@ -212,8 +250,61 @@ namespace System.Drawing {
                 thickness = Math.Max(2, thickness);
             }
 
-            Cv2.PutText(_canvas, text, new OpenCvSharp.Point((int)point.X, (int)point.Y),
-                fontFace, fontScale, brush.ToScalar(), thickness, LineTypes.AntiAlias);
+            var transformedOrigin = TransformPoint(point.X, point.Y);
+            float angle = TransformAngleDegrees();
+
+            if (!_hasTransform || angle == 0f) {
+                Cv2.PutText(_canvas, text, new OpenCvSharp.Point((int)transformedOrigin.X, (int)transformedOrigin.Y),
+                    fontFace, fontScale, brush.ToScalar(), thickness, LineTypes.AntiAlias);
+                return;
+            }
+
+            // Rotated text: Cv2.PutText has no rotation parameter, so render into a padded local
+            // buffer at the untransformed origin, rotate that buffer about its own center, and
+            // composite the buffer-sized result through a mask onto a canvas ROI. Keeping all
+            // warp targets glyph-buffer-sized (instead of canvas-sized) avoids moving multiple
+            // full frames of memory per label on large sensors.
+            var textSize = Cv2.GetTextSize(text, fontFace, fontScale, thickness, out int baseline);
+            // The farthest glyph pixel from the origin is at distance hypot(width, height +
+            // baseline); pad by that so no rotation angle can clip it at the buffer edge.
+            int pad = (int)Math.Ceiling(Math.Sqrt(
+                (double)textSize.Width * textSize.Width +
+                (double)(textSize.Height + baseline) * (textSize.Height + baseline))) + thickness * 4;
+            int bufSize = pad * 2;
+            var localOrigin = new OpenCvSharp.Point(pad, pad);
+            var bufCvSize = new OpenCvSharp.Size(bufSize, bufSize);
+
+            using var glyphs = new Mat(bufSize, bufSize, _canvas.Type(), Scalar.All(0));
+            Cv2.PutText(glyphs, text, localOrigin, fontFace, fontScale, brush.ToScalar(), thickness, LineTypes.AntiAlias);
+
+            using var glyphMask = new Mat(bufSize, bufSize, MatType.CV_8UC1, Scalar.All(0));
+            Cv2.PutText(glyphMask, text, localOrigin, fontFace, fontScale, Scalar.All(255), thickness, LineTypes.AntiAlias);
+
+            // GetRotationMatrix2D is counter-clockwise-positive; negate the clockwise-positive
+            // transform angle. Rotate about the buffer center so the result stays in-buffer.
+            using var rotation = Cv2.GetRotationMatrix2D(new Point2f(pad, pad), -angle, 1.0);
+
+            using var warpedColor = new Mat(bufSize, bufSize, _canvas.Type(), Scalar.All(0));
+            using var warpedMask = new Mat(bufSize, bufSize, MatType.CV_8UC1, Scalar.All(0));
+            Cv2.WarpAffine(glyphs, warpedColor, rotation, bufCvSize, InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(0));
+            Cv2.WarpAffine(glyphMask, warpedMask, rotation, bufCvSize, InterpolationFlags.Linear, BorderTypes.Constant, Scalar.All(0));
+
+            // Composite so the buffer center (the text origin) lands on the transformed
+            // destination position, clipping the ROI to the canvas bounds.
+            int dstX = (int)transformedOrigin.X - pad;
+            int dstY = (int)transformedOrigin.Y - pad;
+            int srcX = Math.Max(0, -dstX);
+            int srcY = Math.Max(0, -dstY);
+            int roiX = Math.Max(0, dstX);
+            int roiY = Math.Max(0, dstY);
+            int roiWidth = Math.Min(bufSize - srcX, _canvas.Width - roiX);
+            int roiHeight = Math.Min(bufSize - srcY, _canvas.Height - roiY);
+            if (roiWidth <= 0 || roiHeight <= 0) return;
+
+            using var colorRoi = new Mat(warpedColor, new Rect(srcX, srcY, roiWidth, roiHeight));
+            using var maskRoi = new Mat(warpedMask, new Rect(srcX, srcY, roiWidth, roiHeight));
+            using var canvasRoi = new Mat(_canvas, new Rect(roiX, roiY, roiWidth, roiHeight));
+            colorRoi.CopyTo(canvasRoi, maskRoi);
         }
 
         /// <summary>
@@ -253,18 +344,18 @@ namespace System.Drawing {
         /// Draws an ellipse
         /// </summary>
         public void DrawEllipse(Pen pen, Rectangle rect) {
-            var center = new OpenCvSharp.Point(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
-            var axes = new OpenCvSharp.Size(rect.Width / 2, rect.Height / 2);
-            Cv2.Ellipse(_canvas, center, axes, 0, 0, 360, pen.Color, (int)pen.Width, pen.LineType);
+            DrawEllipse(pen, new RectangleF(rect.X, rect.Y, rect.Width, rect.Height));
         }
 
         /// <summary>
         /// Draws an ellipse with floating point coordinates
         /// </summary>
         public void DrawEllipse(Pen pen, RectangleF rect) {
-            var center = new OpenCvSharp.Point((int)(rect.X + rect.Width / 2), (int)(rect.Y + rect.Height / 2));
+            var centerLocal = TransformPoint(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
+            var center = new OpenCvSharp.Point((int)centerLocal.X, (int)centerLocal.Y);
             var axes = new OpenCvSharp.Size((int)(rect.Width / 2), (int)(rect.Height / 2));
-            Cv2.Ellipse(_canvas, center, axes, 0, 0, 360, pen.Color, (int)pen.Width, pen.LineType);
+            // Same clamp as DrawRectangle: width < 1 must draw a hairline, not assert (or fill).
+            Cv2.Ellipse(_canvas, center, axes, TransformAngleDegrees(), 0, 360, pen.Color, (int)Math.Max(1, pen.Width), pen.LineType);
         }
 
         /// <summary>
@@ -278,18 +369,17 @@ namespace System.Drawing {
         /// Fills an ellipse
         /// </summary>
         public void FillEllipse(Brush brush, Rectangle rect) {
-            var center = new OpenCvSharp.Point(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
-            var axes = new OpenCvSharp.Size(rect.Width / 2, rect.Height / 2);
-            Cv2.Ellipse(_canvas, center, axes, 0, 0, 360, brush.ToScalar(), -1, LineTypes.AntiAlias);
+            FillEllipse(brush, new RectangleF(rect.X, rect.Y, rect.Width, rect.Height));
         }
 
         /// <summary>
         /// Fills an ellipse with floating point coordinates
         /// </summary>
         public void FillEllipse(Brush brush, RectangleF rect) {
-            var center = new OpenCvSharp.Point((int)(rect.X + rect.Width / 2), (int)(rect.Y + rect.Height / 2));
+            var centerLocal = TransformPoint(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
+            var center = new OpenCvSharp.Point((int)centerLocal.X, (int)centerLocal.Y);
             var axes = new OpenCvSharp.Size((int)(rect.Width / 2), (int)(rect.Height / 2));
-            Cv2.Ellipse(_canvas, center, axes, 0, 0, 360, brush.ToScalar(), -1, LineTypes.AntiAlias);
+            Cv2.Ellipse(_canvas, center, axes, TransformAngleDegrees(), 0, 360, brush.ToScalar(), -1, LineTypes.AntiAlias);
         }
 
         /// <summary>
@@ -305,14 +395,55 @@ namespace System.Drawing {
         public void DrawPolygon(Pen pen, PointF[] points) {
             if (points == null || points.Length < 2) return;
 
-            // Convert PointF array to OpenCV Point array
+            var transformed = new PointF[points.Length];
+            for (int i = 0; i < points.Length; i++) {
+                transformed[i] = TransformPoint(points[i].X, points[i].Y);
+            }
+            DrawPolylineRaw(pen, transformed, true);
+        }
+
+        /// <summary>
+        /// Draws a closed or open polyline through already-transformed points, with no further
+        /// transform applied - used internally by DrawPolygon/DrawRectangle once their input
+        /// points have already been run through TransformPoint.
+        /// </summary>
+        private void DrawPolylineRaw(Pen pen, PointF[] points, bool closed) {
             OpenCvSharp.Point[] cvPoints = new OpenCvSharp.Point[points.Length];
             for (int i = 0; i < points.Length; i++) {
                 cvPoints[i] = new OpenCvSharp.Point((int)points[i].X, (int)points[i].Y);
             }
+            Cv2.Polylines(_canvas, new OpenCvSharp.Point[][] { cvPoints }, closed, pen.Color, (int)System.Math.Max(1, pen.Width), pen.LineType);
+        }
 
-            // Draw polylines (closed polygon)
-            Cv2.Polylines(_canvas, new OpenCvSharp.Point[][] { cvPoints }, true, pen.Color, (int)System.Math.Max(1, pen.Width), pen.LineType);
+        /// <summary>
+        /// Applies the current transform (TranslateTransform/RotateTransform composition) to a
+        /// single point. A no-op when no transform is active.
+        /// </summary>
+        private PointF TransformPoint(float x, float y) {
+            if (!_hasTransform) {
+                return new PointF(x, y);
+            }
+            double tx = _transform.At<double>(0, 0) * x + _transform.At<double>(0, 1) * y + _transform.At<double>(0, 2);
+            double ty = _transform.At<double>(1, 0) * x + _transform.At<double>(1, 1) * y + _transform.At<double>(1, 2);
+            return new PointF((float)tx, (float)ty);
+        }
+
+        /// <summary>
+        /// Returns the current transform's rotation angle in this class's RotateTransform
+        /// convention (positive = clockwise on screen, matching GDI+ in y-down image
+        /// coordinates). Cv2.Ellipse's angle parameter shares that clockwise-positive
+        /// convention, so the value can be passed to it directly; Cv2.GetRotationMatrix2D is
+        /// counter-clockwise-positive and needs the negation. Since TranslateTransform and
+        /// RotateTransform are the only two mutators of _transform, its linear part is always a
+        /// pure rotation (or identity), so extracting a single angle is exact - never a skew.
+        /// </summary>
+        private float TransformAngleDegrees() {
+            if (!_hasTransform) {
+                return 0f;
+            }
+            double m00 = _transform.At<double>(0, 0);
+            double m10 = _transform.At<double>(1, 0);
+            return (float)(Math.Atan2(m10, m00) * 180.0 / Math.PI);
         }
 
         /// <summary>
@@ -320,6 +451,16 @@ namespace System.Drawing {
         /// </summary>
         public void DrawBeziers(Pen pen, PointF[] points) {
             if (points == null || points.Length < 4 || (points.Length - 1) % 3 != 0) return;
+
+            // An affine transform of a Bezier curve equals the Bezier of the transformed
+            // control points, so applying the current transform up front is exact.
+            if (_hasTransform) {
+                var transformedPoints = new PointF[points.Length];
+                for (int i = 0; i < points.Length; i++) {
+                    transformedPoints[i] = TransformPoint(points[i].X, points[i].Y);
+                }
+                points = transformedPoints;
+            }
 
             // Bezier curves require 4 points per curve (start, control1, control2, end)
             // For simplicity, approximate with polylines
@@ -635,6 +776,10 @@ namespace System.Drawing {
                 _transform.Set(0, 0, 1.0); _transform.Set(0, 1, 0.0); _transform.Set(0, 2, 0.0);
                 _transform.Set(1, 0, 0.0); _transform.Set(1, 1, 1.0); _transform.Set(1, 2, 0.0);
             }
+            // Save() clones _transform into the state; that clone's job ends here, in the
+            // Save/Restore pattern this mirrors. Dispose it now rather than waiting on the
+            // finalizer for the native Mat buffer.
+            state.Transform?.Dispose();
         }
 
         /// <summary>
@@ -648,9 +793,26 @@ namespace System.Drawing {
         /// Fills a rectangle with the specified brush using individual coordinates
         /// </summary>
         public void FillRectangle(Brush brush, float x, float y, float width, float height) {
-            var pt1 = new OpenCvSharp.Point((int)x, (int)y);
-            var pt2 = new OpenCvSharp.Point((int)(x + width), (int)(y + height));
-            Cv2.Rectangle(_canvas, pt1, pt2, brush.ToScalar(), -1, LineTypes.AntiAlias);
+            if (!_hasTransform) {
+                var pt1 = new OpenCvSharp.Point((int)x, (int)y);
+                var pt2 = new OpenCvSharp.Point((int)(x + width), (int)(y + height));
+                Cv2.Rectangle(_canvas, pt1, pt2, brush.ToScalar(), -1, LineTypes.AntiAlias);
+                return;
+            }
+
+            // A rotated rectangle can't be filled as an axis-aligned Cv2.Rectangle - fill the
+            // four transformed corners as a convex polygon instead (mirrors DrawRectangle).
+            var corners = new[] {
+                TransformPoint(x, y),
+                TransformPoint(x + width, y),
+                TransformPoint(x + width, y + height),
+                TransformPoint(x, y + height)
+            };
+            var cvCorners = new OpenCvSharp.Point[corners.Length];
+            for (int i = 0; i < corners.Length; i++) {
+                cvCorners[i] = new OpenCvSharp.Point((int)corners[i].X, (int)corners[i].Y);
+            }
+            Cv2.FillConvexPoly(_canvas, cvCorners, brush.ToScalar(), LineTypes.AntiAlias);
         }
 
         /// <summary>

@@ -28,7 +28,6 @@ namespace System.Windows.Threading {
             var op = new DispatcherOperation {
                 Dispatcher = this,
                 Priority = priority,
-                Status = DispatcherOperationStatus.Completed,
                 Task = task
             };
             return op;
@@ -148,6 +147,9 @@ namespace System.Windows.Threading {
             _timer = new System.Timers.Timer(interval.TotalMilliseconds);
             _timer.Elapsed += OnTimerElapsed;
             Tick += callback;
+            // WPF's 4-argument constructor starts the timer as part of construction; callers
+            // (e.g. ProfileSelectVM.Wait100msNonBlocking) rely on that and never call Start().
+            Start();
         }
 
         private void OnTimerElapsed(object sender, System.Timers.ElapsedEventArgs e) {

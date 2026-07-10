@@ -108,16 +108,20 @@ namespace NINA.Image.FileFormat.FITS {
                     CfitsioNative.CheckStatus("fits_open_memory", status);
                 }
 
-                var dimensions = CfitsioNative.fits_read_key_long(fitsPtr, "NAXIS");
+                var dimensions = (int)CfitsioNative.fits_read_key_long(fitsPtr, "NAXIS");
                 if (dimensions > 2) {
-                    Logger.Warning("Reading debayered FITS images not supported. Reading the first 2 axes to get a monochrome image");
+                    Logger.Warning("Reading debayered FITS images not supported. Reading the first axis to get a monochrome image");
                 }
 
                 var width = (int)CfitsioNative.fits_read_key_long(fitsPtr, "NAXIS1");
                 var height = (int)CfitsioNative.fits_read_key_long(fitsPtr, "NAXIS2");
                 var bitPix = (CfitsioNative.BITPIX)(int)CfitsioNative.fits_read_key_long(fitsPtr, "BITPIX");
 
-                var pixels = CfitsioNative.read_ushort_pixels(fitsPtr, bitPix, 2, width * height);
+                // firstpix must be sized to the file's actual NAXIS: cfitsio interprets the start
+                // coordinate against the on-disk dimensionality, so a hardcoded 2 reads past the
+                // array (cfitsio error 308) for 3-axis debayered frames (e.g. V4L2 colour cameras).
+                // Reading width*height elements from {1,1,1} yields the first plane as a mono image.
+                var pixels = CfitsioNative.read_ushort_pixels(fitsPtr, bitPix, Math.Max(dimensions, 2), width * height);
 
                 //Translate CFITSio into N.I.N.A. FITSHeader
                 FITSHeader header = new FITSHeader(width, height);

@@ -40,8 +40,11 @@ namespace Accord.Imaging.Filters {
         public unsafe void ApplyInPlace(Bitmap image) {
             Mat mat = image;
 
-            // Create UnmanagedImage from the Mat
-            using (var unmanagedSrc = UnmanagedImage.FromMat(mat))
+            // ProcessFilter's contract is a read-only source and a separate destination.
+            // Handing both UnmanagedImages the same Mat lets destination writes feed back into
+            // source reads for any neighborhood-based filter - give the source its own copy.
+            using (Mat sourceCopy = mat.Clone())
+            using (var unmanagedSrc = UnmanagedImage.FromMat(sourceCopy))
             using (var unmanagedDst = UnmanagedImage.FromMat(mat)) {
                 var rect = new Rectangle(0, 0, image.Width, image.Height);
                 ProcessFilter(unmanagedSrc, unmanagedDst, rect);

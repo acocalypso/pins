@@ -624,6 +624,24 @@ namespace NINA.Sequencer.Logic {
         }
 
         public void Dispose() {
+            _conditionWatchdog?.Cancel();
+            _imagingMediator.ImagePrepared -= SetImageSymbols;
+
+            _telescopeMediator.RemoveConsumer(this);
+            _switchMediator.RemoveConsumer(this);
+            _weatherDataMediator.RemoveConsumer(this);
+            _focuserMediator.RemoveConsumer(this);
+            _domeMediator.RemoveConsumer(this);
+            _safetyMonitorMediator.RemoveConsumer(this);
+            _filterWheelMediator.RemoveConsumer(this);
+            _cameraMediator.RemoveConsumer(this);
+            _flatMediator.RemoveConsumer(this);
+            _rotatorMediator.RemoveConsumer(this);
+            _guiderMediator.RemoveConsumer(this);
+
+            if (Instance == this) {
+                Instance = null;
+            }
         }
 
         public IReadOnlyCollection<SymbolFunction> GetFunctions() {

@@ -12,22 +12,84 @@
 
 #endregion "copyright"
 
+using System.Collections.Generic;
+using System.Reflection;
+
 namespace System.Windows.Input
 {
     public static class CommandManager
     {
-        private static event EventHandler _requerySuggested;
+        // WPF holds RequerySuggested subscribers weakly (RelayCommand.CanExecuteChanged forwards every
+        // add/remove straight through) so a subscriber that never unsubscribes - the common case for
+        // transient VMs/commands - doesn't get pinned forever. Static-method handlers have no target to
+        // leak and are stored directly (targetRef == null is the marker for that).
+        private static readonly object _lock = new object();
+        private static readonly List<(WeakReference targetRef, MethodInfo method)> _handlers = new();
 
         public static event EventHandler RequerySuggested
         {
-            add { _requerySuggested += value; }
-            remove { _requerySuggested -= value; }
+            add
+            {
+                if (value == null) return;
+                lock (_lock)
+                {
+                    _handlers.Add((value.Target == null ? null : new WeakReference(value.Target), value.Method));
+                }
+            }
+            remove
+            {
+                if (value == null) return;
+                lock (_lock)
+                {
+                    for (int i = _handlers.Count - 1; i >= 0; i--)
+                    {
+                        var (targetRef, method) = _handlers[i];
+                        var target = targetRef?.Target;
+                        if (targetRef != null && target == null)
+                        {
+                            _handlers.RemoveAt(i); // prune collected entry
+                            continue;
+                        }
+                        if (target == value.Target && method == value.Method)
+                        {
+                            _handlers.RemoveAt(i); // remove only the one matching subscription
+                            return;
+                        }
+                    }
+                }
+            }
         }
 
         public static void InvalidateRequerySuggested()
         {
-            // Invoke the event to notify commands to re-evaluate CanExecute
-            _requerySuggested?.Invoke(null, EventArgs.Empty);
+            // Snapshot outside the invoke loop: resolving each WeakReference once roots it in this list
+            // for the duration of the invocation, and prunes any entry collected since it was added.
+            var snapshot = new List<(object target, MethodInfo method)>();
+            lock (_lock)
+            {
+                for (int i = _handlers.Count - 1; i >= 0; i--)
+                {
+                    var (targetRef, method) = _handlers[i];
+                    if (targetRef == null)
+                    {
+                        snapshot.Add((null, method));
+                        continue;
+                    }
+
+                    var target = targetRef.Target;
+                    if (target == null)
+                    {
+                        _handlers.RemoveAt(i);
+                        continue;
+                    }
+                    snapshot.Add((target, method));
+                }
+            }
+
+            foreach (var (target, method) in snapshot)
+            {
+                method.Invoke(target, new object[] { null, EventArgs.Empty });
+            }
         }
     }
 }

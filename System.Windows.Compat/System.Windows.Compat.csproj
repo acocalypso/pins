@@ -3,8 +3,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>System.Windows</RootNamespace>
     <AssemblyName>System.Windows</AssemblyName>
-    <AssemblyVersion>4.0.0.0</AssemblyVersion>
-    <FileVersion>4.0.0.0</FileVersion>
+    <!-- Higher than the System.Windows type-forwarder facade in Microsoft.NETCore.App (4.0.0.0),
+         so both MSBuild conflict resolution and the framework-dependent host pick this assembly
+         instead of the facade. See NINA.Test: without this, no compat type resolves under 'dotnet test'. -->
+    <AssemblyVersion>4.1.0.0</AssemblyVersion>
+    <FileVersion>4.1.0.0</FileVersion>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>

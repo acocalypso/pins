@@ -48,7 +48,17 @@ namespace System.Windows {
         public double Right => X + Width;
         public double Bottom => Y + Height;
 
-        public bool IsEmpty => Width == 0 && Height == 0;
+        // WPF's Rect.Empty is a sentinel (X = Y = +Infinity, Width = Height = -Infinity), and
+        // IsEmpty is true only for that sentinel - a legitimate zero-sized rect at a real
+        // position (e.g. new Rect(5, 5, 0, 0)) is NOT empty in WPF.
+        public static Rect Empty { get; } = new Rect {
+            X = double.PositiveInfinity,
+            Y = double.PositiveInfinity,
+            Width = double.NegativeInfinity,
+            Height = double.NegativeInfinity
+        };
+
+        public bool IsEmpty => Width < 0;
 
         public override string ToString() {
             return $"{X},{Y},{Width},{Height}";

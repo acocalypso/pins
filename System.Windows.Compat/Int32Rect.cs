@@ -29,7 +29,9 @@ namespace System.Windows {
             Height = height;
         }
 
-        public bool IsEmpty => Width == 0 || Height == 0;
+        // WPF requires all four components to be zero (matching Int32Rect.Empty exactly) -
+        // a rect with only Width or Height at zero is a legitimate degenerate rect, not "empty".
+        public bool IsEmpty => X == 0 && Y == 0 && Width == 0 && Height == 0;
 
         public static Int32Rect Empty => new Int32Rect(0, 0, 0, 0);
     }

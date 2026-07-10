@@ -57,5 +57,20 @@ namespace System.Windows.Media {
                 point.X * M12 + point.Y * M22 + OffsetY
             );
         }
+
+        /// <summary>
+        /// Row-vector composition: transforming by the result applies <paramref name="a"/>
+        /// first, then <paramref name="b"/> (v * a * b), matching WPF's Matrix.Multiply.
+        /// </summary>
+        public static Matrix Multiply(Matrix a, Matrix b) {
+            return new Matrix {
+                M11 = a.M11 * b.M11 + a.M12 * b.M21,
+                M12 = a.M11 * b.M12 + a.M12 * b.M22,
+                M21 = a.M21 * b.M11 + a.M22 * b.M21,
+                M22 = a.M21 * b.M12 + a.M22 * b.M22,
+                OffsetX = a.OffsetX * b.M11 + a.OffsetY * b.M21 + b.OffsetX,
+                OffsetY = a.OffsetX * b.M12 + a.OffsetY * b.M22 + b.OffsetY
+            };
+        }
     }
 }

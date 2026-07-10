@@ -24,8 +24,12 @@ namespace System.Drawing
     public class Image : IDisposable
     {
         public virtual void Dispose() { }
-        public int Width { get; set; }
-        public int Height { get; set; }
+
+        // Virtual so Bitmap can route these to its Mat. Non-virtual auto-properties here got
+        // shadowed by Bitmap's expression-bodied Width/Height, and any access through an
+        // Image-typed reference read the never-assigned auto-property backing field: 0.
+        public virtual int Width { get; set; }
+        public virtual int Height { get; set; }
         public ImageFormat RawFormat { get; set; }
     }
 
@@ -35,6 +39,12 @@ namespace System.Drawing
     public class Bitmap : Image
     {
         private Mat _mat;
+
+        // The PixelFormat this bitmap was explicitly created with. The Mat type alone cannot
+        // round-trip every creation format (Format32bppPArgb/Format32bppRgb both map to
+        // CV_8UC4, Format16bppRgb565 to CV_16UC1), so LockBits' format check must compare
+        // against this, not a format re-derived from the Mat. Undefined = derive from the Mat.
+        private PixelFormat _createdFormat = PixelFormat.Undefined;
 
         public Bitmap()
         {
@@ -61,6 +71,7 @@ namespace System.Drawing
                     matType = MatType.CV_8UC3;
                     break;
                 case PixelFormat.Format32bppArgb:
+                case PixelFormat.Format32bppPArgb:
                 case PixelFormat.Format32bppRgb:
                     matType = MatType.CV_8UC4;
                     break;
@@ -71,9 +82,11 @@ namespace System.Drawing
                     matType = MatType.CV_16UC1; // Store as 16-bit single channel
                     break;
                 default:
-                    matType = MatType.CV_8UC3;
-                    break;
+                    // Fail loudly rather than silently guessing an element size the caller's
+                    // pixel math will not match (the LockBits stride/layout corruption class).
+                    throw new NotSupportedException($"Bitmap creation with pixel format {format} is not supported.");
             }
+            _createdFormat = format;
             _mat = new Mat(height, width, matType);
             // Initialize to zero
             _mat.SetTo(OpenCvSharp.Scalar.All(0));
@@ -96,6 +109,7 @@ namespace System.Drawing
         public Bitmap(Bitmap source)
         {
             _mat = source?._mat?.Clone() ?? new Mat();
+            _createdFormat = source?._createdFormat ?? PixelFormat.Undefined;
         }
 
         public Bitmap(Bitmap source, int width, int height)
@@ -109,21 +123,30 @@ namespace System.Drawing
 
             _mat = new Mat();
             Cv2.Resize(source._mat, _mat, new OpenCvSharp.Size(width, height));
+            _createdFormat = source._createdFormat;
         }
 
         public Bitmap Clone()
         {
-            return new Bitmap(_mat?.Clone());
+            var clone = new Bitmap(_mat?.Clone());
+            clone._createdFormat = _createdFormat;
+            return clone;
         }
 
-        public int Width => _mat.Width;
-        public int Height => _mat.Height;
+        // Getter-only overrides: the dimensions always come from the Mat, also when read
+        // through an Image-typed reference. The inherited setters remain and are ignored.
+        public override int Width => _mat.Width;
+        public override int Height => _mat.Height;
 
         public PixelFormat PixelFormat
         {
             get
             {
                 if (_mat == null || _mat.Empty()) return PixelFormat.Undefined;
+
+                // Prefer the format this bitmap was explicitly created with - the Mat type is
+                // lossy (PArgb/32bppRgb/565 have no distinct Mat representation).
+                if (_createdFormat != PixelFormat.Undefined) return _createdFormat;
 
                 var matType = _mat.Type();
                 if (matType == MatType.CV_8UC1) return PixelFormat.Format8bppIndexed;
@@ -174,6 +197,23 @@ namespace System.Drawing
         /// </summary>
         public BitmapData LockBits(Rectangle rect, ImageLockMode mode, PixelFormat format)
         {
+            // This shim always hands back the Mat's own full buffer/format; it cannot honor a
+            // sub-rectangle crop or an on-the-fly format conversion the way real GDI+ LockBits does.
+            // Silently ignoring either used to let callers walk the buffer with the wrong
+            // stride/layout (REVIEW.md F4) - fail loudly instead so a real mismatch is caught at the
+            // call site instead of silently corrupting pixel data.
+            var fullRect = new Rectangle(0, 0, _mat.Width, _mat.Height);
+            if (rect != fullRect)
+            {
+                throw new NotSupportedException(
+                    $"LockBits does not support partial-rectangle locking; requested {rect} but bitmap is {fullRect}.");
+            }
+            if (format != this.PixelFormat)
+            {
+                throw new NotSupportedException(
+                    $"LockBits does not support format conversion; requested {format} but bitmap is {this.PixelFormat}.");
+            }
+
             // For OpenCV Mat, the data is already accessible
             // Return BitmapData pointing to the Mat's data
             return new BitmapData

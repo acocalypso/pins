@@ -193,31 +193,69 @@ namespace Accord.Imaging.Filters {
     }
 
     /// <summary>
-    /// SIS Threshold - Simple Image Statistics threshold using OpenCV
-    /// Adaptive thresholding algorithm
+    /// SIS Threshold - Simple Image Statistics global threshold, matching Accord's algorithm:
+    /// T = sum(w * I) / sum(w) with per-pixel weight w = max(|dI/dx|, |dI/dy|) (central
+    /// differences). Pixels >= T become white, all others black. This is a single global
+    /// threshold - an earlier version used Cv2.AdaptiveThreshold (a *local* threshold), which
+    /// diverged badly from Accord on images with background gradients (star detection input).
     /// </summary>
     public class SISThreshold {
         public void ApplyInPlace(Bitmap image) {
             Mat mat = image;
-
-            // SIS threshold uses adaptive thresholding
-            // Using Gaussian adaptive threshold which is similar to SIS
-            Cv2.AdaptiveThreshold(mat, mat, 255,
-                AdaptiveThresholdTypes.GaussianC,
-                ThresholdTypes.Binary,
-                11, 2);
+            double threshold = CalculateThreshold(mat);
+            // OpenCV Binary compares src > thresh (strict); Accord uses >= threshold on integer
+            // pixels, so shift by half an intensity step to get identical binarization.
+            Cv2.Threshold(mat, mat, threshold - 0.5, MaxValueFor(mat), ThresholdTypes.Binary);
         }
 
         public Bitmap Apply(Bitmap source) {
             Mat sourceMat = source;
+            double threshold = CalculateThreshold(sourceMat);
             Mat result = new Mat();
-
-            Cv2.AdaptiveThreshold(sourceMat, result, 255,
-                AdaptiveThresholdTypes.GaussianC,
-                ThresholdTypes.Binary,
-                11, 2);
-
+            Cv2.Threshold(sourceMat, result, threshold - 0.5, MaxValueFor(sourceMat), ThresholdTypes.Binary);
             return new Bitmap(result);
+        }
+
+        private static double MaxValueFor(Mat mat) {
+            return mat.Depth() == MatType.CV_16U ? 65535 : 255;
+        }
+
+        private static double CalculateThreshold(Mat gray) {
+            if (gray.Channels() != 1) {
+                throw new InvalidImagePropertiesException("SISThreshold requires a single-channel grayscale image.");
+            }
+            // Accord iterates the interior only (borders have no central difference); mirror
+            // that by computing gradients over the full image but summing the interior ROI.
+            if (gray.Width < 3 || gray.Height < 3) {
+                // No interior pixels -> Accord's weight total is 0 and the threshold is 0.
+                return 0;
+            }
+
+            using Mat f = new Mat();
+            gray.ConvertTo(f, MatType.CV_32F);
+
+            // Sobel with ksize 1 is the plain central-difference kernel [-1 0 1], matching
+            // Accord's I(x+1,y) - I(x-1,y) exactly (the constant factor cancels in the ratio).
+            using Mat gx = new Mat();
+            using Mat gy = new Mat();
+            Cv2.Sobel(f, gx, MatType.CV_32F, 1, 0, 1);
+            Cv2.Sobel(f, gy, MatType.CV_32F, 0, 1, 1);
+
+            using Mat absX = Cv2.Abs(gx);
+            using Mat absY = Cv2.Abs(gy);
+            using Mat weights = new Mat();
+            Cv2.Max(absX, absY, weights);
+
+            var interior = new Rect(1, 1, gray.Width - 2, gray.Height - 2);
+            using Mat weightsRoi = new Mat(weights, interior);
+            using Mat fRoi = new Mat(f, interior);
+            using Mat weighted = weightsRoi.Mul(fRoi);
+
+            double weightTotal = Cv2.Sum(weightsRoi).Val0;
+            double weightedTotal = Cv2.Sum(weighted).Val0;
+
+            // Accord truncates the ratio to an integer threshold.
+            return weightTotal == 0 ? 0 : System.Math.Floor(weightedTotal / weightTotal);
         }
     }
 

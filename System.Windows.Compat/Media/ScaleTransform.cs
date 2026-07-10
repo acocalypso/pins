@@ -17,6 +17,11 @@ namespace System.Windows.Media {
     /// Base class for transforms
     /// </summary>
     public abstract class Transform {
+        /// <summary>
+        /// The transform as a WPF row-vector matrix: p' = [x y 1] * Value. Lets consumers
+        /// (e.g. TransformedBitmap) handle any transform type through one general affine path.
+        /// </summary>
+        public abstract Matrix Value { get; }
     }
 
     /// <summary>
@@ -44,5 +49,15 @@ namespace System.Windows.Media {
             CenterX = centerX;
             CenterY = centerY;
         }
+
+        public override Matrix Value => new Matrix {
+            M11 = ScaleX,
+            M12 = 0,
+            M21 = 0,
+            M22 = ScaleY,
+            // Scale about (CenterX, CenterY): p' = (p - c) * S + c
+            OffsetX = CenterX - ScaleX * CenterX,
+            OffsetY = CenterY - ScaleY * CenterY
+        };
     }
 }

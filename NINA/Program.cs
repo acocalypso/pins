@@ -132,6 +132,7 @@ Logger.Info("Server fully initialized and running.");
 
 // Register shutdown handler
 var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+System.Windows.Application.ApplicationLifetime = lifetime;
 lifetime.ApplicationStopping.Register(() => {
     Logger.Info("Application shutting down...");
 
