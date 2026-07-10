@@ -91,7 +91,7 @@ namespace NINA.Test.PlateSolving {
             var solver = new TestableCliSolver {
                 ShouldSucceed = true,
                 Timeout = TimeSpan.FromMilliseconds(100),
-                ArgumentsToReturn = "/C ping 127.0.0.1 -n 6 > nul"
+                ArgumentsToReturn = OperatingSystem.IsWindows() ? "/C ping 127.0.0.1 -n 6 > nul" : "-c \"sleep 6\""
             };
             IImageData imageData = CreateImageData("CliTimeout", out _);
             var parameter = new PlateSolveParameter {
@@ -129,7 +129,7 @@ namespace NINA.Test.PlateSolving {
         }
 
         private sealed class TestableCliSolver : CLISolver {
-            public TestableCliSolver() : base("cmd.exe") {
+            public TestableCliSolver() : base(OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh") {
                 string root = Path.Combine(TestContext.CurrentContext.WorkDirectory, "CliSolver", Guid.NewGuid().ToString("N"));
                 WORKING_DIRECTORY = Path.Combine(root, "Working");
                 FAILED_DIRECTORY = Path.Combine(root, "Failed");
@@ -140,7 +140,7 @@ namespace NINA.Test.PlateSolving {
 
             public bool ShouldSucceed { get; set; }
             public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(10);
-            public string ArgumentsToReturn { get; set; } = "/C exit 0";
+            public string ArgumentsToReturn { get; set; } = OperatingSystem.IsWindows() ? "/C exit 0" : "-c \"exit 0\"";
             public bool ArgumentsSeen { get; private set; }
             public bool OutputExistsDuringRead { get; private set; }
             public bool ReadResultCalled { get; private set; }

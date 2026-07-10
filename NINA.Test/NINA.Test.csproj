@@ -9,6 +9,16 @@
     <IsTestProject>true</IsTestProject>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <PreserveCompilationContext>true</PreserveCompilationContext>
+
+    <!-- Self-contained like NINA.csproj: the compat System.Windows.dll can only win over the
+         Microsoft.NETCore.App type-forwarder facade by overwriting the facade file in an
+         app-local runtime (see CopySystemWindowsStub below). Framework-dependent test hosts
+         always resolve the facade from the shared framework and no compat type loads. -->
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))">
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)'=='' and $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().Contains('Arm64'))">linux-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)'==''">linux-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,6 +46,7 @@
     <ProjectReference Include="..\NINA.Sequencer\NINA.Sequencer.csproj" />
     <ProjectReference Include="..\NINA.WPF.Base\NINA.WPF.Base.csproj" />
     <ProjectReference Include="..\NINA\NINA.csproj" />
+    <ProjectReference Include="..\System.Windows.Compat\System.Windows.Compat.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="AstrometryTest\HorizonData\commas.hrz">
@@ -69,4 +80,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+  <!-- The SDK's conflict resolution drops System.Windows.dll from copy-local because the
+       simple name collides with a reserved framework assembly; copy it manually like NINA.csproj does. -->
+  <Target Name="CopySystemWindowsStub" AfterTargets="Build">
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)\..\System.Windows.Compat\bin\$(Configuration)\net10.0\System.Windows.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="false" />
+  </Target>
 </Project>

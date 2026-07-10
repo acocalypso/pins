@@ -130,6 +130,11 @@ namespace NINA.Test.Sequencer.SequenceItem.Imaging {
             cameraMediatorMock.Setup(x => x.GetInfo()).Returns(new CameraInfo() { Connected = true });
             var sut = new TakeManyExposures(profileServiceMock.Object, cameraMediatorMock.Object, imagingMediatorMock.Object, imageSaveMediatorMock.Object, historyMock.Object);
             sut.IterationsDefinition = "2 + 3";
+            // Expression.Evaluate() only computes a value once the entity is attached to a sequence
+            // root (see UserSymbol.IsAttachedToRoot); a standalone sut has no parent, so the "2 + 3"
+            // definition above sits unevaluated until something reads Iterations, which bypasses that
+            // gate (Evaluate(true)) and is what actually drives the LoopCondition validator.
+            sut.Iterations.Should().Be(5);
 
             var clone = (TakeManyExposures)sut.Clone();
 
