@@ -145,14 +145,13 @@ namespace System.Windows {
         public static bool CloseDialog(int dialogId, bool result = true) {
             string contentType = null;
             object dataContext = null;
+            Action<bool> resultCallback = null;
             bool hasOtherActiveDialogs = false;
             lock (_lock) {
                 if (_activeDialogs.TryGetValue(dialogId, out var dialog)) {
                     contentType = dialog.ContentType;
                     dataContext = dialog.DataContext;
-                    
-                    // Call the result callback if provided
-                    dialog.ResultCallback?.Invoke(result);
+                    resultCallback = dialog.ResultCallback;
 
                     _activeDialogs.Remove(dialogId);
 
@@ -164,7 +163,12 @@ namespace System.Windows {
                     hasOtherActiveDialogs = _activeDialogs.Values.Any(d => d.ContentType == contentType);
                 }
             }
-            
+
+            // Invoke the user callback outside the lock (mirrors ClickButton): a callback that
+            // blocks on work in another thread which itself touches DialogService would
+            // otherwise deadlock, and any reentrant call would run against a half-updated state.
+            resultCallback?.Invoke(result);
+
             // Clean up event handlers for this content
             if (dataContext != null) {
                 CleanupEventHandlers(dataContext);
@@ -217,8 +221,8 @@ namespace System.Windows {
             lock (_lock) {
                 if (_activeDialogs.TryGetValue(dialogId, out var dialog)) {
                     var button = dialog.Buttons.FirstOrDefault(b =>
-                        b.Name.Equals(buttonName, StringComparison.OrdinalIgnoreCase) ||
-                        b.Text.Equals(buttonName, StringComparison.OrdinalIgnoreCase));
+                        string.Equals(b.Name, buttonName, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(b.Text, buttonName, StringComparison.OrdinalIgnoreCase));
 
                     if (button != null) {
                         onClick = button.OnClick;

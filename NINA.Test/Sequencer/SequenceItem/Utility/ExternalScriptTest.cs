@@ -39,7 +39,17 @@ namespace NINA.Test.Sequencer.SequenceItem.Utility {
             progressMock = new Mock<IProgress<ApplicationStatus>>();
         }
 
-        private static string HeadlessSuccessCommand => $"\"{Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "mshta.exe")}\" vbscript:close";
+        // mshta.exe vbscript:close is a lightweight Windows trick to get a real process that exits 0 instantly
+        // without showing a window; /bin/true is the direct POSIX equivalent on Linux (pins' target platform).
+        private static string HeadlessSuccessExecutablePath =>
+            OperatingSystem.IsWindows()
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "mshta.exe")
+                : "/bin/true";
+
+        private static string HeadlessSuccessCommand =>
+            OperatingSystem.IsWindows()
+                ? $"\"{HeadlessSuccessExecutablePath}\" vbscript:close"
+                : $"\"{HeadlessSuccessExecutablePath}\"";
 
         [Test]
         public void ExternalScript_Clone_GoodClone() {
@@ -248,7 +258,7 @@ namespace NINA.Test.Sequencer.SequenceItem.Utility {
 
             symbolBrokerMock.Setup(x => x.TryGetValue("TestExecutable", out It.Ref<object>.IsAny))
                 .Returns((string key, out object value) => {
-                    value = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "mshta.exe");
+                    value = HeadlessSuccessExecutablePath;
                     return true;
                 });
 
@@ -258,7 +268,7 @@ namespace NINA.Test.Sequencer.SequenceItem.Utility {
             });
 
             // Script with expression that resolves to a valid headless executable path.
-            sut.Script = "\"{TestExecutable}\" vbscript:close";
+            sut.Script = OperatingSystem.IsWindows() ? "\"{TestExecutable}\" vbscript:close" : "\"{TestExecutable}\"";
 
             var progress = new Progress<ApplicationStatus>();
             var cts = new CancellationTokenSource();

@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using NINA.Image.FileFormat.FITS;
 
 namespace NINA.Test {
@@ -60,6 +61,74 @@ namespace NINA.Test {
             }
         }
 
+        // Writes a minimal 3-axis (NAXIS=3) FITS file, as produced by debayered colour cameras
+        // (e.g. the INDI V4L2 CCD driver in RGB mode). Each colour plane is filled with a
+        // constant so the loaded monochrome image can be asserted against the first plane.
+        private static string WriteNaxis3Fits(int width, int height, ushort plane0, ushort plane1, ushort plane2) {
+            void AppendCard(StringBuilder sb, string keyword, string value) {
+                sb.Append((keyword.PadRight(8) + "= " + value.PadLeft(20)).PadRight(80));
+            }
+
+            var header = new StringBuilder();
+            AppendCard(header, "SIMPLE", "T");
+            AppendCard(header, "BITPIX", "16");
+            AppendCard(header, "NAXIS", "3");
+            AppendCard(header, "NAXIS1", width.ToString(CultureInfo.InvariantCulture));
+            AppendCard(header, "NAXIS2", height.ToString(CultureInfo.InvariantCulture));
+            AppendCard(header, "NAXIS3", "3");
+            AppendCard(header, "BZERO", "32768");
+            AppendCard(header, "BSCALE", "1");
+            header.Append("END".PadRight(80));
+            // Pad the header to a 2880-byte block boundary as required by the FITS standard
+            while (header.Length % 2880 != 0) {
+                header.Append(' ');
+            }
+
+            var bytes = new List<byte>(Encoding.ASCII.GetBytes(header.ToString()));
+
+            void WritePlane(ushort physical) {
+                // BITPIX=16 stores big-endian signed shorts; physical = stored + BZERO(32768)
+                var stored = (ushort)(short)(physical - 32768);
+                for (int i = 0; i < width * height; i++) {
+                    bytes.Add((byte)(stored >> 8));
+                    bytes.Add((byte)(stored & 0xFF));
+                }
+            }
+            WritePlane(plane0);
+            WritePlane(plane1);
+            WritePlane(plane2);
+            // Pad the data to a 2880-byte block boundary
+            while (bytes.Count % 2880 != 0) {
+                bytes.Add(0);
+            }
+
+            var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".fits");
+            File.WriteAllBytes(path, bytes.ToArray());
+            return path;
+        }
+
+        [Test]
+        public async System.Threading.Tasks.Task FITSLoadDebayeredNaxis3ReturnsFirstPlaneAsMonochrome() {
+            //Arrange
+            var width = 4;
+            var height = 3;
+            ushort plane0 = 100, plane1 = 200, plane2 = 44;
+            var path = WriteNaxis3Fits(width, height, plane0, plane1, plane2);
+            var factory = new ImageDataFactoryTestUtility().ImageDataFactory;
+
+            try {
+                //Act
+                var result = await FITS.Load(new Uri(path), isBayered: false, factory, System.Threading.CancellationToken.None);
+
+                //Assert
+                // Only the first colour plane is read to yield a monochrome image
+                result.Data.FlatArray.Length.Should().Be(width * height);
+                result.Data.FlatArray.Should().AllBeEquivalentTo(plane0);
+            } finally {
+                File.Delete(path);
+            }
+        }
+
         [Test]
         public void FITSDefaultMetaDataPopulated() {
             //Arrange
@@ -70,7 +139,7 @@ namespace NINA.Test {
                 new FITSHeaderCard("YBINNING",1, "Y axis binning factor"),
                 new FITSHeaderCard("ROWORDER","TOP-DOWN", "FITS Image Orientation"),
                 new FITSHeaderCard("EQUINOX", 2000d, "Equinox of celestial coordinate system"),
-                new FITSHeaderCard("SWCREATE",string.Format("N.I.N.A. {0} ({1})", NINA.Core.Utility.CoreUtil.Version, DllLoader.IsX86() ? "x86" : "x64"), "Software that created this file"),
+                new FITSHeaderCard("SWCREATE",string.Format("PI N Stars (N.I.N.A. {0} ({1}))", NINA.Core.Utility.CoreUtil.Version, DllLoader.GetProcessorArchitecture()), "Software that created this file"),
             };
 
             //Act

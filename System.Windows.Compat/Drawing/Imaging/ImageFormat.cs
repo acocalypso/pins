@@ -19,15 +19,20 @@ namespace System.Drawing.Imaging {
     public partial class ImageFormat {
         private readonly string _name;
 
-        private ImageFormat(string name) {
+        private ImageFormat(string name, System.Guid guid) {
             _name = name;
+            Guid = guid;
         }
 
-        public static readonly ImageFormat Png = new ImageFormat("PNG");
-        public static readonly ImageFormat Jpeg = new ImageFormat("JPEG");
-        public static readonly ImageFormat Bmp = new ImageFormat("BMP");
-        public static readonly ImageFormat Tiff = new ImageFormat("TIFF");
-        public static readonly ImageFormat Gif = new ImageFormat("GIF");
+        // The GUIDs are GDI+'s canonical format identifiers (same values as the real
+        // System.Drawing.Imaging.ImageFormat). They must be distinct: Bitmap.Save and the
+        // ImageCodecInfo entries route on FormatID equality, and defaulted Guid.Empty values
+        // made every encoder compare equal to Jpeg.
+        public static readonly ImageFormat Png = new ImageFormat("PNG", new System.Guid("b96b3caf-0728-11d3-9d7b-0000f81ef32e"));
+        public static readonly ImageFormat Jpeg = new ImageFormat("JPEG", new System.Guid("b96b3cae-0728-11d3-9d7b-0000f81ef32e"));
+        public static readonly ImageFormat Bmp = new ImageFormat("BMP", new System.Guid("b96b3cab-0728-11d3-9d7b-0000f81ef32e"));
+        public static readonly ImageFormat Tiff = new ImageFormat("TIFF", new System.Guid("b96b3cb1-0728-11d3-9d7b-0000f81ef32e"));
+        public static readonly ImageFormat Gif = new ImageFormat("GIF", new System.Guid("b96b3cb0-0728-11d3-9d7b-0000f81ef32e"));
 
         public override string ToString() => _name;
     }
@@ -35,6 +40,6 @@ namespace System.Drawing.Imaging {
 
 namespace System.Drawing.Imaging {
     public partial class ImageFormat {
-        public System.Guid Guid { get; set; }
+        public System.Guid Guid { get; private set; }
     }
 }

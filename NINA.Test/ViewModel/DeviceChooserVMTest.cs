@@ -70,6 +70,10 @@ namespace NINA.Test.ViewModel {
         /// </summary>
         [Test]
         public async Task SetupDialogCommand_WhenDeviceHasSetupDialog_RunsDialogOnStaThreadAndResetsState() {
+            if (!OperatingSystem.IsWindows()) {
+                Assert.Ignore("STA apartment threading is a Windows/COM-only concept; Thread.SetApartmentState throws PlatformNotSupportedException on Linux, which is pins' target platform, so DeviceChooserVM.SetupDialog() never reaches the device's SetupDialog() there.");
+            }
+
             TestDeviceChooserVM chooser = CreateChooser();
             ManualResetEventSlim setupEntered = new ManualResetEventSlim(false);
             ManualResetEventSlim releaseSetup = new ManualResetEventSlim(false);

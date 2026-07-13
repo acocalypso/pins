@@ -118,7 +118,32 @@ namespace Accord.Imaging {
         /// Creates a Bitmap from this unmanaged image
         /// </summary>
         public Bitmap ToManagedImage() {
-            return new Bitmap(mat);
+            if (mat != null) {
+                return new Bitmap(mat);
+            }
+
+            // BitmapData-backed images (see the BitmapData ctor above) have no backing Mat -
+            // build a fresh, owned Mat from the raw buffer instead of wrapping null, which would
+            // NRE on the Bitmap's first property access.
+            MatType matType = PixelFormat switch {
+                PixelFormat.Format8bppIndexed => MatType.CV_8UC1,
+                PixelFormat.Format16bppGrayScale => MatType.CV_16UC1,
+                PixelFormat.Format24bppRgb => MatType.CV_8UC3,
+                PixelFormat.Format32bppArgb or PixelFormat.Format32bppPArgb or PixelFormat.Format32bppRgb => MatType.CV_8UC4,
+                PixelFormat.Format48bppRgb => MatType.CV_16UC3,
+                // Fail loudly rather than guessing an element size: copying rows into a Mat of
+                // the wrong depth/channel count silently garbles every pixel.
+                _ => throw new NotSupportedException($"ToManagedImage is not supported for pixel format {PixelFormat}.")
+            };
+
+            var result = new Mat(Height, Width, matType);
+            int rowBytes = System.Math.Min(Stride, (int)result.Step());
+            for (int y = 0; y < Height; y++) {
+                IntPtr srcPtr = imageData + (y * Stride);
+                IntPtr dstPtr = result.Data + (y * (int)result.Step());
+                Buffer.MemoryCopy(srcPtr.ToPointer(), dstPtr.ToPointer(), result.Step(), rowBytes);
+            }
+            return new Bitmap(result);
         }
 
         /// <summary>

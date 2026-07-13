@@ -117,6 +117,11 @@ namespace NINA.Test.Sequencer.SequenceItem.Imaging {
             SmartExposure sut = CreateSut();
             sut.Icon = new System.Windows.Media.GeometryGroup();
             sut.IterationsDefinition = "2 + 3";
+            // Expression.Evaluate() only computes a value once the entity is attached to a sequence
+            // root (see UserSymbol.IsAttachedToRoot); a standalone sut has no parent, so the "2 + 3"
+            // definition above sits unevaluated until something reads Iterations, which bypasses that
+            // gate (Evaluate(true)) and is what actually drives the LoopCondition validator.
+            sut.Iterations.Should().Be(5);
             sut.GetSwitchFilter().ComboBoxText = "Red";
             sut.GetTakeExposure().ExposureTimeDefinition = "30 + 15";
             sut.GetDitherAfterExposures().AfterExposuresDefinition = "1 + 1";

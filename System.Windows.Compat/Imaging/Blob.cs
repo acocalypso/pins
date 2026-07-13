@@ -30,20 +30,42 @@ namespace Accord.Imaging {
         /// </summary>
         public Rectangle Rectangle { get; set; }
 
+        private int? _area;
+
         /// <summary>
-        /// Area of the blob in pixels
+        /// Area of the blob in pixels. Computed lazily on first access: the pixel-accurate
+        /// count needs a mask fill per blob, which is far too expensive to pay eagerly for
+        /// every contour of every star-detection frame when most callers never read it.
         /// </summary>
-        public int Area { get; set; }
+        public int Area {
+            get {
+                if (_area == null) {
+                    ComputeAreaAndFullness();
+                }
+                return _area ?? 0;
+            }
+            set => _area = value;
+        }
 
         /// <summary>
         /// Center of gravity (centroid) of the blob
         /// </summary>
         public Point2d CenterOfGravity { get; set; }
 
+        private double? _fullness;
+
         /// <summary>
-        /// Fullness of the blob (ratio of area to bounding rectangle area)
+        /// Fullness of the blob (ratio of area to bounding rectangle area). Lazy, see Area.
         /// </summary>
-        public double Fullness { get; set; }
+        public double Fullness {
+            get {
+                if (_fullness == null) {
+                    ComputeAreaAndFullness();
+                }
+                return _fullness ?? 0;
+            }
+            set => _fullness = value;
+        }
 
         /// <summary>
         /// The contour points that define this blob
@@ -62,7 +84,6 @@ namespace Accord.Imaging {
             if (contour != null && contour.Length > 0) {
                 var rect = Cv2.BoundingRect(contour);
                 Rectangle = new Rectangle(rect.X, rect.Y, rect.Width, rect.Height);
-                Area = contour.Length;
 
                 // Calculate center of gravity
                 var moments = Cv2.Moments(contour);
@@ -71,11 +92,27 @@ namespace Accord.Imaging {
                 } else {
                     CenterOfGravity = new Point2d(Rectangle.X + Rectangle.Width / 2.0, Rectangle.Y + Rectangle.Height / 2.0);
                 }
-
-                // Calculate fullness
-                double rectArea = Rectangle.Width * Rectangle.Height;
-                Fullness = rectArea > 0 ? Area / rectArea : 0;
             }
+        }
+
+        private void ComputeAreaAndFullness() {
+            if (EdgePoints == null || EdgePoints.Length == 0 || Rectangle.Width <= 0 || Rectangle.Height <= 0) {
+                _area = 0;
+                _fullness = 0;
+                return;
+            }
+
+            // Cv2.ContourArea uses the shoelace formula on the corner polygon (undercounts by a border of
+            // half a pixel on each side), so fill the contour into a bounding-rect mask and count pixels to
+            // match Accord's actual pixel-count semantics.
+            using (var mask = new Mat(Rectangle.Height, Rectangle.Width, MatType.CV_8UC1, Scalar.Black)) {
+                var shifted = EdgePoints.Select(p => new CVPoint(p.X - Rectangle.X, p.Y - Rectangle.Y)).ToArray();
+                Cv2.FillPoly(mask, new[] { shifted }, Scalar.White);
+                _area = Cv2.CountNonZero(mask);
+            }
+
+            double rectArea = (double)Rectangle.Width * Rectangle.Height;
+            _fullness = _area.Value / rectArea;
         }
     }
 

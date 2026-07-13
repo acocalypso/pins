@@ -102,10 +102,14 @@ namespace NINA.Test.PlateSolving {
         }
 
         /// <summary>
-        /// Verifies ASTAP validation rejects missing executables and legacy auto-downsample combinations before a solve starts.
+        /// Verifies ASTAP validation rejects a missing executable, and accepts any downsample factor (including
+        /// auto/0) once the executable exists. The previous version-gated rejection of downsample=0 relied on
+        /// FileVersionInfo, which only reads Windows PE version resources; Linux ASTAP builds are ELF binaries
+        /// with no such resource, so that check always misfired there and was intentionally removed (see commit
+        /// "PlateSolving", 2025-11-25).
         /// </summary>
         [Test]
-        public void ASTAPSolver_ValidationRejectsMissingOrLegacyAutoDownsampleConfiguration() {
+        public void ASTAPSolver_ValidationRejectsMissingExecutableButAllowsAutoDownsample() {
             var missingSolver = new TestableASTAPSolver(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "astap.exe"));
             Action missing = () => missingSolver.Validate(CreateParameter());
 
@@ -113,13 +117,13 @@ namespace NINA.Test.PlateSolving {
             try {
                 string executable = Path.Combine(directory, "astap.exe");
                 File.WriteAllBytes(executable, Array.Empty<byte>());
-                var legacySolver = new TestableASTAPSolver(executable);
-                Action legacyAutoDownsample = () => legacySolver.Validate(CreateParameter(downSampleFactor: 0));
-                Action validLegacy = () => legacySolver.Validate(CreateParameter(downSampleFactor: 2));
+                var solver = new TestableASTAPSolver(executable);
+                Action autoDownsample = () => solver.Validate(CreateParameter(downSampleFactor: 0));
+                Action fixedDownsample = () => solver.Validate(CreateParameter(downSampleFactor: 2));
 
                 missing.Should().Throw<ASTAPSolver.ASTAPValidationFailedException>();
-                legacyAutoDownsample.Should().Throw<ASTAPSolver.ASTAPValidationFailedException>();
-                validLegacy.Should().NotThrow();
+                autoDownsample.Should().NotThrow();
+                fixedDownsample.Should().NotThrow();
             } finally {
                 Directory.Delete(directory, recursive: true);
             }
@@ -264,6 +268,10 @@ namespace NINA.Test.PlateSolving {
         /// </summary>
         [Test]
         public void LocalPlateSolver_TranslatesHintedAndBlindArguments() {
+            if (!OperatingSystem.IsWindows()) {
+                Assert.Ignore("LocalPlateSolver is a Windows/Cygwin-only wrapper (cmd.exe + C:\\cygwin64\\bin\\bash.exe); Path.GetFullPath doesn't recognize the Windows drive-letter path on Linux, which is pins' target platform.");
+            }
+
             var solver = new TestableLocalPlateSolver(@"C:\cygwin64");
             PlateSolveParameter hinted = CreateParameter();
             PlateSolveImageProperties properties = CreateImageProperties(hinted, width: 300, height: 200);

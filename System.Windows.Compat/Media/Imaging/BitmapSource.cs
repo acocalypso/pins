@@ -134,8 +134,19 @@ namespace System.Windows.Media.Imaging {
                 throw new ArgumentException($"Destination array too small. Need {offset + dataSize} bytes, got {pixels.Length}");
             }
 
-            // Copy the Mat data directly to the byte array
-            System.Runtime.InteropServices.Marshal.Copy(_mat.Data, pixels, offset, dataSize);
+            if (_mat.IsContinuous()) {
+                // Copy the Mat data directly to the byte array
+                System.Runtime.InteropServices.Marshal.Copy(_mat.Data, pixels, offset, dataSize);
+            } else {
+                // A non-continuous Mat (e.g. an un-cloned ROI view) has padding between rows, so
+                // a single flat copy would read past each row's real content. Copy row by row,
+                // using the Mat's own Step() as the source pitch but packing the destination tightly.
+                int rowBytes = _mat.Cols * bytesPerPixel;
+                for (int y = 0; y < _mat.Rows; y++) {
+                    IntPtr srcPtr = _mat.Data + (y * (int)_mat.Step());
+                    System.Runtime.InteropServices.Marshal.Copy(srcPtr, pixels, offset + (y * rowBytes), rowBytes);
+                }
+            }
             GC.KeepAlive(this);
         }
 
@@ -152,7 +163,17 @@ namespace System.Windows.Media.Imaging {
             // Copy as raw bytes then reinterpret — Marshal.Copy does not accept ushort[]
             int byteCount = dataSize * sizeof(ushort);
             byte[] bytes = new byte[byteCount];
-            System.Runtime.InteropServices.Marshal.Copy(_mat.Data, bytes, 0, byteCount);
+
+            if (_mat.IsContinuous()) {
+                System.Runtime.InteropServices.Marshal.Copy(_mat.Data, bytes, 0, byteCount);
+            } else {
+                // See the byte[] overload above - a non-continuous Mat needs a row-by-row copy.
+                int rowBytes = _mat.Cols * _mat.Channels() * sizeof(ushort);
+                for (int y = 0; y < _mat.Rows; y++) {
+                    IntPtr srcPtr = _mat.Data + (y * (int)_mat.Step());
+                    System.Runtime.InteropServices.Marshal.Copy(srcPtr, bytes, y * rowBytes, rowBytes);
+                }
+            }
             System.Buffer.BlockCopy(bytes, 0, pixels, offset * sizeof(ushort), byteCount);
             GC.KeepAlive(this);
         }
@@ -318,7 +339,10 @@ namespace System.Windows.Media.Imaging {
 
     public class BitmapImage : BitmapSource {
         public BitmapImage() : base() { }
-        public BitmapImage(Uri uriSource) : base() { }
+        public BitmapImage(Uri uriSource) : base() {
+            UriSource = uriSource;
+            LoadFromUri();
+        }
 
         public Uri UriSource { get; set; }
         public System.IO.Stream StreamSource { get; set; }
@@ -326,9 +350,33 @@ namespace System.Windows.Media.Imaging {
 
         public void BeginInit() { }
         public void EndInit() {
-            // Load from StreamSource if set
+            // Load from StreamSource if set, otherwise fall back to UriSource - WPF supports
+            // both `new BitmapImage(uri)` and the BeginInit/UriSource=.../EndInit idiom.
             if (StreamSource != null) {
                 SetSource(StreamSource);
+            } else if (UriSource != null) {
+                LoadFromUri();
+            }
+        }
+
+        private void LoadFromUri() {
+            if (UriSource == null) {
+                return;
+            }
+
+            try {
+                string path = UriSource.IsAbsoluteUri && UriSource.IsFile ? UriSource.LocalPath : UriSource.ToString();
+                var mat = OpenCvSharp.Cv2.ImRead(path, OpenCvSharp.ImreadModes.Unchanged);
+                if (mat != null && !mat.Empty()) {
+                    _mat?.Dispose();
+                    _mat = mat;
+                    AddMemoryPressure();
+                } else {
+                    mat?.Dispose();
+                }
+            } catch {
+                // Malformed/unsupported URI - leave the image empty, matching SetSource's
+                // silent-failure behavior on a bad stream.
             }
         }
 
@@ -409,7 +457,7 @@ namespace System.Windows.Media.Imaging {
                         RenderDrawText(operation);
                         break;
                     case System.Windows.Media.DrawingOperation.OperationType.DrawGeometry:
-                        // Geometry path decomposition is complex; not yet implemented
+                        RenderGeometry(operation.Geometry, operation.Brush, operation.Pen);
                         break;
                 }
             }
@@ -425,10 +473,17 @@ namespace System.Windows.Media.Imaging {
             int y = (int)operation.Rect.Y;
             int width = (int)operation.Rect.Width;
             int height = (int)operation.Rect.Height;
+            if (width <= 0 || height <= 0) return;
 
-            if (x < 0 || y < 0 || x + width > _mat.Width || y + height > _mat.Height) {
-                return;
-            }
+            // Clip to the canvas instead of rejecting the whole draw when the requested rect is
+            // only partially out of bounds (e.g. a thumbnail drawn slightly past the canvas edge).
+            int clippedX = System.Math.Max(0, x);
+            int clippedY = System.Math.Max(0, y);
+            int clippedRight = System.Math.Min(_mat.Width, x + width);
+            int clippedBottom = System.Math.Min(_mat.Height, y + height);
+            int clippedWidth = clippedRight - clippedX;
+            int clippedHeight = clippedBottom - clippedY;
+            if (clippedWidth <= 0 || clippedHeight <= 0) return; // entirely outside the canvas
 
             Mat resizedSource = sourceMat;
             if (sourceMat.Width != width || sourceMat.Height != height) {
@@ -436,32 +491,98 @@ namespace System.Windows.Media.Imaging {
                 OpenCvSharp.Cv2.Resize(sourceMat, resizedSource, new OpenCvSharp.Size(width, height));
             }
 
+            // If clipping trimmed any edge, crop the resized source down to the visible sub-rect
+            // rather than drawing the whole (now mis-sized) resized image at the clipped position.
+            int srcOffsetX = clippedX - x;
+            int srcOffsetY = clippedY - y;
+            Mat visibleSource = resizedSource;
+            bool visibleSourceCreated = false;
+            if (srcOffsetX != 0 || srcOffsetY != 0 || clippedWidth != resizedSource.Width || clippedHeight != resizedSource.Height) {
+                using var srcRoi = new Mat(resizedSource, new OpenCvSharp.Rect(srcOffsetX, srcOffsetY, clippedWidth, clippedHeight));
+                visibleSource = srcRoi.Clone();
+                visibleSourceCreated = true;
+            }
+
             try {
-                Mat convertedSource = resizedSource;
-                if (resizedSource.Type() != _mat.Type()) {
+                Mat convertedSource = visibleSource;
+                if (visibleSource.Type() != _mat.Type()) {
                     convertedSource = new Mat();
-                    if (resizedSource.Channels() == 1 && _mat.Channels() == 4) {
-                        OpenCvSharp.Cv2.CvtColor(resizedSource, convertedSource, OpenCvSharp.ColorConversionCodes.GRAY2BGRA);
-                    } else if (resizedSource.Channels() == 3 && _mat.Channels() == 4) {
-                        OpenCvSharp.Cv2.CvtColor(resizedSource, convertedSource, OpenCvSharp.ColorConversionCodes.BGR2BGRA);
-                    } else if (resizedSource.Channels() == 4 && _mat.Channels() == 3) {
-                        OpenCvSharp.Cv2.CvtColor(resizedSource, convertedSource, OpenCvSharp.ColorConversionCodes.BGRA2BGR);
+                    if (visibleSource.Channels() == 1 && _mat.Channels() == 4) {
+                        OpenCvSharp.Cv2.CvtColor(visibleSource, convertedSource, OpenCvSharp.ColorConversionCodes.GRAY2BGRA);
+                    } else if (visibleSource.Channels() == 3 && _mat.Channels() == 4) {
+                        OpenCvSharp.Cv2.CvtColor(visibleSource, convertedSource, OpenCvSharp.ColorConversionCodes.BGR2BGRA);
+                    } else if (visibleSource.Channels() == 4 && _mat.Channels() == 3) {
+                        OpenCvSharp.Cv2.CvtColor(visibleSource, convertedSource, OpenCvSharp.ColorConversionCodes.BGRA2BGR);
                     } else {
-                        resizedSource.ConvertTo(convertedSource, _mat.Depth());
+                        visibleSource.ConvertTo(convertedSource, _mat.Depth());
                     }
                 }
 
-                var roi = new OpenCvSharp.Rect(x, y, width, height);
+                var roi = new OpenCvSharp.Rect(clippedX, clippedY, clippedWidth, clippedHeight);
                 using (var targetRoi = new Mat(_mat, roi)) {
                     convertedSource.CopyTo(targetRoi);
                 }
 
-                if (convertedSource != resizedSource) {
+                if (convertedSource != visibleSource) {
                     convertedSource.Dispose();
                 }
             } finally {
+                if (visibleSourceCreated) {
+                    visibleSource.Dispose();
+                }
                 if (resizedSource != sourceMat) {
                     resizedSource.Dispose();
+                }
+            }
+        }
+
+        // REVIEW.md F12: DrawGeometry operations were silently skipped, so any annotation drawn
+        // via a Geometry rather than a plain rect/line vanished from the rendered bitmap.
+        // RectangleGeometry/PathGeometry/GeometryGroup carry actual geometric data in this compat
+        // layer and are rendered here; EllipseGeometry/LineGeometry currently have no data
+        // properties at all in this codebase, so there is nothing yet to draw for those.
+        private void RenderGeometry(System.Windows.Media.Geometry geometry, System.Windows.Media.Brush brush, System.Windows.Media.Pen pen) {
+            if (geometry == null) return;
+
+            switch (geometry) {
+                case System.Windows.Media.RectangleGeometry rectGeometry: {
+                    var r = rectGeometry.Rect;
+                    var cvRect = new OpenCvSharp.Rect((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
+                    if (brush != null) {
+                        OpenCvSharp.Cv2.Rectangle(_mat, cvRect, GetScalarFromBrush(brush), -1);
+                    }
+                    if (pen != null) {
+                        OpenCvSharp.Cv2.Rectangle(_mat, cvRect, GetScalarFromBrush(pen.Brush), System.Math.Max(1, (int)pen.Thickness));
+                    }
+                    break;
+                }
+                case System.Windows.Media.PathGeometry pathGeometry: {
+                    foreach (var figure in pathGeometry.Figures) {
+                        var points = new System.Collections.Generic.List<OpenCvSharp.Point> {
+                            new OpenCvSharp.Point((int)figure.StartPoint.X, (int)figure.StartPoint.Y)
+                        };
+                        foreach (var segment in figure.Segments) {
+                            if (segment is System.Windows.Media.LineSegment lineSegment) {
+                                points.Add(new OpenCvSharp.Point((int)lineSegment.Point.X, (int)lineSegment.Point.Y));
+                            }
+                        }
+                        if (points.Count < 2) continue;
+
+                        var ptArray = points.ToArray();
+                        if (brush != null) {
+                            OpenCvSharp.Cv2.FillPoly(_mat, new[] { ptArray }, GetScalarFromBrush(brush));
+                        }
+                        if (pen != null) {
+                            OpenCvSharp.Cv2.Polylines(_mat, new[] { ptArray }, figure.IsClosed, GetScalarFromBrush(pen.Brush), System.Math.Max(1, (int)pen.Thickness));
+                        }
+                    }
+                    break;
+                }
+                case System.Windows.Media.GeometryGroup group: {
+                    foreach (var child in group.Children) {
+                        RenderGeometry(child, brush, pen);
+                    }
+                    break;
                 }
             }
         }

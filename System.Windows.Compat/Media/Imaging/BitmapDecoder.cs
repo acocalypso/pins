@@ -110,7 +110,13 @@ namespace System.Windows.Media.Imaging {
 
         public JpegBitmapDecoder(Stream stream, BitmapCreateOptions createOptions, BitmapCacheOption cacheOption) {
             byte[] data = new byte[stream.Length - stream.Position];
-            stream.Read(data, 0, data.Length);
+            // A single Read can return fewer bytes than requested (network/chunked streams) -
+            // loop until the buffer is full, matching BitmapImage.SetSource's read loop.
+            int offset = 0;
+            int bytesRead;
+            while (offset < data.Length && (bytesRead = stream.Read(data, offset, data.Length - offset)) > 0) {
+                offset += bytesRead;
+            }
             Mat mat = Cv2.ImDecode(data, ImreadModes.Unchanged);
             if (mat != null && !mat.Empty()) {
                 var frame = new BitmapFrame(mat);

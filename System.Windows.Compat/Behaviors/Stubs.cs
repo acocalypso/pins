@@ -37,16 +37,13 @@ namespace Microsoft.Xaml.Behaviors {
     }
 
     /// <summary>
-    /// Generic base class for behaviors attached to elements.
+    /// Generic base class for behaviors attached to elements. This must not redeclare
+    /// OnAttached/OnDetaching: hiding them makes derived overrides bind to members the base
+    /// Attach()/Detach() never call, and a separately settable AssociatedObject stays null
+    /// because Attach() only assigns the base property.
     /// </summary>
     public abstract class Behavior<T> : Behavior where T : System.Windows.DependencyObject {
-        public new T AssociatedObject { get; set; }
-
-        protected virtual void OnAttached() {
-        }
-
-        protected virtual void OnDetaching() {
-        }
+        public new T AssociatedObject => (T)base.AssociatedObject;
     }
 }
 

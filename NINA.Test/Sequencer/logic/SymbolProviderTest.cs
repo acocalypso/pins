@@ -56,6 +56,7 @@ namespace NINA.Test.Sequencer.Logic {
         private Mock<ITelescopeMediator> telescopeMediatorMock;
         private Mock<IGuiderMediator> guiderMediatorMock;
         private Mock<IImagingMediator> imagingMediatorMock;
+        private SymbolBroker broker;
 
         [SetUp]
         public void Setup() {
@@ -76,14 +77,19 @@ namespace NINA.Test.Sequencer.Logic {
             profileServiceMock.SetupGet(x => x.ActiveProfile.AstrometrySettings.Latitude).Returns(10);
             profileServiceMock.SetupGet(x => x.ActiveProfile.AstrometrySettings.Longitude).Returns(20);
             profileServiceMock.SetupGet(x => x.ActiveProfile.AstrometrySettings.Elevation).Returns(30);
+
+            broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
+                flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
+                telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
+        }
+
+        [TearDown]
+        public void TearDown() {
+            broker.Dispose();
         }
 
         [Test]
         public void RegisterSymbolProvider() {
-            var broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-                flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-                telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
-
             var sut = broker.RegisterSymbolProvider("Plugin");
             sut.Should().GetType().Should().NotBeNull();
             sut.GetProviderName().Should().Be("Plugin");
@@ -98,9 +104,6 @@ namespace NINA.Test.Sequencer.Logic {
         }
         [Test]
         public void TestAddRemoveSymbols() {
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-                flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-                telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var sut = broker.RegisterSymbolProvider("Plugin");
             sut.Should().GetType().Should().NotBeNull();
 
@@ -125,9 +128,6 @@ namespace NINA.Test.Sequencer.Logic {
 
         [Test]
         public void TestAmbiguousSymbols() {
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-                flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-                telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var sut1 = broker.RegisterSymbolProvider("Plugin1");
             var sut2 = broker.RegisterSymbolProvider("Plugin2");
             sut1.Should().GetType().Should().NotBeNull();
@@ -152,9 +152,6 @@ namespace NINA.Test.Sequencer.Logic {
 
         [Test]
         public void TestHiddenSymbols() {
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-                flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-                telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var sut1 = broker.RegisterSymbolProvider("Plugin1");
             sut1.Should().GetType().Should().NotBeNull();
 
@@ -181,9 +178,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void RegisterFunction_ThenInvoke_ShouldReturnExpectedResult() {
             // arrange
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("Plugin");
             var fn = new SymbolFunction(
                 key: "const42",
@@ -210,9 +204,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void InvokeFunction_UnknownFunction_ShouldReturnFalseAndNullResult() {
             // arrange
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var args = new FunctionArgs(Guid.NewGuid(), []);
 
             // act
@@ -225,9 +216,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void RegisterFunction_VolatileFunction_ShouldSetIsVolatileTrueOnInvoke() {
             // arrange
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("Plugin");
             var fn = new SymbolFunction(
                 key: "volatileFunc",
@@ -254,9 +242,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void InvokeFunction_WithTooFewArguments_ShouldThrowArgumentException() {
             // arrange
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("Plugin");
             var fn = new SymbolFunction(
                 key: "needsOneArg",
@@ -286,9 +271,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void RegisterFunction_WithSameName_ShouldNotOverrideExistingFunction() {
             // arrange
-            var broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("Plugin");
             var fn1 = new SymbolFunction(
                 key: "overrideMe",
@@ -318,9 +300,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void RegisterFunction_WithSameName_DifferentNamespace_ShouldNotOverrideExistingFunction() {
             // arrange
-            var broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider1 = broker.RegisterSymbolProvider("Plugin1");
             var fn1 = new SymbolFunction(
                 key: "overrideMe",
@@ -359,9 +338,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void VolatileFunction_WithArguments_ShouldSetIsVolatileTrue() {
             // arrange
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("Plugin");
             var fn = new SymbolFunction(
                 key: "randomInRange",
@@ -392,9 +368,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void RegisterFunction_WithNumericArguments_ShouldReceiveEvaluatedValues() {
             // arrange: add(a, b) => a + b
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("Plugin");
             var fn = new SymbolFunction(
                 key: "add",
@@ -427,9 +400,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void RegisterFunction_WithNumericArguments_WithNamespace_ShouldReceiveEvaluatedValues() {
             // arrange: add(a, b) => a + b
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("Plugin");
             var fn = new SymbolFunction(
                 key: "add",
@@ -462,9 +432,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void RegisterMultipleFunctions_WithNumericArguments_WithNamespace_ShouldReceiveEvaluatedValues() {
             // arrange: add(a, b) => a + b
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider1 = broker.RegisterSymbolProvider("Plugin1");
             var fn1 = new SymbolFunction(
                 key: "add",
@@ -521,9 +488,6 @@ namespace NINA.Test.Sequencer.Logic {
         [Test]
         public void RegisterMultipleFunctions_WithNumericArguments_WithoutNamespace_IsAmbiguousAndThrows() {
             // arrange: add(a, b) => a + b
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-               flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-               telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider1 = broker.RegisterSymbolProvider("Plugin1");
             var fn1 = new SymbolFunction(
                 key: "add",
@@ -580,10 +544,6 @@ namespace NINA.Test.Sequencer.Logic {
         [TestCase("Invalid-Symbol!")]
         [TestCase("Symbol@Name")]
         public void RegisterSymbolProvider_WithInvalidName_ShouldThrowArgumentException(string invalidName) {
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-                flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-                telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
-
             Action act = () => broker.RegisterSymbolProvider(invalidName);
 
             act.Should().Throw<ArgumentException>()
@@ -598,9 +558,6 @@ namespace NINA.Test.Sequencer.Logic {
         [TestCase("Invalid+Symbol")]
         [TestCase("Symbol@Name")]
         public void AddOrUpdateSymbol_WithInvalidToken_ShouldThrowArgumentException(string invalidToken) {
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-                flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-                telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("ValidProvider");
 
             Action act = () => provider.AddOrUpdateSymbol(invalidToken, 42);
@@ -617,9 +574,6 @@ namespace NINA.Test.Sequencer.Logic {
         [TestCase("Invalid+Symbol")]
         [TestCase("Symbol@Name")]
         public void AddOrUpdateSymbol_WithConstantsAndInvalidToken_ShouldThrowArgumentException(string invalidToken) {
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-                flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-                telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("ValidProvider");
             Symbol[] constants = new Symbol[] { new Symbol("Constant1", 1), new Symbol("Constant2", 2) };
 
@@ -637,9 +591,6 @@ namespace NINA.Test.Sequencer.Logic {
         [TestCase("Invalid+Symbol")]
         [TestCase("Symbol@Name")]
         public void AddOrUpdateHiddenSymbol_WithInvalidToken_ShouldThrowArgumentException(string invalidToken) {
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-                flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-                telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("ValidProvider");
             Symbol[] constants = new Symbol[] { new Symbol("Constant1", 1), new Symbol("Constant2", 2) };
 
@@ -658,9 +609,6 @@ namespace NINA.Test.Sequencer.Logic {
         [TestCase("a")]
         [TestCase("A1B2C3")]
         public void AddOrUpdateSymbol_WithValidToken_ShouldSucceed(string validToken) {
-            ISymbolBroker broker = new SymbolBroker(profileServiceMock.Object, switchMediatorMock.Object, weatherDataMediatorMock.Object, cameraMediatorMock.Object, domeMediatorMock.Object,
-                flatDeviceMediatorMock.Object, filterWheelMediatorMock.Object, rotatorMediatorMock.Object, safetyMonitorMediatorMock.Object, focuserMediatorMock.Object,
-                telescopeMediatorMock.Object, guiderMediatorMock.Object, imagingMediatorMock.Object);
             var provider = broker.RegisterSymbolProvider("ValidProvider");
 
             Action act = () => provider.AddOrUpdateSymbol(validToken, 42);
