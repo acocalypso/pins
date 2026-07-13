@@ -7,6 +7,7 @@ using NINA.Equipment.Equipment.MyGuider;
 using NINA.Equipment.Interfaces;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Equipment.Interfaces.ViewModel;
+using NINA.Profile;
 using NINA.Profile.Interfaces;
 using NINA.WPF.Base.Interfaces.Mediator;
 using NINA.WPF.Base.ViewModel.Equipment.Guider;
@@ -248,6 +249,49 @@ namespace NINA.Test.ViewModel {
             await setShiftRate.Should().NotThrowAsync();
             await stopShifting.Should().NotThrowAsync();
             getLockPosition.Should().NotThrow();
+        }
+
+        /// <summary>
+        /// Verifies that a profile change re-applies the new profile's guide graph scaling (MaxY, guider scale,
+        /// history size) and re-subscribes the settings listeners, so later setting changes keep reaching the
+        /// GuideStepsHistory. This protects API/frontend consumers (e.g. Touch-N-Stars) that adjust graph scaling
+        /// through profile values; previously the VM stayed subscribed to the old profile's GuiderSettings and
+        /// scale changes silently stopped applying after a profile switch.
+        /// </summary>
+        [Test]
+        public void ProfileChanged_AppliesNewProfileGraphScaleAndRewiresGuiderSettings() {
+            GuiderVM vm = CreateVm();
+
+            Mock<IProfile> newProfile = new Mock<IProfile>();
+            Mock<IAstrometrySettings> newAstrometrySettings = new Mock<IAstrometrySettings>();
+            Mock<ICameraSettings> newCameraSettings = new Mock<ICameraSettings>();
+            Mock<ITelescopeSettings> newTelescopeSettings = new Mock<ITelescopeSettings>();
+            Mock<IGuiderSettings> newGuiderSettings = new Mock<IGuiderSettings>();
+            newCameraSettings.SetupProperty(x => x.PixelSize, 3.76);
+            newTelescopeSettings.SetupProperty(x => x.FocalLength, 600);
+            newGuiderSettings.SetupProperty(x => x.GuiderName, string.Empty);
+            newGuiderSettings.SetupProperty(x => x.PHD2HistorySize, 200);
+            newGuiderSettings.SetupProperty(x => x.PHD2GuiderScale, GuiderScaleEnum.PIXELS);
+            newGuiderSettings.SetupProperty(x => x.MaxY, 8);
+            newGuiderSettings.SetupProperty(x => x.DitherPixels, 5);
+            newProfile.SetupGet(x => x.AstrometrySettings).Returns(newAstrometrySettings.Object);
+            newProfile.SetupGet(x => x.CameraSettings).Returns(newCameraSettings.Object);
+            newProfile.SetupGet(x => x.TelescopeSettings).Returns(newTelescopeSettings.Object);
+            newProfile.SetupGet(x => x.GuiderSettings).Returns(newGuiderSettings.Object);
+
+            IProfile oldProfile = profile.Object;
+            profileService.SetupGet(x => x.ActiveProfile).Returns(newProfile.Object);
+            profileService.Raise(x => x.ProfileChanged += null, new ProfileChangedEventArgs(oldProfile, newProfile.Object));
+
+            vm.GuideStepsHistory.MaxY.Should().Be(8);
+            vm.GuideStepsHistory.Scale.Should().Be(GuiderScaleEnum.PIXELS);
+            vm.GuideStepsHistory.HistorySize.Should().Be(200);
+            guiderSettings.VerifyRemove(x => x.PropertyChanged -= It.IsAny<PropertyChangedEventHandler>(), Times.AtLeastOnce);
+
+            newGuiderSettings.Object.MaxY = 16;
+            newGuiderSettings.Raise(x => x.PropertyChanged += null, new PropertyChangedEventArgs(nameof(IGuiderSettings.MaxY)));
+
+            vm.GuideStepsHistory.MaxY.Should().Be(16);
         }
 
         private GuiderVM CreateVm() {

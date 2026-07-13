@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.49 - 2026-07-13
+### Fixed
+- Fixed issue where GuideGraph config changes were ignored
+
 ## 1.1.48 - 2026-07-10
 ### Fixed
 - System.Windows.Compat: `Blob.Area` (Accord.Imaging shim) now reports actual pixel count instead of contour point count, matching Accord semantics

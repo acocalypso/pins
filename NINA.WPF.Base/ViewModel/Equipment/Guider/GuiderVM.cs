@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -76,16 +76,28 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Guider {
 
             profileService.ProfileChanged += async (object sender, EventArgs e) => {
                 if(e is ProfileChangedEventArgs pcea) {
-                    if(pcea.OldProfile != null) { 
+                    if(pcea.OldProfile != null) {
+                        pcea.OldProfile.AstrometrySettings.PropertyChanged -= AstrometrySettings_PropertyChanged;
                         pcea.OldProfile.CameraSettings.PropertyChanged -= CameraSettings_PropertyChanged;
                         pcea.OldProfile.TelescopeSettings.PropertyChanged -= TelescopeSettings_PropertyChanged;
+                        pcea.OldProfile.GuiderSettings.PropertyChanged -= GuiderSettings_PropertyChanged;
                     }
 
                     if(pcea.NewProfile != null) {
+                        pcea.NewProfile.AstrometrySettings.PropertyChanged += AstrometrySettings_PropertyChanged;
                         pcea.NewProfile.CameraSettings.PropertyChanged += CameraSettings_PropertyChanged;
                         pcea.NewProfile.TelescopeSettings.PropertyChanged += TelescopeSettings_PropertyChanged;
+                        pcea.NewProfile.GuiderSettings.PropertyChanged += GuiderSettings_PropertyChanged;
                     }
                 }
+
+                GuideStepsHistory.MaxY = profileService.ActiveProfile.GuiderSettings.MaxY;
+                GuideStepsHistory.Scale = profileService.ActiveProfile.GuiderSettings.PHD2GuiderScale;
+                GuideStepsHistory.HistorySize = profileService.ActiveProfile.GuiderSettings.PHD2HistorySize;
+                RaisePropertyChanged(nameof(GuiderMaxY));
+                RaisePropertyChanged(nameof(GuiderScale));
+                RaisePropertyChanged(nameof(HistorySize));
+
                 await RescanDevicesCommand.ExecuteAsync(null);
                 RaisePropertyChanged(nameof(MainCameraPixelScale));
                 RaisePropertyChanged(nameof(MainCameraDitherPixels));
