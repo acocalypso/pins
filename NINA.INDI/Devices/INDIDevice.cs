@@ -307,7 +307,7 @@ namespace NINA.INDI.Devices
             }
         }
 
-        public async Task<bool> SetSwitchValueAsync(string propertyName, string elementName, bool value, TimeSpan timeout)
+        public async Task<bool> SetSwitchValueAsync(string propertyName, string elementName, bool value, TimeSpan timeout, CancellationToken ct = default)
         {
             try
             {
@@ -358,11 +358,12 @@ namespace NINA.INDI.Devices
                     SetSwitchValue(propertyName, elementName, value);
 
                     // Wait for server acknowledgement (property state changes to Busy) with timeout
-                    var timeoutTask = Task.Delay(timeout);
+                    var timeoutTask = Task.Delay(timeout, ct);
                     var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
 
                     if (completedTask == timeoutTask)
                     {
+                        ct.ThrowIfCancellationRequested();
                         Logger.Error($"SetSwitchValueAsync ({propertyName}) - server did not acknowledge within timeout");
                         return false;
                     }
@@ -548,7 +549,7 @@ namespace NINA.INDI.Devices
             INDIClient.Instance.SendProperty(prop);
         }
 
-        public async Task<bool> SetTextValueAsync(string propertyName, string elementName, string value, TimeSpan timeout)
+        public async Task<bool> SetTextValueAsync(string propertyName, string elementName, string value, TimeSpan timeout, CancellationToken ct = default)
         {
             try
             {
@@ -592,11 +593,12 @@ namespace NINA.INDI.Devices
                     SetTextValue(propertyName, elementName, value);
 
                     // Wait for server acknowledgement (property state changes to Busy) with timeout
-                    var timeoutTask = Task.Delay(timeout);
+                    var timeoutTask = Task.Delay(timeout, ct);
                     var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
 
                     if (completedTask == timeoutTask)
                     {
+                        ct.ThrowIfCancellationRequested();
                         Logger.Error($"SetTextValueAsync ({propertyName}) - server did not acknowledge within timeout");
                         return false;
                     }
@@ -667,7 +669,7 @@ namespace NINA.INDI.Devices
                 Logger.Info($"Connecting to INDI device: {DeviceName}");
 
                 // Call hook to configure connection properties before connecting
-                if (!await OnPreConnect())
+                if (!await OnPreConnect(ct))
                 {
                     Logger.Error($"OnPreConnect failed for {DeviceName}");
                     return false;
@@ -702,7 +704,7 @@ namespace NINA.INDI.Devices
                 }
                 else
                 {
-                    success = await SetSwitchValueAsync("CONNECTION", "CONNECT", true, TimeSpan.FromSeconds(30));
+                    success = await SetSwitchValueAsync("CONNECTION", "CONNECT", true, TimeSpan.FromSeconds(30), ct);
                 }
 
                 if (success)
@@ -882,7 +884,7 @@ namespace NINA.INDI.Devices
         /// <summary>
         /// Override this to configure device properties after driver load but before CONNECT
         /// </summary>
-        protected virtual async Task<bool> OnPreConnect()
+        protected virtual async Task<bool> OnPreConnect(CancellationToken ct)
         {
             // If the INDI driver is already connected (shared driver, other interface connected
             // first), skip all pre-connect property writes.  Attempting to change CONNECTION_MODE,
@@ -957,7 +959,7 @@ namespace NINA.INDI.Devices
             if (HasConnectionMode)
             {
                 Logger.Info($"[{DeviceName}] Setting CONNECTION_MODE to {_connectionMode}");
-                if (!await SetSwitchValueAsync("CONNECTION_MODE", _connectionMode, true, TimeSpan.FromSeconds(10)))
+                if (!await SetSwitchValueAsync("CONNECTION_MODE", _connectionMode, true, TimeSpan.FromSeconds(10), ct))
                 {
                     Logger.Error($"[{DeviceName}] Failed to set CONNECTION_MODE to {_connectionMode}");
                     return false;
@@ -973,7 +975,7 @@ namespace NINA.INDI.Devices
                 {
                     // Just set auto mode and return
                     Logger.Info($"[{DeviceName}] Enabling DEVICE_AUTO_SEARCH");
-                    bool autoSearchResult = await SetSwitchValueAsync("DEVICE_AUTO_SEARCH", "INDI_ENABLED", true, TimeSpan.FromSeconds(10));
+                    bool autoSearchResult = await SetSwitchValueAsync("DEVICE_AUTO_SEARCH", "INDI_ENABLED", true, TimeSpan.FromSeconds(10), ct);
                     if (autoSearchResult)
                     {
                         Logger.Info($"[{DeviceName}] DEVICE_AUTO_SEARCH enabled successfully");
@@ -989,13 +991,13 @@ namespace NINA.INDI.Devices
                 // secondary devices from a multi-device driver typically do not)
                 if (_hasAutoSearchProperty)
                 {
-                    await SetSwitchValueAsync("DEVICE_AUTO_SEARCH", "INDI_DISABLED", true, TimeSpan.FromSeconds(10));
+                    await SetSwitchValueAsync("DEVICE_AUTO_SEARCH", "INDI_DISABLED", true, TimeSpan.FromSeconds(10), ct);
                 }
 
                 if (_hasDevicePortProperty)
                 {
                     Logger.Info($"[{DeviceName}] Setting DEVICE_PORT to {_port}");
-                    if (!await SetTextValueAsync("DEVICE_PORT", "PORT", _port, TimeSpan.FromSeconds(10)))
+                    if (!await SetTextValueAsync("DEVICE_PORT", "PORT", _port, TimeSpan.FromSeconds(10), ct))
                     {
                         Logger.Error($"[{DeviceName}] Failed to set DEVICE_PORT to {_port}");
                         return false;
@@ -1005,7 +1007,7 @@ namespace NINA.INDI.Devices
                 if (_hasDeviceBaudRateProperty)
                 {
                     Logger.Info($"[{DeviceName}] Setting DEVICE_BAUD_RATE to {_baudRate}");
-                    if (!await SetSwitchValueAsync("DEVICE_BAUD_RATE", $"{_baudRate}", true, TimeSpan.FromSeconds(10)))
+                    if (!await SetSwitchValueAsync("DEVICE_BAUD_RATE", $"{_baudRate}", true, TimeSpan.FromSeconds(10), ct))
                     {
                         Logger.Error($"[{DeviceName}] Failed to set DEVICE_BAUD_RATE to {_baudRate}");
                         return false;
@@ -1022,9 +1024,9 @@ namespace NINA.INDI.Devices
                 if (HasAddress)
                 {
                     var addrPropStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                    while (!HasProperties(["DEVICE_BASE_URL"]) && !HasProperties(["DEVICE_ADDRESS"]) && addrPropStopwatch.Elapsed < TimeSpan.FromSeconds(10))
+                    while (!HasProperties(["DEVICE_BASE_URL"]) && !HasProperties(["DEVICE_ADDRESS"]) && addrPropStopwatch.Elapsed < TimeSpan.FromSeconds(10) && !ct.IsCancellationRequested)
                     {
-                        await CoreUtil.Wait(TimeSpan.FromMilliseconds(200));
+                        await CoreUtil.Wait(TimeSpan.FromMilliseconds(200), ct);
                     }
 
                     if (HasProperties(["DEVICE_BASE_URL"]))
@@ -1034,7 +1036,7 @@ namespace NINA.INDI.Devices
                             ? _address
                             : $"http://{_address}";
                         Logger.Info($"[{DeviceName}] Setting DEVICE_BASE_URL to {baseUrl}");
-                        if (!await SetTextValueAsync("DEVICE_BASE_URL", "BASE_URL", baseUrl, TimeSpan.FromSeconds(10)))
+                        if (!await SetTextValueAsync("DEVICE_BASE_URL", "BASE_URL", baseUrl, TimeSpan.FromSeconds(10), ct))
                         {
                             Logger.Error($"[{DeviceName}] Failed to set DEVICE_BASE_URL to {baseUrl}");
                             return false;
@@ -1044,7 +1046,7 @@ namespace NINA.INDI.Devices
                     else if (HasProperties(["DEVICE_ADDRESS"]))
                     {
                         Logger.Info($"[{DeviceName}] Setting DEVICE_ADDRESS to {_address}");
-                        if (!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10)))
+                        if (!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10), ct))
                         {
                             Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS to {_address}");
                             return false;
@@ -1077,12 +1079,12 @@ namespace NINA.INDI.Devices
                         try
                         {
                             Logger.Info($"[{DeviceName}] Setting DEVICE_ADDRESS to {_address}:{_port}");
-                            if (!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10)))
+                            if (!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10), ct))
                             {
                                 Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS address to {_address}");
                                 return false;
                             }
-                            if (!await SetTextValueAsync("DEVICE_ADDRESS", "PORT", _port, TimeSpan.FromSeconds(10)))
+                            if (!await SetTextValueAsync("DEVICE_ADDRESS", "PORT", _port, TimeSpan.FromSeconds(10), ct))
                             {
                                 Logger.Error($"[{DeviceName}] Failed to set DEVICE_ADDRESS port to {_port}");
                                 return false;
