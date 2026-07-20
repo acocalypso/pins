@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - INDI: Connection can now be canceled
 - ToupTek-alike filter wheels: filter changes no longer report ready before the wheel has physically finished moving (some firmware reports a matching position readback prematurely); the position setter now waits for the readback to stably confirm the commanded position
+### Changed
+- Updated NINA to 3.3.0.1049-nightly
 
 ## 1.1.50 - 2026-07-14
 ### Fixed
