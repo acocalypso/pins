@@ -13,6 +13,7 @@
 #endregion "copyright"
 
 using NINA.Profile.Interfaces;
+using System.Collections.Generic;
 using System.Runtime.Serialization;
 
 namespace NINA.Profile {
@@ -32,6 +33,8 @@ namespace NINA.Profile {
             id = "No_Device";
             indiDriver = "None";
             lastDeviceName = string.Empty;
+            knownReadonlySwitchSymbols = new List<string>();
+            knownWritableSwitchSymbols = new List<string>();
             indiConnectionMode = "CONNECTION_SERIAL";
             indiPort = "/dev/ttyUSB0";
             indiBaudRate = 9600;
@@ -62,6 +65,32 @@ namespace NINA.Profile {
             set {
                 if (lastDeviceName != value) {
                     lastDeviceName = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private List<string> knownReadonlySwitchSymbols;
+
+        [DataMember]
+        public List<string> KnownReadonlySwitchSymbols {
+            get => knownReadonlySwitchSymbols;
+            set {
+                if (knownReadonlySwitchSymbols != value) {
+                    knownReadonlySwitchSymbols = value ?? new List<string>();
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private List<string> knownWritableSwitchSymbols;
+
+        [DataMember]
+        public List<string> KnownWritableSwitchSymbols {
+            get => knownWritableSwitchSymbols;
+            set {
+                if (knownWritableSwitchSymbols != value) {
+                    knownWritableSwitchSymbols = value ?? new List<string>();
                     RaisePropertyChanged();
                 }
             }

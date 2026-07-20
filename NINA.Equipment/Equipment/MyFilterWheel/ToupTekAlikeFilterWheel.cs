@@ -151,7 +151,25 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
             set {
                 var position = (Unidirectional ? 0 : 0x100) | (ushort)value;
                 sdk.put_Option(ToupTekAlikeOption.OPTION_FILTERWHEEL_POSITION, position);
+                WaitForPosition(value);
             }
+        }
+
+        // Some firmware reports a valid, even matching, position readback before the wheel has
+        // actually finished moving, so wait until the readback matches the commanded target
+        // instead of trusting the first non -1 read (mirrors indi_toupwheel's SelectFilter/
+        // TimerHit poll loop, which keeps polling until CurrentFilter == TargetFilter).
+        private void WaitForPosition(short target) {
+            var start = DateTime.UtcNow;
+            int readPosition;
+            do {
+                Thread.Sleep(TimeSpan.FromSeconds(2));
+                sdk.get_Option(ToupTekAlikeOption.OPTION_FILTERWHEEL_POSITION, out readPosition);
+                if (DateTime.UtcNow - start > TimeSpan.FromSeconds(30)) {
+                    Logger.Error($"Filter wheel did not confirm reaching position {target} within 30 seconds. Last reported position: {readPosition}");
+                    return;
+                }
+            } while (readPosition != target);
         }
 
         public Task<bool> Connect(CancellationToken ct) {
