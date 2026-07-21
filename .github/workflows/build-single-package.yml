@@ -289,6 +289,8 @@ jobs:
             cp scripts/manage-plugin.sh build/usr/local/bin/
             cp scripts/collect-diagnostics.sh build/usr/local/bin/
             cp scripts/install-astap-star-database.sh build/usr/local/bin/
+            cp scripts/pins-wifi-watchdog.sh build/usr/local/bin/
+
 
 
 
@@ -298,6 +300,9 @@ jobs:
             chmod 755 build/etc/NetworkManager/dispatcher.d/90-pins-wifi-recovery
 
             cp systemd/sysupdate-api.service build/etc/systemd/system/
+            cp systemd/pins-wifi-watchdog.service build/etc/systemd/system/
+            cp systemd/pins-wifi-watchdog.timer build/etc/systemd/system/
+        
             cp packaging/zz-pins.rules build/lib/udev/rules.d/zz-pins.rules
             cp packaging/sudoers build/etc/sudoers.d/sysupdate-api
 
