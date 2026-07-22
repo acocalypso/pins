@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 1.1.52 - 2026-07-22
 ### Fixed
 - HocusFocus's "Replay Settings" prompt (shown when re-running a saved AutoFocus analysis from Touch-N-Stars) would open and hang forever: the headless dialog bridge only recognized OK/Cancel/Yes/No-style command names, so the prompt's actual choices never got wired to buttons, and dismissing its dead fallback button didn't notify the waiting backend either. Dialog view models that expose a `RequestClose` event (the pattern used by HocusFocus's headless-safe dialogs) now get all of their commands surfaced as buttons, and closing a headless dialog now raises `OnClosed` like a real window does
+- Other headless dialogs sharing the same bridge as the Replay Settings fix above were still broken in related ways: the star-detection import dialog only ever showed "Cancel" (its "Apply" command was silently dropped whenever a recognized command name like Cancel was also present), and the HocusFocus frame-review dialog closed itself the moment you clicked Prev/Next/Fit to page through frames instead of just navigating. Both are fixed, and the modal's X/dismiss button now also works for dialogs with more than one button (it previously only worked when a dialog had exactly one)
 
 ## 1.1.51 - 2026-07-20
 ### Fixed

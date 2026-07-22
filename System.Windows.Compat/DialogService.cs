@@ -42,6 +42,18 @@ namespace System.Windows {
             public object DataContext { get; set; }
             public Action<bool> ResultCallback { get; set; }
 
+            /// <summary>
+            /// True for a dialog VM that closes itself (raises its own "RequestClose" event, which flows through
+            /// IWindowService.Close() to DialogService.CloseDialog — see WindowService.ShowViaDialogService, which
+            /// sets this). For these, ClickButton must NOT force-close after every button: some of their commands
+            /// are intentionally non-terminal (e.g. FrameReviewVMBase's Prev/Next/Fit page through frames without
+            /// closing the review dialog) and only the VM itself knows which click should end the dialog.
+            /// False (the default) preserves the original behavior — every button click closes the dialog — which
+            /// is correct for VMs that never signal their own close (the generic OK/Cancel-style dialogs, and the
+            /// single dead "Cancel" fallback button).
+            /// </summary>
+            public bool SelfClosing { get; set; }
+
             public DialogInfo() {
                 Content = new Dictionary<string, object>();
                 Buttons = new List<ButtonInfo>();
@@ -216,6 +228,7 @@ namespace System.Windows {
         public static bool ClickButton(int dialogId, string buttonName) {
             Action onClick = null;
             bool isCancel = false;
+            bool selfClosing = false;
             bool found = false;
 
             lock (_lock) {
@@ -227,6 +240,7 @@ namespace System.Windows {
                     if (button != null) {
                         onClick = button.OnClick;
                         isCancel = button.IsCancel;
+                        selfClosing = dialog.SelfClosing;
                         found = true;
                     }
                 }
@@ -235,7 +249,16 @@ namespace System.Windows {
             if (found) {
                 // Invoke user callback outside the lock to prevent deadlocks
                 onClick?.Invoke();
-                CloseDialog(dialogId, !isCancel);
+
+                // A self-closing dialog's own command is responsible for ending the dialog (it raises the VM's
+                // RequestClose, which flows through IWindowService.Close() to CloseDialog) — some of its buttons
+                // are intentionally non-terminal (e.g. paging Prev/Next in a frame-review dialog) and must NOT
+                // close just because they were clicked. Force-closing here would undo that distinction. For every
+                // other dialog (the generic OK/Cancel-style ones, and the single dead "Cancel" fallback button),
+                // nothing else will ever close it, so this call remains the only thing that does.
+                if (!selfClosing) {
+                    CloseDialog(dialogId, !isCancel);
+                }
             }
 
             return found;
