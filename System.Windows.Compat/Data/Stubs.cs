@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Windows.Input;
 
 namespace System.Windows {
@@ -434,6 +435,12 @@ namespace System.Windows {
             }
         }
 
+        public void ClearValue(DependencyProperty dp) {
+            if (dp != null) {
+                _propertyValues.Remove(dp);
+            }
+        }
+
         public void BeginAnimation(DependencyProperty dp, Media.Animation.AnimationTimeline animation) {
             // Stub for animation - in headless mode, animations are not executed
             // This method is called but doesn't actually animate anything
@@ -555,7 +562,7 @@ namespace System.Windows {
         public double MinWidth { get; set; }
         public object Style { get; set; }
         public object Content { get; set; }
-        public event EventHandler Closing;
+        public event CancelEventHandler Closing;
         public object DataContext { get; set; }
         public object Owner { get; set; }
         public WindowStartupLocation WindowStartupLocation { get; set; }
@@ -578,6 +585,11 @@ namespace System.Windows {
         public void Show() { }
         public void Hide() { IsVisible = false; }
         public void Close() {
+            var e = new CancelEventArgs(false);
+            Closing?.Invoke(this, e);
+            if (e.Cancel) {
+                return;
+            }
             Closed?.Invoke(this, EventArgs.Empty);
         }
         public bool Focus() => true;
