@@ -24,17 +24,33 @@ using Serilog.Events;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace NINA.Core.Utility {
 
     public static class Logger {
         private static LoggingLevelSwitch levelSwitch;
 
+        // On RTC-less hosts (e.g. Raspberry Pi) the system clock can still be wrong when this runs,
+        // and only gets corrected once a client connects later. Detect that step via the monotonic
+        // clock and rename the log file(s) so the name matches the corrected date.
+        private static readonly TimeSpan ClockJumpThreshold = TimeSpan.FromHours(1);
+        private static readonly TimeSpan ClockWatchdogInterval = TimeSpan.FromSeconds(5);
+        private static DateTime startupUtc;
+        private static long startupTicks;
+        private static string logDir;
+        private static string logFileNamePrefix;
+        private static Timer clockWatchdog;
+
         static Logger() {
+            startupUtc = DateTime.UtcNow;
+            startupTicks = Environment.TickCount64;
+
             var logDate = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            var logDir = Path.Combine(CoreUtil.APPLICATIONTEMPPATH, "Logs");
+            logDir = Path.Combine(CoreUtil.APPLICATIONTEMPPATH, "Logs");
             var processId = Environment.ProcessId;
-            var logFilePath = Path.Combine(logDir, $"{logDate}-{CoreUtil.Version}.{processId}-.log");
+            logFileNamePrefix = $"{logDate}-{CoreUtil.Version}.{processId}-";
+            var logFilePath = Path.Combine(logDir, $"{logFileNamePrefix}.log");
 
             levelSwitch = new LoggingLevelSwitch();
             levelSwitch.MinimumLevel = LogEventLevel.Information;
@@ -61,6 +77,29 @@ namespace NINA.Core.Utility {
                     flushToDiskInterval: TimeSpan.FromSeconds(1),
                     retainedFileCountLimit: null)
                 .CreateLogger();
+
+            clockWatchdog = new Timer(CheckForClockCorrection, null, ClockWatchdogInterval, ClockWatchdogInterval);
+        }
+
+        private static void CheckForClockCorrection(object state) {
+            var elapsedWall = DateTime.UtcNow - startupUtc;
+            var elapsedMonotonic = TimeSpan.FromMilliseconds(Environment.TickCount64 - startupTicks);
+            if ((elapsedWall - elapsedMonotonic).Duration() < ClockJumpThreshold) {
+                return;
+            }
+
+            clockWatchdog.Change(Timeout.Infinite, Timeout.Infinite);
+            try {
+                var correctedLogFileNamePrefix = $"{DateTime.Now:yyyyMMdd-HHmmss}-{CoreUtil.Version}.{Environment.ProcessId}-";
+                foreach (var oldFilePath in Directory.GetFiles(logDir, $"{logFileNamePrefix}*.log")) {
+                    var newFilePath = Path.Combine(logDir, Path.GetFileName(oldFilePath).Replace(logFileNamePrefix, correctedLogFileNamePrefix));
+                    File.Move(oldFilePath, newFilePath);
+                }
+            } catch {
+                // Best effort - if the rename fails the file simply keeps its original (stale) name.
+            } finally {
+                clockWatchdog.Dispose();
+            }
         }
 
         private static string GenerateHeader() {

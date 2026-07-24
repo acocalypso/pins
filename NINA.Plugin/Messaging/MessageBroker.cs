@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NINA.Plugin.Messaging {
@@ -10,8 +11,12 @@ namespace NINA.Plugin.Messaging {
         private readonly Dictionary<string, List<ISubscriber>> subscribers = new Dictionary<string, List<ISubscriber>>();
         private readonly object lockObj = new object();
 
-        public async Task Publish(IMessage message) {
-            if (message == null || string.IsNullOrEmpty(message.Topic)) { 
+        public Task Publish(IMessage message) {
+            return Publish(message, CancellationToken.None);
+        }
+
+        public async Task Publish(IMessage message, CancellationToken token) {
+            if (message == null || string.IsNullOrEmpty(message.Topic)) {
                 throw new ArgumentException("Message or message topic cannot be null.");
             }
 
@@ -27,7 +32,10 @@ namespace NINA.Plugin.Messaging {
             foreach (var handler in handlers) {
                 tasks.Add(handler.OnMessageReceived(message));
             }
-            await Task.WhenAll(tasks);
+            // A blocked or slow subscriber must not hang the publisher indefinitely.
+            // WaitAsync lets the caller stop awaiting when its token is cancelled; the
+            // subscriber tasks themselves keep running detached since ISubscriber has no token.
+            await Task.WhenAll(tasks).WaitAsync(token);
         }
 
         public void Subscribe(string topic, ISubscriber subscriber) {

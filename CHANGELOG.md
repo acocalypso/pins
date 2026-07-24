@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.53 - 2026-07-24
+### Fixed
+- Logger now renames logfiles when time gets synchronized
+- MessageBrokers Publish method can now be canceled
+- SymbolBroker only generates log entries when count greater than 0
+
 ## 1.1.52 - 2026-07-22
 ### Fixed
 - HocusFocus's "Replay Settings" prompt (shown when re-running a saved AutoFocus analysis from Touch-N-Stars) would open and hang forever: the headless dialog bridge only recognized OK/Cancel/Yes/No-style command names, so the prompt's actual choices never got wired to buttons, and dismissing its dead fallback button didn't notify the waiting backend either. Dialog view models that expose a `RequestClose` event (the pattern used by HocusFocus's headless-safe dialogs) now get all of their commands surfaced as buttons, and closing a headless dialog now raises `OnClosed` like a real window does
