@@ -94,8 +94,19 @@ namespace NINA.Equipment.Equipment.MyRotator {
                     angle = AstroUtil.EuclidianModulus(angle, -360);
                 }
 
-                Logger.Debug($"INDI - Move relative by {angle}� - Mechanical Position reported by rotator {MechanicalPosition}� and offset {offset}");
-                await device.MoveAsync(angle, ct);
+                var targetMechanicalPosition = AstroUtil.EuclidianModulus(MechanicalPosition + angle, 360);
+                Logger.Debug($"INDI - Move relative by {angle}� to mechanical position {targetMechanicalPosition}� - Mechanical Position reported by rotator {MechanicalPosition}� and offset {offset}");
+                return await MoveAbsoluteMechanical(targetMechanicalPosition, ct);
+            }
+            return false;
+        }
+
+        public async Task<bool> MoveAbsoluteMechanical(float targetPosition, CancellationToken ct) {
+            if (ShouldBeConnected) {
+                // Unlike ASCOM, the INDI backend has no relative-move primitive: ABS_ROTATOR_ANGLE
+                // is always an absolute target, so it is written directly here rather than via Move().
+                Logger.Debug($"INDI - Move absolute mechanical to {targetPosition}�");
+                await device.MoveAsync(targetPosition, ct);
                 InvalidatePropertyCache();
 
                 return true;
@@ -103,17 +114,11 @@ namespace NINA.Equipment.Equipment.MyRotator {
             return false;
         }
 
-        public async Task<bool> MoveAbsoluteMechanical(float targetPosition, CancellationToken ct) {
-            if (ShouldBeConnected) {
-                var movement = targetPosition - MechanicalPosition;
-                return await Move(movement, ct);
-            }
-            return false;
-        }
-
         public async Task<bool> MoveAbsolute(float targetPosition, CancellationToken ct) {
             if (ShouldBeConnected) {
-                return await Move(targetPosition - Position, ct);
+                var targetMechanicalPosition = AstroUtil.EuclidianModulus(targetPosition - offset, 360);
+                Logger.Debug($"INDI - Move absolute sky angle to {targetPosition}� (mechanical {targetMechanicalPosition}�) using offset {offset}");
+                return await MoveAbsoluteMechanical(targetMechanicalPosition, ct);
             }
             return false;
         }
