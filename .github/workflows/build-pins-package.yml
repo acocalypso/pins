@@ -360,10 +360,14 @@ jobs:
       - name: Build PinsDaemon Package
         working-directory: pinsdaemon
         run: |
+          set -euo pipefail
+
           mkdir -p build/opt/pinsdaemon
           mkdir -p build/usr/local/bin
           mkdir -p build/etc/systemd/system
           mkdir -p build/etc/NetworkManager/dispatcher.d
+          mkdir -p build/etc/systemd/journald.conf.d
+          mkdir -p build/etc/avahi/services
           mkdir -p build/etc/sudoers.d
           mkdir -p build/home/pi/pins-scripts
           mkdir -p build/lib/udev/rules.d
@@ -383,6 +387,11 @@ jobs:
           cp scripts/wifi-scan.py build/usr/local/bin/
           cp scripts/install-firmware.sh build/usr/local/bin/
           cp scripts/install-indi-package.sh build/usr/local/bin/
+          cp scripts/install-astap-star-database.sh build/usr/local/bin/
+          cp scripts/ensure-required-packages.sh build/usr/local/bin/
+          cp scripts/manage-plugin.sh build/usr/local/bin/
+          cp scripts/collect-diagnostics.sh build/usr/local/bin/
+          cp scripts/pins-wifi-watchdog.sh build/usr/local/bin/
           
           # Hotspot hook script
           cp scripts/hotspot.sh build/home/pi/pins-scripts/
@@ -393,6 +402,10 @@ jobs:
           
           # Systemd
           cp systemd/sysupdate-api.service build/etc/systemd/system/
+          cp systemd/pins-wifi-watchdog.service build/etc/systemd/system/
+          cp systemd/pins-wifi-watchdog.timer build/etc/systemd/system/
+          cp packaging/journald-persistent.conf build/etc/systemd/journald.conf.d/90-pins-persistent.conf
+          cp packaging/pinsdaemon.service build/etc/avahi/services/pinsdaemon.service
 
           # Udev rules
           cp packaging/zz-pins.rules build/lib/udev/rules.d/zz-pins.rules
@@ -415,10 +428,32 @@ jobs:
           
           # Build
           dpkg-deb --root-owner-group --build build "$FILENAME"
+
+          required_paths=(
+            ./etc/NetworkManager/dispatcher.d/90-pins-wifi-recovery
+            ./etc/avahi/services/pinsdaemon.service
+            ./etc/systemd/journald.conf.d/90-pins-persistent.conf
+            ./etc/systemd/system/pins-wifi-watchdog.service
+            ./etc/systemd/system/pins-wifi-watchdog.timer
+            ./etc/systemd/system/sysupdate-api.service
+            ./usr/local/bin/collect-diagnostics.sh
+            ./usr/local/bin/ensure-required-packages.sh
+            ./usr/local/bin/install-astap-star-database.sh
+            ./usr/local/bin/manage-plugin.sh
+            ./usr/local/bin/pins-wifi-watchdog.sh
+          )
+          package_contents=$(dpkg-deb --fsys-tarfile "$FILENAME" | tar -tf -)
+          for required_path in "${required_paths[@]}"; do
+            if ! grep -Fxq "$required_path" <<< "$package_contents"; then
+              echo "Pinsdaemon package is missing $required_path" >&2
+              exit 1
+            fi
+          done
           
           # Move to artifacts
           mkdir -p ../artifacts
           mv "$FILENAME" ../artifacts/
+          sha256sum "../artifacts/$FILENAME" > "../artifacts/$FILENAME.sha256"
 
       - name: Checkout WandererETASDK
         uses: actions/checkout@v4
@@ -1496,6 +1531,7 @@ jobs:
             "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb"
             "artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb.sha256"
             artifacts/pinsdaemon_*.deb
+            artifacts/pinsdaemon_*.deb.sha256
             artifacts/pins-wandereretasdk_*.deb
             artifacts/pins-wandereretasdk_*.deb.sha256
             artifacts/plugins/*.deb
@@ -1524,6 +1560,7 @@ jobs:
           files: |
             artifacts/${{ env.DEB_PACKAGE }}_${{ steps.version.outputs.package_version }}_${{ env.DEB_ARCH }}_${{ steps.release_tag.outputs.date }}.deb
             artifacts/pinsdaemon_*.deb
+            artifacts/pinsdaemon_*.deb.sha256
             artifacts/pins-wandereretasdk_*.deb
             artifacts/plugins/*.deb
             ${{ steps.firmware_bundle.outputs.path }}

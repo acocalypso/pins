@@ -38,6 +38,7 @@ This allows you to safely return to a stable release if needed.
 - Image save failures in the asynchronous save queue now raise a persistent notification and are forwarded into the active sequence failure event stream.
 
 ## Improvements
+- Raspberry Pi package workflows now include and validate the complete pinsdaemon runtime payload, including Wi-Fi recovery, diagnostics, persistent journaling, and mDNS service files.
 - **Autofocus after HFR Increase Trigger**
     - new Trend per Filter checkbox to consider HFR Trend per filter (default) or across all filters to earlier trigger autofocus runs when imaging with continues filter loops 
 - When a safety monitor is connected and is reporting unsafe conditions, the imaging related core triggers will no longer fire as the conditions aren't safe anyways to execute them.

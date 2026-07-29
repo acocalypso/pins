@@ -269,6 +269,8 @@ jobs:
             mkdir -p build/usr/local/bin
             mkdir -p build/etc/systemd/system
             mkdir -p build/etc/NetworkManager/dispatcher.d
+            mkdir -p build/etc/systemd/journald.conf.d
+            mkdir -p build/etc/avahi/services
             mkdir -p build/etc/sudoers.d
             mkdir -p build/home/pi/pins-scripts
             mkdir -p build/lib/udev/rules.d
@@ -302,7 +304,9 @@ jobs:
             cp systemd/sysupdate-api.service build/etc/systemd/system/
             cp systemd/pins-wifi-watchdog.service build/etc/systemd/system/
             cp systemd/pins-wifi-watchdog.timer build/etc/systemd/system/
-        
+            cp packaging/journald-persistent.conf build/etc/systemd/journald.conf.d/90-pins-persistent.conf
+            cp packaging/pinsdaemon.service build/etc/avahi/services/pinsdaemon.service
+
             cp packaging/zz-pins.rules build/lib/udev/rules.d/zz-pins.rules
             cp packaging/sudoers build/etc/sudoers.d/sysupdate-api
 
@@ -316,10 +320,33 @@ jobs:
 
             sed -i "s/^Version:.*/Version: ${full_version}/" build/DEBIAN/control
             dpkg-deb --root-owner-group --build build "$filename"
+
+            required_paths=(
+              ./etc/NetworkManager/dispatcher.d/90-pins-wifi-recovery
+              ./etc/avahi/services/pinsdaemon.service
+              ./etc/systemd/journald.conf.d/90-pins-persistent.conf
+              ./etc/systemd/system/pins-wifi-watchdog.service
+              ./etc/systemd/system/pins-wifi-watchdog.timer
+              ./etc/systemd/system/sysupdate-api.service
+              ./usr/local/bin/collect-diagnostics.sh
+              ./usr/local/bin/ensure-required-packages.sh
+              ./usr/local/bin/install-astap-star-database.sh
+              ./usr/local/bin/manage-plugin.sh
+              ./usr/local/bin/pins-wifi-watchdog.sh
+            )
+            package_contents=$(dpkg-deb --fsys-tarfile "$filename" | tar -tf -)
+            for required_path in "${required_paths[@]}"; do
+              if ! grep -Fxq "$required_path" <<< "$package_contents"; then
+                echo "Pinsdaemon package is missing $required_path" >&2
+                return 1
+              fi
+            done
             popd >/dev/null
 
             mv "pinsdaemon/${filename}" artifacts/
+            sha256sum "artifacts/${filename}" > "artifacts/${filename}.sha256"
             echo "artifacts/${filename}" >> artifacts/release-files.txt
+            echo "artifacts/${filename}.sha256" >> artifacts/release-files.txt
           }
 
           build_cmake_sdk_package() {
