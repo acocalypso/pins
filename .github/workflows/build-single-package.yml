@@ -187,10 +187,12 @@ jobs:
       - name: Build selected package
         id: build
         shell: bash
+        env:
+          PACKAGE_KEY: ${{ inputs.package_key }}
         run: |
           set -euo pipefail
 
-          package_key="${{ inputs.package_key }}"
+          package_key="${PACKAGE_KEY}"
           mkdir -p artifacts "${PLUGIN_ARTIFACT_DIR}"
           : > artifacts/release-files.txt
 
