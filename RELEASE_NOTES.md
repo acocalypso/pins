@@ -36,6 +36,9 @@ This allows you to safely return to a stable release if needed.
 - Fixed an issue where custom popout windows and message boxes could briefly render incorrectly when opened.
 - Firmware version is now correctly displayed for certain QHY camera models.
 - Image save failures in the asynchronous save queue now raise a persistent notification and are forwarded into the active sequence failure event stream.
+- QHY cameras now re-apply gain and offset after a read mode change. Previously a frame taken across a read mode switch was exposed with the new mode's power-on defaults while its metadata still recorded the requested values.
+- QHY cameras connected in a read mode that fixes the offset in hardware, such as Linearity HDR, no longer misreport their offset for the remainder of the session.
+- QHY cameras now really have their cooler turned off when they are disconnected. The cooler shutdown was skipped on every disconnect, so a camera that was cooling kept regulating to its old set point after being disconnected or after N.I.N.A. was closed, while the next session reported the cooler as off.
 
 ## Improvements
 - **Autofocus after HFR Increase Trigger**
@@ -53,6 +56,11 @@ This allows you to safely return to a stable release if needed.
 - Native Nikon and Canon camera drivers can now be configured to use the file format selection, such as FITS or XISF, instead of always saving native camera RAW files.
 - Sky brightness readings in the Weather device windows have been increased from 2 decimal places to 5 so that measurements obtained in low light conditions are adequately displayed.
 - Improved Sky Atlas search performance.
+- **Offline framing sky map improvements**
+    - All map layers and camera framing rectangles now refresh continuously while dragging, with substantially lower rendering overhead, fewer temporary allocations, and bounded decoded-image memory use.
+    - The grid and viewport projection can be switched between Equatorial and Alt/Az coordinates, with clear compass direction indicators along the zero-altitude line that remain visible over the horizon overlay, planetarium handedness and correct image and camera orientation.
+    - An optional local or custom horizon hides annotations and cached imagery below it, including in wide-field views.
+    - Offline-only date and time steppers provide a current or fixed observation context for the map and horizon, while the selected date drives the altitude chart.
 - **Autofocus & Star Measurements**
     - The native star detector now measures HFR from a centroid-refined curve of growth instead of using a first-moment approximation
     - Local star background estimation now uses a robust sigma-clipped median to reduce bias from nearby stars and outliers
@@ -65,6 +73,7 @@ This allows you to safely return to a stable release if needed.
   - This change only affects mount drivers that previously started tracking immediately upon unparking; drivers that did not exhibit this behavior are unaffected.
   - Preventing automatic tracking on unpark avoids unexpected mount movement and reduces the risk of pier collisions or other unintended motion, while ensuring consistent and predictable behavior across drivers.
 - `Wait Until Safe` instruction no longer requires a safety monitor to be connected. A disconnected safety monitor is treated as unsafe, as it could be disconnected due to communication failures.
+- Plugins that register sequencer symbol functions must now use `ISymbolFunctionArguments`. Use `Count` to inspect the argument count and `Evaluate(index)` to lazily evaluate an argument. This NINA-owned contract prevents future NCalc upgrades from changing the plugin API directly.
 
 ## Features
 
