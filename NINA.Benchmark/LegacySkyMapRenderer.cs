@@ -19,6 +19,7 @@ using System.Drawing.Drawing2D;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Color = System.Drawing.Color;
+using FontStyle = System.Drawing.FontStyle;
 using Pen = System.Drawing.Pen;
 using Point = System.Windows.Point;
 
