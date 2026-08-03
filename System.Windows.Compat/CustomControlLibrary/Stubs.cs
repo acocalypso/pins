@@ -23,6 +23,25 @@ namespace NINA.CustomControlLibrary {
     }
 
     /// <summary>
+    /// Step direction for IntStepperControl. Not a stub - the underlying values are copied from
+    /// upstream because callers cast them to int and use the result as the step amount
+    /// (FramingAssistantTimeContext.Adjust), so changing them changes behavior.
+    /// </summary>
+    public enum StepDirection {
+        Decrement = -1,
+        Increment = 1
+    }
+
+    public sealed class StepRequestedEventArgs : System.EventArgs {
+        public StepRequestedEventArgs(StepDirection direction) {
+            Direction = direction;
+        }
+
+        public StepDirection Direction { get; }
+        public bool Handled { get; set; }
+    }
+
+    /// <summary>
     /// Headless stub for the WPF DetachingExpander control.
     /// </summary>
     public class DetachingExpander : System.Windows.FrameworkElement {

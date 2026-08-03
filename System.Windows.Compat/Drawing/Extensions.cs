@@ -58,38 +58,56 @@ namespace System.Drawing
 
         public Bitmap(int width, int height, PixelFormat format)
         {
-            MatType matType;
+            _createdFormat = format;
+            _mat = new Mat(height, width, ToMatType(format));
+            // Initialize to zero
+            _mat.SetTo(OpenCvSharp.Scalar.All(0));
+        }
+
+        /// <summary>
+        /// Wraps an existing pixel buffer in place, mirroring
+        /// Bitmap(int, int, int, PixelFormat, IntPtr). No copy is made: drawing into this Bitmap
+        /// writes straight through to <paramref name="scan0"/>, which is the whole point of the
+        /// overload - it is how a WriteableBitmap's back buffer gets rendered into with GDI+
+        /// calls. The caller owns that memory and must keep it alive at least as long as this
+        /// Bitmap.
+        /// </summary>
+        public Bitmap(int width, int height, int stride, PixelFormat format, IntPtr scan0)
+        {
+            if (scan0 == IntPtr.Zero)
+            {
+                throw new ArgumentException("Pixel buffer pointer must not be null.", nameof(scan0));
+            }
+            _createdFormat = format;
+            _mat = Mat.FromPixelData(height, width, ToMatType(format), scan0, stride);
+        }
+
+        /// <summary>
+        /// Maps a GDI+ pixel format onto the Mat element type that matches its memory layout.
+        /// </summary>
+        private static MatType ToMatType(PixelFormat format)
+        {
             switch (format)
             {
                 case PixelFormat.Format8bppIndexed:
-                    matType = MatType.CV_8UC1;
-                    break;
+                    return MatType.CV_8UC1;
                 case PixelFormat.Format16bppGrayScale:
-                    matType = MatType.CV_16UC1;
-                    break;
+                    return MatType.CV_16UC1;
                 case PixelFormat.Format24bppRgb:
-                    matType = MatType.CV_8UC3;
-                    break;
+                    return MatType.CV_8UC3;
                 case PixelFormat.Format32bppArgb:
                 case PixelFormat.Format32bppPArgb:
                 case PixelFormat.Format32bppRgb:
-                    matType = MatType.CV_8UC4;
-                    break;
+                    return MatType.CV_8UC4;
                 case PixelFormat.Format48bppRgb:
-                    matType = MatType.CV_16UC3;
-                    break;
+                    return MatType.CV_16UC3;
                 case PixelFormat.Format16bppRgb565:
-                    matType = MatType.CV_16UC1; // Store as 16-bit single channel
-                    break;
+                    return MatType.CV_16UC1; // Store as 16-bit single channel
                 default:
                     // Fail loudly rather than silently guessing an element size the caller's
                     // pixel math will not match (the LockBits stride/layout corruption class).
                     throw new NotSupportedException($"Bitmap creation with pixel format {format} is not supported.");
             }
-            _createdFormat = format;
-            _mat = new Mat(height, width, matType);
-            // Initialize to zero
-            _mat.SetTo(OpenCvSharp.Scalar.All(0));
         }
 
         public Bitmap(string filename)
