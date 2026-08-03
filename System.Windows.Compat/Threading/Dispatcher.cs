@@ -87,8 +87,39 @@ namespace System.Windows.Threading {
             return true;
         }
 
-        public bool HasShutdownStarted => false;
-        public bool HasShutdownFinished => false;
+        /// <summary>
+        /// Throws if the caller is on the wrong thread. Since CheckAccess always succeeds here,
+        /// this never throws - it exists so affinity-asserting callers compile and run unchanged.
+        /// </summary>
+        public void VerifyAccess() { }
+
+        private readonly System.Threading.ManualResetEventSlim _shutdownRequested = new System.Threading.ManualResetEventSlim(false);
+        private volatile bool _shutdownStarted;
+        private volatile bool _shutdownFinished;
+
+        public bool HasShutdownStarted => _shutdownStarted;
+        public bool HasShutdownFinished => _shutdownFinished;
+
+        /// <summary>
+        /// Blocks the calling thread until <see cref="InvokeShutdown"/> is called on its
+        /// dispatcher. There is no message queue to pump headless, so this delivers only the
+        /// "keep the thread alive until told to stop" half of WPF's contract - work handed to
+        /// the dispatcher runs on the caller's thread or the thread pool, not here.
+        /// </summary>
+        public static void Run() {
+            Dispatcher dispatcher = CurrentDispatcher;
+            dispatcher._shutdownRequested.Wait();
+            dispatcher._shutdownFinished = true;
+        }
+
+        public void InvokeShutdown() {
+            _shutdownStarted = true;
+            _shutdownRequested.Set();
+        }
+
+        public void BeginInvokeShutdown(DispatcherPriority priority) {
+            InvokeShutdown();
+        }
 
         public static void PushFrame(DispatcherFrame frame) {
             // In headless mode, simulate frame processing by pumping the message loop

@@ -35,14 +35,14 @@
     <ProjectReference Include="..\NINA.WPF.Base\NINA.WPF.Base.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="NJsonSchema" Version="11.5.2" />
-    <PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
-    <PackageReference Include="Trinet.Core.IO.Ntfs" Version="4.1.2" />
+    <PackageReference Include="NJsonSchema" Version="11.6.1" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.9.1" />
+    <PackageReference Include="Trinet.Core.IO.Ntfs" Version="4.1.3" />
   </ItemGroup>
   <PropertyGroup>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>$(AssemblyName)</Title>
-    <Version>3.3.0.1050-nightly</Version>
+    <Version>3.3.0.1053-nightly</Version>
     <Authors>Stefan Berg and the N.I.N.A. Contributors</Authors>
     <Product>N.I.N.A. - Nighttime Imaging 'N' Astronomy</Product>
     <Copyright>Copyright ©  2016 - 2026 Stefan Berg and the N.I.N.A. contributors</Copyright>

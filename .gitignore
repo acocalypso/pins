@@ -42,6 +42,7 @@ Generated\ Files/
 # NUNIT
 *.VisualState.xml
 TestResult.xml
+BenchmarkDotNet.Artifacts/
 
 # Files built by Visual Studio
 *_i.c
@@ -91,6 +92,7 @@ TestResult.xml
 !**/[Pp]ackages/build/
 
 # Others
+*.lscache
 RELEASE_NOTES.html
 ClientBin/
 ~$*

@@ -403,6 +403,67 @@ namespace System.Drawing {
         }
 
         /// <summary>
+        /// Draws a series of connected line segments (an open polyline)
+        /// </summary>
+        public void DrawLines(Pen pen, PointF[] points) {
+            if (points == null || points.Length < 2) return;
+
+            var transformed = new PointF[points.Length];
+            for (int i = 0; i < points.Length; i++) {
+                transformed[i] = TransformPoint(points[i].X, points[i].Y);
+            }
+            DrawPolylineRaw(pen, transformed, false);
+        }
+
+        /// <summary>
+        /// Fills a polygon with the specified brush. A HatchBrush is rendered as a real pattern
+        /// clipped to the polygon; every other brush fills flat.
+        /// </summary>
+        public void FillPolygon(Brush brush, PointF[] points) {
+            if (points == null || points.Length < 3) return;
+
+            var cvPoints = new OpenCvSharp.Point[points.Length];
+            for (int i = 0; i < points.Length; i++) {
+                PointF transformed = TransformPoint(points[i].X, points[i].Y);
+                cvPoints[i] = new OpenCvSharp.Point((int)transformed.X, (int)transformed.Y);
+            }
+
+            if (brush is Drawing2D.HatchBrush hatchBrush) {
+                FillPolygonHatched(hatchBrush, cvPoints);
+                return;
+            }
+            Cv2.FillPoly(_canvas, new OpenCvSharp.Point[][] { cvPoints }, brush.ToScalar(), LineTypes.AntiAlias);
+        }
+
+        /// <summary>
+        /// Renders a hatch pattern into a scratch patch the size of the polygon's bounding box
+        /// and copies it through a polygon-shaped mask. Going via the bounding box rather than
+        /// the whole canvas keeps the cost proportional to the polygon; the patch's canvas
+        /// position is handed to the brush so the pattern stays phase-aligned to the canvas.
+        /// </summary>
+        private void FillPolygonHatched(Drawing2D.HatchBrush brush, OpenCvSharp.Point[] points) {
+            OpenCvSharp.Rect roi = Cv2.BoundingRect(points)
+                .Intersect(new OpenCvSharp.Rect(0, 0, _canvas.Width, _canvas.Height));
+            if (roi.Width <= 0 || roi.Height <= 0) {
+                return;
+            }
+
+            var shifted = new OpenCvSharp.Point[points.Length];
+            for (int i = 0; i < points.Length; i++) {
+                shifted[i] = new OpenCvSharp.Point(points[i].X - roi.X, points[i].Y - roi.Y);
+            }
+
+            using var patch = new Mat(roi.Height, roi.Width, _canvas.Type());
+            using var mask = new Mat(roi.Height, roi.Width, MatType.CV_8UC1, Scalar.All(0));
+            using var destination = new Mat(_canvas, roi);
+            brush.DrawPattern(patch, roi.X, roi.Y);
+            // Link8, not AntiAlias: CopyTo treats any non-zero mask byte as fully opaque, so an
+            // anti-aliased mask would widen the edge to a hard jagged fringe rather than soften it.
+            Cv2.FillPoly(mask, new OpenCvSharp.Point[][] { shifted }, Scalar.All(255), LineTypes.Link8);
+            patch.CopyTo(destination, mask);
+        }
+
+        /// <summary>
         /// Draws a closed or open polyline through already-transformed points, with no further
         /// transform applied - used internally by DrawPolygon/DrawRectangle once their input
         /// points have already been run through TransformPoint.
@@ -781,6 +842,14 @@ namespace System.Drawing {
             // finalizer for the native Mat buffer.
             state.Transform?.Dispose();
         }
+
+        /// <summary>
+        /// The bounding rectangle of the visible drawing surface. This shim tracks no clip
+        /// region, so the answer is always the full canvas in device pixels. GDI+ reports this
+        /// in world coordinates, so under a non-identity transform the two would disagree -
+        /// callers here read it under the identity transform.
+        /// </summary>
+        public RectangleF VisibleClipBounds => new RectangleF(0, 0, _canvas.Width, _canvas.Height);
 
         /// <summary>
         /// Fills a rectangle with the specified brush

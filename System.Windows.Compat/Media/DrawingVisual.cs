@@ -19,7 +19,7 @@ namespace System.Windows.Media {
     /// <summary>
     /// DrawingVisual is a visual object that can be used to render graphics on screen
     /// </summary>
-    public class DrawingVisual {
+    public class DrawingVisual : Visual {
         internal List<DrawingOperation> Operations { get; } = new List<DrawingOperation>();
 
         public DrawingContext RenderOpen() {
@@ -46,20 +46,57 @@ namespace System.Windows.Media {
         public FormattedText FormattedText { get; set; }
         public Point Point1 { get; set; }
         public Point Point2 { get; set; }
+
+        /// <summary>
+        /// Transform in effect when the operation was issued, from the context's PushTransform
+        /// stack, or null under the identity transform.
+        /// </summary>
+        public Transform Transform { get; set; }
     }
 
     /// <summary>
     /// DrawingContext is used to describe visual content
     /// </summary>
     public class DrawingContext : IDisposable {
-        private readonly DrawingVisual _visual;
+        private readonly List<DrawingOperation> _operations;
+        private readonly Stack<Transform> _transformStack = new Stack<Transform>();
 
         internal DrawingContext(DrawingVisual visual) {
-            _visual = visual;
+            _operations = visual.Operations;
+        }
+
+        internal DrawingContext(DrawingGroup group) {
+            _operations = group.Operations;
+        }
+
+        /// <summary>
+        /// Pushes a transform onto the context's stack. Recorded onto each subsequent operation
+        /// until the matching <see cref="Pop"/>, so a caller's intent survives even though this
+        /// shim does not rasterize the recording.
+        /// </summary>
+        public void PushTransform(Transform transform) {
+            _transformStack.Push(transform);
+        }
+
+        /// <summary>
+        /// Pops the most recent push. Tolerates an unbalanced pop rather than throwing - a
+        /// mismatch here would take down a caller that WPF would have let through.
+        /// </summary>
+        public void Pop() {
+            if (_transformStack.Count > 0) {
+                _transformStack.Pop();
+            }
+        }
+
+        private Transform CurrentTransform => _transformStack.Count > 0 ? _transformStack.Peek() : null;
+
+        private void Record(DrawingOperation operation) {
+            operation.Transform = CurrentTransform;
+            _operations.Add(operation);
         }
 
         public void DrawImage(Imaging.BitmapSource imageSource, Rect rectangle) {
-            _visual.Operations.Add(new DrawingOperation {
+            Record(new DrawingOperation {
                 Type = DrawingOperation.OperationType.DrawImage,
                 Image = imageSource,
                 Rect = rectangle
@@ -67,7 +104,7 @@ namespace System.Windows.Media {
         }
 
         public void DrawLine(Pen pen, Point point1, Point point2) {
-            _visual.Operations.Add(new DrawingOperation {
+            Record(new DrawingOperation {
                 Type = DrawingOperation.OperationType.DrawLine,
                 Pen = pen,
                 Point1 = point1,
@@ -76,7 +113,7 @@ namespace System.Windows.Media {
         }
 
         public void DrawRectangle(Brush brush, Pen pen, Rect rectangle) {
-            _visual.Operations.Add(new DrawingOperation {
+            Record(new DrawingOperation {
                 Type = DrawingOperation.OperationType.DrawRectangle,
                 Brush = brush,
                 Pen = pen,
@@ -85,7 +122,7 @@ namespace System.Windows.Media {
         }
 
         public void DrawGeometry(Brush brush, Pen pen, Geometry geometry) {
-            _visual.Operations.Add(new DrawingOperation {
+            Record(new DrawingOperation {
                 Type = DrawingOperation.OperationType.DrawGeometry,
                 Brush = brush,
                 Pen = pen,
@@ -94,7 +131,7 @@ namespace System.Windows.Media {
         }
 
         public void DrawText(FormattedText text, Point point) {
-            _visual.Operations.Add(new DrawingOperation {
+            Record(new DrawingOperation {
                 Type = DrawingOperation.OperationType.DrawText,
                 FormattedText = text,
                 Point1 = point

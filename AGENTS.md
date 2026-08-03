@@ -45,6 +45,7 @@ Read the project-local architecture doc before making non-trivial changes in tha
 
 - [`NINA/ARCHITECTURE.md`](NINA/ARCHITECTURE.md)
 - [`NINA.Astrometry/ARCHITECTURE.md`](NINA.Astrometry/ARCHITECTURE.md)
+- [`NINA.Benchmark/ARCHITECTURE.md`](NINA.Benchmark/ARCHITECTURE.md)
 - [`NINA.Core/ARCHITECTURE.md`](NINA.Core/ARCHITECTURE.md)
 - [`NINA.CustomControlLibrary/ARCHITECTURE.md`](NINA.CustomControlLibrary/ARCHITECTURE.md)
 - [`NINA.Equipment/ARCHITECTURE.md`](NINA.Equipment/ARCHITECTURE.md)
@@ -115,6 +116,8 @@ The solution has a clear layering pattern.
   WiX Burn bootstrapper.
 - `NINA.Test`
   NUnit test suite.
+- `NINA.Benchmark`
+  BenchmarkDotNet performance verification; it is a developer tool and is not shipped with the application.
 
 ### Non-`NINA.*` Solution Projects
 

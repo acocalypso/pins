@@ -24,6 +24,13 @@ namespace System.Windows.Media.Imaging {
 
         public bool CanFreeze => true;
 
+        /// <summary>
+        /// WPF hangs a Dispatcher off every DispatcherObject and callers use it for thread
+        /// affinity checks (VerifyAccess/CheckAccess). Headless has one logical dispatcher, so
+        /// hand back the current one and those checks always pass.
+        /// </summary>
+        public System.Windows.Threading.Dispatcher Dispatcher => System.Windows.Threading.Dispatcher.CurrentDispatcher;
+
         public BitmapSource() {
             _mat = new Mat();
         }
@@ -85,8 +92,8 @@ namespace System.Windows.Media.Imaging {
         public double DpiX { get; set; } = 96.0;
         public double DpiY { get; set; } = 96.0;
 
-        public int Width => _mat.Width;
-        public int Height => _mat.Height;
+        public override double Width => _mat.Width;
+        public override double Height => _mat.Height;
 
         public System.Windows.Media.PixelFormat Format {
             get {
@@ -118,9 +125,10 @@ namespace System.Windows.Media.Imaging {
         public static implicit operator Mat(BitmapSource bmp) => bmp._mat?.Clone();
         public static implicit operator BitmapSource(Mat mat) => new BitmapSource(mat);
 
-        public void Freeze() {
+        public override void Freeze() {
             // In WPF, Freeze makes objects immutable for thread safety
             // For OpenCV Mat, this is a no-op since Mat is already thread-safe for reading
+            base.Freeze();
         }
 
         public void CopyPixels(byte[] pixels, int stride, int offset) {
@@ -320,6 +328,26 @@ namespace System.Windows.Media.Imaging {
             AddMemoryPressure();
         }
 
+        /// <summary>
+        /// Pointer to the bitmap's pixel buffer. The backing Mat's data block *is* the back
+        /// buffer - there is no separate front buffer to flip to - so writes through this
+        /// pointer are visible immediately and <see cref="Lock"/>/<see cref="Unlock"/>/
+        /// <see cref="AddDirtyRect"/> have nothing to synchronize or invalidate.
+        /// </summary>
+        public IntPtr BackBuffer => _mat.Data;
+
+        public int BackBufferStride => (int)_mat.Step();
+
+        /// <summary>
+        /// No-op: see <see cref="BackBuffer"/>. Kept so callers can follow WPF's mandatory
+        /// Lock/write/AddDirtyRect/Unlock protocol unchanged.
+        /// </summary>
+        public void Lock() { }
+
+        public void Unlock() { }
+
+        public void AddDirtyRect(Int32Rect dirtyRect) { }
+
         public WriteableBitmap(BitmapSource source) : base() {
             // Implicit operator already clones — take ownership directly
             if (source != null) {
@@ -348,6 +376,23 @@ namespace System.Windows.Media.Imaging {
         public System.IO.Stream StreamSource { get; set; }
         public BitmapCacheOption CacheOption { get; set; }
 
+        /// <summary>
+        /// Accepted and ignored. The options WPF exposes here (PreservePixelFormat, DelayCreation,
+        /// IgnoreColorProfile, ...) describe WIC decoder behavior that has no counterpart in the
+        /// OpenCV decode path this shim uses.
+        /// </summary>
+        public BitmapCreateOptions CreateOptions { get; set; }
+
+        /// <summary>
+        /// Requested decode width in pixels, or 0 for the image's natural size. OpenCV has no
+        /// scale-on-decode, so this downscales after the fact - which still delivers the point of
+        /// the hint (a large source image does not stay resident at full size) even though the
+        /// decode itself is not cheaper.
+        /// </summary>
+        public int DecodePixelWidth { get; set; }
+
+        public int DecodePixelHeight { get; set; }
+
         public void BeginInit() { }
         public void EndInit() {
             // Load from StreamSource if set, otherwise fall back to UriSource - WPF supports
@@ -357,6 +402,7 @@ namespace System.Windows.Media.Imaging {
             } else if (UriSource != null) {
                 LoadFromUri();
             }
+            ApplyDecodeSize();
         }
 
         private void LoadFromUri() {
@@ -380,9 +426,37 @@ namespace System.Windows.Media.Imaging {
             }
         }
 
-        public new void Freeze() {
-            // In WPF, Freeze makes objects immutable for thread safety
-            // For OpenCV Mat, this is a no-op since Mat is already thread-safe for reading
+        /// <summary>
+        /// Resizes the loaded image to DecodePixelWidth/DecodePixelHeight. Matching WPF, leaving
+        /// one of the two at 0 derives it from the other so the aspect ratio is preserved, and
+        /// leaving both at 0 keeps the natural size.
+        /// </summary>
+        private void ApplyDecodeSize() {
+            if (DecodePixelWidth <= 0 && DecodePixelHeight <= 0) {
+                return;
+            }
+            if (_mat == null || _mat.Empty()) {
+                return;
+            }
+
+            int width = DecodePixelWidth;
+            int height = DecodePixelHeight;
+            if (width <= 0) {
+                width = (int)Math.Round((double)height * _mat.Width / _mat.Height);
+            } else if (height <= 0) {
+                height = (int)Math.Round((double)width * _mat.Height / _mat.Width);
+            }
+            if (width <= 0 || height <= 0 || (width == _mat.Width && height == _mat.Height)) {
+                return;
+            }
+
+            var resized = new OpenCvSharp.Mat();
+            // Area is the right filter for the shrink this is almost always used for, and
+            // degrades to a usable bilinear-ish result on the rare upscale.
+            OpenCvSharp.Cv2.Resize(_mat, resized, new OpenCvSharp.Size(width, height), 0, 0, OpenCvSharp.InterpolationFlags.Area);
+            _mat.Dispose();
+            _mat = resized;
+            AddMemoryPressure();
         }
 
         public void SetSource(System.IO.Stream stream) {
@@ -436,6 +510,17 @@ namespace System.Windows.Media.Imaging {
         /// <summary>
         /// Renders a DrawingVisual onto this bitmap
         /// </summary>
+        /// <summary>
+        /// Renders any visual, matching WPF's Render(Visual). Only a DrawingVisual carries
+        /// recorded drawing operations in this shim - a laid-out element tree has no headless
+        /// render pass behind it - so anything else leaves the target untouched.
+        /// </summary>
+        public void Render(System.Windows.Media.Visual visual) {
+            if (visual is System.Windows.Media.DrawingVisual drawingVisual) {
+                Render(drawingVisual);
+            }
+        }
+
         public void Render(System.Windows.Media.DrawingVisual visual) {
             if (visual == null || _mat == null || _mat.Empty()) {
                 return;

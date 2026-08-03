@@ -48,6 +48,24 @@ namespace System.Windows.Media {
 
     public abstract class ImageSource : IDisposable {
         public abstract void Dispose();
+
+        /// <summary>
+        /// Natural width in device-independent units. Double rather than int to match WPF, where
+        /// a BitmapSource's Width is its pixel width scaled by DPI.
+        /// </summary>
+        public abstract double Width { get; }
+
+        public abstract double Height { get; }
+
+        /// <summary>
+        /// Whether <see cref="Freeze"/> has been called. Freezing is a no-op here - nothing
+        /// enforces immutability - so this only reports whether a caller asked for it.
+        /// </summary>
+        public bool IsFrozen { get; protected set; }
+
+        public virtual void Freeze() {
+            IsFrozen = true;
+        }
     }
 
     public class GeometryGroup : Geometry {
@@ -322,6 +340,11 @@ namespace System.Windows.Media {
     public abstract class Drawing {
         public bool CanFreeze => true;
         public void Freeze() { }
+
+        /// <summary>
+        /// Axis-aligned bounds of the drawing's content.
+        /// </summary>
+        public virtual Rect Bounds => default;
     }
 
     /// <summary>
@@ -329,6 +352,91 @@ namespace System.Windows.Media {
     /// </summary>
     public class DrawingGroup : Drawing {
         public System.Collections.Generic.List<Drawing> Children { get; set; } = new System.Collections.Generic.List<Drawing>();
+
+        /// <summary>
+        /// Clip applied to the group's content. Recorded only - nothing in this shim rasterizes
+        /// a DrawingGroup, so the clip is never enforced.
+        /// </summary>
+        public Geometry ClipGeometry { get; set; }
+
+        /// <summary>
+        /// Operations recorded through <see cref="Open"/>, in issue order. Retained so the
+        /// composition a caller described can still be inspected, even though it is not drawn.
+        /// </summary>
+        internal System.Collections.Generic.List<DrawingOperation> Operations { get; } = new System.Collections.Generic.List<DrawingOperation>();
+
+        /// <summary>
+        /// Opens the group for recording, matching WPF's DrawingGroup.Open(): the returned
+        /// context replaces the group's existing content, and the recording is committed when
+        /// the context is disposed.
+        /// </summary>
+        public DrawingContext Open() {
+            Children.Clear();
+            Operations.Clear();
+            return new DrawingContext(this);
+        }
+
+        /// <summary>
+        /// A rectangular clip pins the bounds outright, which is the usual case for a group used
+        /// as a fixed-size composition surface. Otherwise fall back to the union of whatever
+        /// content the group holds.
+        /// </summary>
+        public override Rect Bounds {
+            get {
+                if (ClipGeometry is RectangleGeometry clip) {
+                    return clip.Rect;
+                }
+
+                Rect bounds = Rect.Empty;
+                foreach (Drawing child in Children) {
+                    bounds = Union(bounds, child.Bounds);
+                }
+                foreach (DrawingOperation operation in Operations) {
+                    bounds = Union(bounds, operation.Rect);
+                }
+                return bounds.IsEmpty ? default : bounds;
+            }
+        }
+
+        private static Rect Union(Rect first, Rect second) {
+            if (second.Width <= 0 || second.Height <= 0) {
+                return first;
+            }
+            if (first.IsEmpty) {
+                return second;
+            }
+            double left = Math.Min(first.Left, second.Left);
+            double top = Math.Min(first.Top, second.Top);
+            double right = Math.Max(first.Right, second.Right);
+            double bottom = Math.Max(first.Bottom, second.Bottom);
+            return new Rect(left, top, right - left, bottom - top);
+        }
+    }
+
+    /// <summary>
+    /// An ImageSource whose content is a vector <see cref="Drawing"/>.
+    ///
+    /// Headless never rasterizes one: it exists so vector composition paths type-check and can
+    /// round-trip the Drawing they built. Anything that needs actual pixels wants a
+    /// BitmapSource, not this.
+    /// </summary>
+    public class DrawingImage : ImageSource {
+
+        public DrawingImage() { }
+
+        public DrawingImage(Drawing drawing) {
+            Drawing = drawing;
+        }
+
+        public Drawing Drawing { get; set; }
+
+        public override double Width => Drawing?.Bounds.Width ?? 0;
+
+        public override double Height => Drawing?.Bounds.Height ?? 0;
+
+        public override void Dispose() {
+            // Nothing unmanaged - the Drawing is a plain managed object graph.
+        }
     }
 
     /// <summary>
@@ -342,6 +450,8 @@ namespace System.Windows.Media {
             ImageSource = imageSource;
             Rect = rect;
         }
+
+        public override Rect Bounds => Rect;
     }
 
     /// <summary>
@@ -516,6 +626,13 @@ namespace System.Windows.Media {
     /// Represents a rectangular geometry.
     /// </summary>
     public class RectangleGeometry : Geometry {
+
+        public RectangleGeometry() { }
+
+        public RectangleGeometry(Rect rect) {
+            Rect = rect;
+        }
+
         public Rect Rect { get; set; }
 
         protected override Freezable CreateInstanceCore() {

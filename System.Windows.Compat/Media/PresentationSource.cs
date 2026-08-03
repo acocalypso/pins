@@ -43,7 +43,20 @@ namespace System.Windows.Media {
     /// </summary>
     public struct Matrix {
         public static Matrix Identity => new Matrix { M11 = 1, M22 = 1, M12 = 0, M21 = 0, OffsetX = 0, OffsetY = 0 };
-        
+
+        /// <summary>
+        /// Element order matches WPF's Matrix(m11, m12, m21, m22, offsetX, offsetY) - row-vector
+        /// convention, so a point is transformed as v * M.
+        /// </summary>
+        public Matrix(double m11, double m12, double m21, double m22, double offsetX, double offsetY) {
+            M11 = m11;
+            M12 = m12;
+            M21 = m21;
+            M22 = m22;
+            OffsetX = offsetX;
+            OffsetY = offsetY;
+        }
+
         public double M11 { get; set; }
         public double M12 { get; set; }
         public double M21 { get; set; }
