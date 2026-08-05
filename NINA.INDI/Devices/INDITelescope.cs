@@ -1204,12 +1204,14 @@ namespace NINA.INDI.Devices {
                     throw new NotImplementedException("TELESCOPE_HOME property not found");
                 }
 
-                // Drivers name the "go home" action element differently, e.g. the Starbook Ten
-                // uses "FindHome" while libindi's standard uses "GoHome" and others use "FIND"/"GO".
-                // Pick the first recognized action element; if the vector has a single switch, use
-                // that (most TELESCOPE_HOME vectors expose only the go-home action).
-                string[] homeActionNames = ["FindHome", "GoHome", "FIND", "GO", "HOME", "Home", "SLEW"];
-                var homeSwitch = homeProp.Switches.FirstOrDefault(s => homeActionNames.Contains(s.Name, StringComparer.OrdinalIgnoreCase))
+                // Drivers name the action element differently. Pick by the priority below, NOT
+                // by the driver's element order: "go to home" must win over a mechanical home
+                // SEARCH (which some drivers refuse outright) since that is what FindHome means.
+                // A set-home element is deliberately not listed - it would redefine home.
+                string[] homeActionNames = ["GO", "GoHome", "HOME", "SLEW", "FIND", "FindHome"];
+                var homeSwitch = homeActionNames
+                                     .Select(name => homeProp.Switches.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase)))
+                                     .FirstOrDefault(s => s != null)
                                  ?? (homeProp.Switches.Count == 1 ? homeProp.Switches[0] : null);
 
                 if (homeSwitch == null) {

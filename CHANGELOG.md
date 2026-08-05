@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.55 - 2026-08-05
+### Fixed
+- Relative-only INDI focusers (open-loop DC focusers with no absolute-position feedback, e.g. HitecAstro DC) failed every move with `Number property 'ABS_FOCUS_POSITION' not found`: the low-level move always wrote the absolute position instead of `FOCUS_MOTION`/`REL_FOCUS_POSITION`, movement state was tracked from a property such devices never send, a missing `FOCUS_MAX` was treated as a real limit of 0/-1 (clamping every target position or collapsing the per-step chunking), and a failed move left the focuser stuck reporting "moving" forever. Absolute focusers are unaffected
+- INDI mounts: "Find home" failed with "Mount refused the home command" on drivers that expose both a home *search* and a go-to-home action (e.g. iOptron): the search action was always picked because it comes first in the driver's element list, and it is refused outright by some drivers. The go-to-home action is now preferred, which is also what NINA's Find Home means
+
 ## 1.1.54 - 2026-07-28
 ### Fixed
 - INDI only accepts absolute rotator position
