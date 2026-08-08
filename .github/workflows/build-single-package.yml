@@ -285,6 +285,7 @@ jobs:
             cp scripts/system-upgrade.sh build/usr/local/bin/
             cp scripts/manage-samba.sh build/usr/local/bin/
             cp scripts/wifi-connect.sh build/usr/local/bin/
+            cp scripts/pins-wifi-profile.py build/usr/local/bin/
             cp scripts/wifi-automanage.py build/usr/local/bin/
             cp scripts/wifi-scan.py build/usr/local/bin/
             cp scripts/install-firmware.sh build/usr/local/bin/
@@ -302,6 +303,7 @@ jobs:
             cp scripts/hotspot.sh build/home/pi/pins-scripts/
             cp scripts/90-pins-wifi-recovery build/etc/NetworkManager/dispatcher.d/
             chmod 755 build/etc/NetworkManager/dispatcher.d/90-pins-wifi-recovery
+            chmod 755 build/usr/local/bin/pins-wifi-profile.py
 
             cp systemd/sysupdate-api.service build/etc/systemd/system/
             cp systemd/pins-wifi-watchdog.service build/etc/systemd/system/
@@ -334,6 +336,7 @@ jobs:
               ./usr/local/bin/ensure-required-packages.sh
               ./usr/local/bin/install-astap-star-database.sh
               ./usr/local/bin/manage-plugin.sh
+              ./usr/local/bin/pins-wifi-profile.py
               ./usr/local/bin/pins-wifi-watchdog.sh
             )
             package_contents=$(dpkg-deb --fsys-tarfile "$filename" | tar -tf -)
