@@ -284,6 +284,7 @@ jobs:
 
             cp scripts/system-upgrade.sh build/usr/local/bin/
             cp scripts/manage-samba.sh build/usr/local/bin/
+            cp scripts/manage-localization.sh build/usr/local/bin/
             cp scripts/wifi-connect.sh build/usr/local/bin/
             cp scripts/pins-wifi-profile.py build/usr/local/bin/
             cp scripts/wifi-automanage.py build/usr/local/bin/
@@ -335,6 +336,7 @@ jobs:
               ./usr/local/bin/collect-diagnostics.sh
               ./usr/local/bin/ensure-required-packages.sh
               ./usr/local/bin/install-astap-star-database.sh
+              ./usr/local/bin/manage-localization.sh
               ./usr/local/bin/manage-plugin.sh
               ./usr/local/bin/pins-wifi-profile.py
               ./usr/local/bin/pins-wifi-watchdog.sh
