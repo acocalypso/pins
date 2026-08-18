@@ -90,6 +90,14 @@ jobs:
         with:
           node-version: 22.x
 
+      - name: Install pinsdaemon validation tooling
+        if: ${{ inputs.package_key == 'pinsdaemon' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends python3 python3-venv
+
       - name: Determine release and build metadata
         id: meta
         shell: bash
@@ -267,6 +275,11 @@ jobs:
             git clone https://github.com/Touch-N-Stars/pinsdaemon pinsdaemon
 
             pushd pinsdaemon >/dev/null
+            python3 -m venv .venv
+            .venv/bin/python -m pip install --disable-pip-version-check -r requirements.txt
+            .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+            bash -n scripts/*.sh scripts/pins-rig-name scripts/90-pins-wifi-recovery packaging/DEBIAN/postinst packaging/DEBIAN/prerm
+
             mkdir -p build/opt/pinsdaemon
             mkdir -p build/usr/local/bin
             mkdir -p build/etc/systemd/system
@@ -296,11 +309,7 @@ jobs:
             cp scripts/collect-diagnostics.sh build/usr/local/bin/
             cp scripts/install-astap-star-database.sh build/usr/local/bin/
             cp scripts/pins-wifi-watchdog.sh build/usr/local/bin/
-
-
-
-
-
+            cp scripts/pins-rig-name build/usr/local/bin/
             cp scripts/hotspot.sh build/home/pi/pins-scripts/
             cp scripts/90-pins-wifi-recovery build/etc/NetworkManager/dispatcher.d/
             chmod 755 build/etc/NetworkManager/dispatcher.d/90-pins-wifi-recovery
@@ -338,6 +347,7 @@ jobs:
               ./usr/local/bin/install-astap-star-database.sh
               ./usr/local/bin/manage-localization.sh
               ./usr/local/bin/manage-plugin.sh
+              ./usr/local/bin/pins-rig-name
               ./usr/local/bin/pins-wifi-profile.py
               ./usr/local/bin/pins-wifi-watchdog.sh
             )
