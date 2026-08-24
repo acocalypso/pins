@@ -22,6 +22,7 @@ This allows you to safely return to a stable release if needed.
 - The application now runs on .NET 10, bringing performance improvements and access to the latest runtime features.
 
 ## Bugfixes
+- Pinsdaemon packages now include the ASTAP data-link helper required to expose database files installed under `/opt/astap` to the command-line solver.
 - Autofocus after HFR Increase HFRTrendPercentage is now calculated correctly and will no longer underestimate the change on large HFR drift
 - ToupTek based filter wheels and focusers will no longer be listed in the camera connector.
 - When updating the application, the color schema upgrades now properly apply updated or added colors

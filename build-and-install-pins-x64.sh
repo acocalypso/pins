@@ -1169,6 +1169,7 @@ build_pinsdaemon_package() {
   cp scripts/wifi-scan.py build/usr/local/bin/
   cp scripts/install-firmware.sh build/usr/local/bin/
   cp scripts/install-indi-package.sh build/usr/local/bin/
+  cp scripts/ensure-astap-data-links.sh build/usr/local/bin/
 
   cp scripts/hotspot.sh build/home/$TARGET_USER/pins-scripts/
 

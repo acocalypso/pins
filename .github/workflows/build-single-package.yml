@@ -309,6 +309,7 @@ jobs:
             cp scripts/manage-plugin.sh build/usr/local/bin/
             cp scripts/collect-diagnostics.sh build/usr/local/bin/
             cp scripts/install-astap-star-database.sh build/usr/local/bin/
+            cp scripts/ensure-astap-data-links.sh build/usr/local/bin/
             cp scripts/pins-wifi-watchdog.sh build/usr/local/bin/
             cp scripts/pins-rig-name build/usr/local/bin/
             cp scripts/hotspot.sh build/home/pi/pins-scripts/
@@ -345,6 +346,7 @@ jobs:
               ./etc/systemd/system/pins-wifi-watchdog.timer
               ./etc/systemd/system/sysupdate-api.service
               ./usr/local/bin/collect-diagnostics.sh
+              ./usr/local/bin/ensure-astap-data-links.sh
               ./usr/local/bin/ensure-required-packages.sh
               ./usr/local/bin/install-astap-star-database.sh
               ./usr/local/bin/manage-localization.sh
