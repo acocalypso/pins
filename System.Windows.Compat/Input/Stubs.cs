@@ -315,6 +315,14 @@ namespace System.Windows {
         public event EventHandler<System.Windows.Input.KeyEventArgs> KeyDown;
         public event DependencyPropertyChangedEventHandler DataContextChanged;
 
+        /// <summary>
+        /// Attaches a binding to this element. Headless has no binding engine, so this records
+        /// nothing and the target property keeps whatever it was assigned directly.
+        /// </summary>
+        public System.Windows.Data.BindingExpressionBase SetBinding(DependencyProperty dp, System.Windows.Data.BindingBase binding) {
+            return System.Windows.Data.BindingOperations.SetBinding(this, dp, binding);
+        }
+
         public void CaptureTouch(System.Windows.Input.TouchDevice touchDevice) {
         }
 

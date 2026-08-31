@@ -58,6 +58,29 @@ namespace System.Windows.Threading {
     }
 
     /// <summary>
+    /// Result-carrying DispatcherOperation, as returned by Dispatcher.InvokeAsync&lt;T&gt;.
+    /// Callers reach the underlying task through <see cref="Task"/> the way they do in WPF; the
+    /// implicit conversion to Task&lt;T&gt; additionally keeps code that treated InvokeAsync's
+    /// result as a task directly compiling.
+    /// </summary>
+    public class DispatcherOperation<T> : DispatcherOperation {
+        public DispatcherOperation(System.Threading.Tasks.Task<T> task) {
+            Task = task;
+            // Keep the base class' non-generic view pointing at the same task, so the inherited
+            // Status/Wait members report on the operation that actually ran.
+            base.Task = task;
+        }
+
+        public new System.Threading.Tasks.Task<T> Task { get; }
+
+        public new T Result => Task.GetAwaiter().GetResult();
+
+        public new System.Runtime.CompilerServices.TaskAwaiter<T> GetAwaiter() => Task.GetAwaiter();
+
+        public static implicit operator System.Threading.Tasks.Task<T>(DispatcherOperation<T> operation) => operation?.Task;
+    }
+
+    /// <summary>
     /// Stub implementation of DispatcherFrame for headless execution
     /// </summary>
     public class DispatcherFrame {

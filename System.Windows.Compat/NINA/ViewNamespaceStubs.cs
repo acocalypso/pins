@@ -12,18 +12,14 @@
 
 #endregion "copyright"
 
-namespace System.Windows.Interop {
-    /// <summary>
-    /// Minimal stub for PresentationSource interop operations
-    /// </summary>
-    internal static class Interop {
-    }
+namespace NINA.WPF.Base.View {
+    // Every real member of this namespace lives in a *.xaml.cs file, and those are excluded from
+    // the build on Linux. Without something compiled under this name the namespace does not exist
+    // in any referenced assembly and upstream's "using NINA.WPF.Base.View;" fails to resolve.
 
     /// <summary>
-    /// Specifies the render mode preference for the process.
+    /// Placeholder that keeps the namespace resolvable.
     /// </summary>
-    public enum RenderMode {
-        Default = 0,
-        SoftwareOnly = 1
+    internal static class ViewNamespaceStub {
     }
 }

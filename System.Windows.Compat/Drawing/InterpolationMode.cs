@@ -35,6 +35,20 @@ namespace System.Drawing.Drawing2D {
         Half = 4
     }
 
+    public enum CompositingMode {
+        SourceOver = 0,
+        SourceCopy = 1
+    }
+
+    public enum CompositingQuality {
+        Invalid = -1,
+        Default = 0,
+        HighSpeed = 1,
+        HighQuality = 2,
+        GammaCorrected = 3,
+        AssumeLinear = 4
+    }
+
     /// <summary>
     /// Represents the state of a Graphics object, used by Save/Restore
     /// </summary>
