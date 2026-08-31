@@ -23,6 +23,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using DrawingBitmap = System.Drawing.Bitmap;
 
 namespace NINA.WPF.Base.SkySurvey {
 
@@ -32,9 +33,12 @@ namespace NINA.WPF.Base.SkySurvey {
         double Width,
         double Height,
         double Rotation,
-        bool FlipHorizontally = false);
+        bool FlipHorizontally = false) {
 
-    public sealed class SkyMapImageCache {
+        internal DrawingBitmap RasterImage { get; init; }
+    }
+
+    public sealed class SkyMapImageCache : IDisposable {
         public const int DefaultDecodedImageCapacity = 32;
         public const long DefaultMaximumEstimatedBytes = 64L * 1024 * 1024;
 
@@ -45,6 +49,7 @@ namespace NINA.WPF.Base.SkySurvey {
         private readonly long maximumEstimatedBytes;
         private readonly LinkedList<ImageTile> recentlyUsed = [];
         private readonly IReadOnlyList<ImageTile> tiles;
+        private bool disposed;
         private long estimatedBytes;
 
         public SkyMapImageCache(
@@ -86,26 +91,47 @@ namespace NINA.WPF.Base.SkySurvey {
         public long MaximumEstimatedBytes => maximumEstimatedBytes;
 
         public IReadOnlyList<SkyMapImagePlacement> GetPlacements(SkyMapViewportProjection projection) {
+            lock (lockObject) {
+                return GetPlacementsLocked(projection);
+            }
+        }
+
+        internal T UsePlacements<T>(SkyMapViewportProjection projection, Func<IReadOnlyList<SkyMapImagePlacement>, T> usePlacements) {
+            lock (lockObject) {
+                return usePlacements(GetPlacementsLocked(projection));
+            }
+        }
+
+        private IReadOnlyList<SkyMapImagePlacement> GetPlacementsLocked(SkyMapViewportProjection projection) {
             ViewportFoV viewport = projection.Viewport;
             List<SkyMapImagePlacement> result = [];
             foreach (ImageTile tile in RelevantTiles(viewport)) {
-                BitmapSource image = GetLoadedImage(tile, viewport);
-                if (image is null) {
+                CacheEntry loaded = GetLoadedImage(tile);
+                if (loaded is null) {
                     continue;
                 }
+                BitmapSource image = loaded.Image;
 
                 double imageResolutionWidth = AstroUtil.ArcminToArcsec(tile.FieldOfViewWidth) / image.PixelWidth;
                 double imageResolutionHeight = AstroUtil.ArcminToArcsec(tile.FieldOfViewHeight) / image.PixelHeight;
                 double width = image.PixelWidth * imageResolutionWidth / viewport.ArcSecWidth;
                 double height = image.PixelHeight * imageResolutionHeight / viewport.ArcSecHeight;
                 System.Windows.Point center = projection.Project(tile.Coordinates);
-                (double rotation, bool flipHorizontally) = CalculateTransform(tile, viewport, projection, center);
-                result.Add(new SkyMapImagePlacement(image, center, width, height, rotation, flipHorizontally));
+                (double rotation, bool flipHorizontally) = projection.ImageTransformFromEquatorial(
+                    tile.Coordinates,
+                    tile.Rotation,
+                    center);
+                result.Add(new SkyMapImagePlacement(image, center, width, height, rotation, flipHorizontally) {
+                    RasterImage = loaded.RasterImage
+                });
             }
             return result;
         }
 
         public async Task<bool> LoadAsync(ViewportFoV viewport, CancellationToken token) {
+            lock (lockObject) {
+                ObjectDisposedException.ThrowIf(disposed, this);
+            }
             ImageTile[] relevantTiles = RelevantTiles(viewport).ToArray();
             HashSet<ImageTile> activeTiles = relevantTiles.ToHashSet();
             await loadGate.WaitAsync(token);
@@ -123,14 +149,27 @@ namespace NINA.WPF.Base.SkySurvey {
             }
         }
 
-        private BitmapSource GetLoadedImage(ImageTile tile, ViewportFoV viewport) {
+        public void Dispose() {
             lock (lockObject) {
-                if (images.TryGetValue(tile, out CacheEntry loaded)) {
-                    Touch(loaded.Node);
-                    return loaded.Image;
+                if (disposed) {
+                    return;
                 }
-                return null;
+                disposed = true;
+                foreach (CacheEntry entry in images.Values) {
+                    entry.RasterImage.Dispose();
+                }
+                images.Clear();
+                recentlyUsed.Clear();
+                estimatedBytes = 0;
             }
+        }
+
+        private CacheEntry GetLoadedImage(ImageTile tile) {
+            if (images.TryGetValue(tile, out CacheEntry loaded)) {
+                Touch(loaded.Node);
+                return loaded;
+            }
+            return null;
         }
 
         private bool Load(
@@ -140,32 +179,46 @@ namespace NINA.WPF.Base.SkySurvey {
             CancellationToken token) {
             int size = tile.DesiredSize(viewport);
             lock (lockObject) {
+                if (disposed) {
+                    return false;
+                }
                 if (images.TryGetValue(tile, out CacheEntry loaded) && loaded.Size == size) {
                     Touch(loaded.Node);
                     return false;
                 }
             }
 
-            BitmapSource image = tile.Load(size);
-            if (image is null) {
-                return false;
-            }
-            token.ThrowIfCancellationRequested();
-
-            lock (lockObject) {
-                if (images.TryGetValue(tile, out CacheEntry loaded) && loaded.Size == size) {
-                    Touch(loaded.Node);
+            DrawingBitmap rasterImage = null;
+            try {
+                BitmapSource image = tile.Load(size);
+                if (image is null) {
                     return false;
                 }
-                if (loaded is not null) {
-                    Remove(tile);
+                token.ThrowIfCancellationRequested();
+                rasterImage = SkyMapRasterRenderer.CreateRasterImage(image);
+                token.ThrowIfCancellationRequested();
+
+                lock (lockObject) {
+                    if (disposed) {
+                        return false;
+                    }
+                    if (images.TryGetValue(tile, out CacheEntry loaded) && loaded.Size == size) {
+                        Touch(loaded.Node);
+                        return false;
+                    }
+                    if (loaded is not null) {
+                        Remove(tile);
+                    }
+                    LinkedListNode<ImageTile> node = recentlyUsed.AddFirst(tile);
+                    long imageBytes = EstimateBytes(image);
+                    images.Add(tile, new CacheEntry(image, rasterImage, size, imageBytes, node));
+                    rasterImage = null;
+                    estimatedBytes += imageBytes;
+                    Trim(activeTiles);
+                    return true;
                 }
-                LinkedListNode<ImageTile> node = recentlyUsed.AddFirst(tile);
-                long imageBytes = EstimateBytes(image);
-                images.Add(tile, new CacheEntry(image, size, imageBytes, node));
-                estimatedBytes += imageBytes;
-                Trim(activeTiles);
-                return true;
+            } finally {
+                rasterImage?.Dispose();
             }
         }
 
@@ -192,6 +245,7 @@ namespace NINA.WPF.Base.SkySurvey {
             recentlyUsed.Remove(removed.Node);
             images.Remove(tile);
             estimatedBytes -= removed.EstimatedBytes;
+            removed.RasterImage.Dispose();
         }
 
         private static long EstimateBytes(BitmapSource image) {
@@ -218,38 +272,12 @@ namespace NINA.WPF.Base.SkySurvey {
             return AstroUtil.ToDegree(Math.Acos(Math.Clamp(cosine, -1, 1)));
         }
 
-        private static (double Rotation, bool FlipHorizontally) CalculateTransform(
-            ImageTile tile,
-            ViewportFoV viewport,
-            SkyMapViewportProjection projection,
-            System.Windows.Point center) {
-            if (projection.Mode == SkyMapProjectionMode.AltAz) {
-                return projection.ImageTransformFromEquatorial(tile.Coordinates, tile.Rotation, center);
-            }
-
-            double deltaX = center.X - viewport.ViewPortCenterPoint.X;
-            double deltaY = center.Y - viewport.ViewPortCenterPoint.Y;
-            Coordinates referenceCenter = viewport.CenterCoordinates.Shift(
-                deltaX < 1E-10 ? 1 : 0,
-                deltaY,
-                viewport.Rotation,
-                viewport.ArcSecWidth,
-                viewport.ArcSecHeight);
-            double equatorialRotation = -(90 - AstroUtil.CalculatePositionAngle(
-                referenceCenter.RADegrees,
-                tile.Coordinates.RADegrees,
-                referenceCenter.Dec,
-                tile.Coordinates.Dec));
-            if (deltaX < 0) {
-                equatorialRotation += 180;
-            }
-            if (tile.Coordinates.Dec < 0 || (referenceCenter.Dec < 0 && tile.Coordinates.Dec >= 0)) {
-                equatorialRotation += 180;
-            }
-            return (equatorialRotation + tile.Rotation, false);
-        }
-
-        private sealed record CacheEntry(BitmapSource Image, int Size, long EstimatedBytes, LinkedListNode<ImageTile> Node);
+        private sealed record CacheEntry(
+            BitmapSource Image,
+            DrawingBitmap RasterImage,
+            int Size,
+            long EstimatedBytes,
+            LinkedListNode<ImageTile> Node);
 
         private sealed class ImageTile {
             public ImageTile(double rightAscension, double declination, double fieldOfViewWidth, double fieldOfViewHeight, double rotation, string path) {

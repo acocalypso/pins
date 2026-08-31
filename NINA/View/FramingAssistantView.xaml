@@ -100,7 +100,7 @@
                                     <WrapPanel Orientation="Horizontal">
                                         <TextBlock Text="This sky survey makes use of " TextWrapping="Wrap" />
                                         <TextBlock TextWrapping="Wrap">
-                                            <Hyperlink NavigateUri="https://skyview.gsfc.nasa.gov/" RequestNavigate="Hyperlink_RequestNavigate">SkyView</Hyperlink>
+                                            <Hyperlink NavigateUri="https://skyview.gsfc.nasa.gov/">SkyView</Hyperlink>
                                         </TextBlock>
                                         <TextBlock Text=" a service of the Astrophysics Science Division at NASA/GSFC" TextWrapping="Wrap" />
                                     </WrapPanel>
@@ -140,7 +140,7 @@
                                     <WrapPanel Orientation="Horizontal">
                                         <TextBlock Text="This sky survey makes use of " TextWrapping="Wrap" />
                                         <TextBlock TextWrapping="Wrap">
-                                            <Hyperlink NavigateUri="http://skyserver.sdss.org/dr17/" RequestNavigate="Hyperlink_RequestNavigate">Sloan Digital Sky Survey</Hyperlink>
+                                            <Hyperlink NavigateUri="http://skyserver.sdss.org/dr17/">Sloan Digital Sky Survey</Hyperlink>
                                         </TextBlock>
                                         <TextBlock Text=" a service provided by SkyServer" TextWrapping="Wrap" />
                                     </WrapPanel>
@@ -180,7 +180,7 @@
                                     <WrapPanel Orientation="Horizontal">
                                         <TextBlock Text="This sky survey makes use of " TextWrapping="Wrap" />
                                         <TextBlock TextWrapping="Wrap">
-                                            <Hyperlink NavigateUri="http://archive.eso.org/dss/dss" RequestNavigate="Hyperlink_RequestNavigate">ESO Online Digitized Sky Survey</Hyperlink>
+                                            <Hyperlink NavigateUri="http://archive.eso.org/dss/dss">ESO Online Digitized Sky Survey</Hyperlink>
                                         </TextBlock>
                                         <TextBlock Text=" a service provided by the European Southern Observatory" TextWrapping="Wrap" />
                                     </WrapPanel>
@@ -220,7 +220,7 @@
                                     <WrapPanel Orientation="Horizontal">
                                         <TextBlock Text="This sky survey makes use of " TextWrapping="Wrap" />
                                         <TextBlock TextWrapping="Wrap">
-                                            <Hyperlink NavigateUri="https://archive.stsci.edu/dss/acknowledging.html" RequestNavigate="Hyperlink_RequestNavigate">STScI DSS Search</Hyperlink>
+                                            <Hyperlink NavigateUri="https://archive.stsci.edu/dss/acknowledging.html">STScI DSS Search</Hyperlink>
                                         </TextBlock>
                                         <TextBlock Text=" a service provided by the Space Telescope Science Institude" TextWrapping="Wrap" />
                                     </WrapPanel>
@@ -308,7 +308,7 @@
                                     <WrapPanel Margin="0,10,0,0" Orientation="Horizontal">
                                         <TextBlock Text="This sky survey makes use of " TextWrapping="Wrap" />
                                         <TextBlock TextWrapping="Wrap">
-                                            <Hyperlink NavigateUri="https://alasky.u-strasbg.fr/hips-image-services/hips2fits" RequestNavigate="Hyperlink_RequestNavigate">hips2fits</Hyperlink>
+                                            <Hyperlink NavigateUri="https://alasky.u-strasbg.fr/hips-image-services/hips2fits">hips2fits</Hyperlink>
                                         </TextBlock>
                                         <TextBlock Text=" a service provided by CDS" TextWrapping="Wrap" />
                                     </WrapPanel>
@@ -1341,7 +1341,9 @@
                 ImageRotation="{Binding InverseRectangleRotation}"
                 RectangleFontSize="{Binding FontSize}"
                 RectangleOpacity="{Binding Opacity}"
-                ScrollEnabled="{Binding SkyMapAnnotator.DynamicFoV, Converter={StaticResource InverseBooleanConverter}}">
+                ScrollEnabled="{Binding SkyMapAnnotator.DynamicFoV, Converter={StaticResource InverseBooleanConverter}}"
+                ZoomInCommand="{Binding ZoomInCommand}"
+                ZoomOutCommand="{Binding ZoomOutCommand}">
                 <i:Interaction.Triggers>
                     <i:EventTrigger EventName="SizeChanged" SourceObject="{Binding RelativeSource={RelativeSource AncestorType=wpfbase:ImageView, Mode=FindAncestor}, Path=PART_ScrollViewerBinding}">
                         <i:InvokeCommandAction Command="{Binding ScrollViewerSizeChangedCommand}" />
@@ -1682,14 +1684,17 @@
                                     Width="{Binding ProjectedRectangle.Width}"
                                     Height="{Binding ProjectedRectangle.Height}"
                                     behaviors:DragCommandBehavior.Drag="True"
+                                    behaviors:DragCommandBehavior.DragStartCommand="{Binding DragStartCommand}"
                                     behaviors:DragCommandBehavior.DragMoveCommand="{Binding DragMoveCommand}"
                                     behaviors:DragCommandBehavior.DragStopCommand="{Binding DragStopCommand}"
                                     behaviors:MouseWheelCommandBehavior.Enabled="{Binding SkyMapAnnotator.DynamicFoV}"
                                     behaviors:MouseWheelCommandBehavior.MouseWheelCommand="{Binding MouseWheelCommand}"
                                     Fill="Transparent"
+                                    HorizontalAlignment="Left"
                                     RenderTransformOrigin="0.5,0.5"
                                     Stroke="{StaticResource ButtonForegroundBrush}"
-                                    StrokeThickness="2">
+                                    StrokeThickness="2"
+                                    VerticalAlignment="Top">
                                     <Rectangle.RenderTransform>
                                         <RotateTransform Angle="{Binding ProjectedRectangle.Rotation}" />
                                     </Rectangle.RenderTransform>
@@ -1703,26 +1708,13 @@
                                         </MultiBinding>
                                     </Rectangle.Margin>
                                 </Rectangle>
-                                <Border
-                                    Width="2.5"
-                                    Height="2.5"
-                                    Background="{StaticResource ButtonForegroundBrush}">
-                                    <Border.Margin>
-                                        <MultiBinding Converter="{StaticResource MultiMarginConverter}">
-
-                                            <Binding Path="ProjectedRectangle.X" />
-                                            <Binding Path="ProjectedRectangle.Y" />
-                                            <Binding Source="{StaticResource zero}" />
-                                            <Binding Source="{StaticResource zero}" />
-                                        </MultiBinding>
-                                    </Border.Margin>
-                                </Border>
-
                                 <Grid
                                     Width="{Binding ProjectedRectangle.Width}"
                                     Height="{Binding ProjectedRectangle.Height}"
+                                    HorizontalAlignment="Left"
                                     IsHitTestVisible="False"
-                                    RenderTransformOrigin="0.5,0.5">
+                                    RenderTransformOrigin="0.5,0.5"
+                                    VerticalAlignment="Top">
                                     <Grid.Margin>
                                         <MultiBinding Converter="{StaticResource MultiMarginConverter}">
 
@@ -1732,6 +1724,10 @@
                                             <Binding Source="{StaticResource zero}" />
                                         </MultiBinding>
                                     </Grid.Margin>
+                                    <Border
+                                        Width="2.5"
+                                        Height="2.5"
+                                        Background="{StaticResource ButtonForegroundBrush}" />
                                 </Grid>
                             </Grid>
                         </Grid>

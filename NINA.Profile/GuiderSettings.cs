@@ -33,6 +33,7 @@ namespace NINA.Profile {
         protected override void SetDefaultValues() {
             lastDeviceName = string.Empty;
             ditherPixels = 5;
+            mountDitherMinimumPixels = 0;
             ditherRAOnly = false;
             settleTime = 10;
             pHD2ServerUrl = "localhost";
@@ -43,6 +44,8 @@ namespace NINA.Profile {
             pHD2Camera = "None";
             pHD2CameraId = string.Empty;
             pHD2CameraDepth = 16;
+            pHD2GuideChartShowStarMass = false;
+            pHD2GuideChartShowSNR = false;
             phd2ROIPct = 100;
             settlePixels = 1.5;
             settleTimeout = 40;
@@ -165,6 +168,19 @@ namespace NINA.Profile {
             set {
                 if (ditherPixels != value) {
                     ditherPixels = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private double mountDitherMinimumPixels;
+
+        [DataMember]
+        public double MountDitherMinimumPixels {
+            get => mountDitherMinimumPixels;
+            set {
+                if (mountDitherMinimumPixels != value) {
+                    mountDitherMinimumPixels = value;
                     RaisePropertyChanged();
                 }
             }
@@ -308,6 +324,32 @@ namespace NINA.Profile {
             set {
                 if (pHD2GuiderScale != value) {
                     pHD2GuiderScale = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private bool pHD2GuideChartShowStarMass;
+
+        [DataMember]
+        public bool PHD2GuideChartShowStarMass {
+            get => pHD2GuideChartShowStarMass;
+            set {
+                if (pHD2GuideChartShowStarMass != value) {
+                    pHD2GuideChartShowStarMass = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private bool pHD2GuideChartShowSNR;
+
+        [DataMember]
+        public bool PHD2GuideChartShowSNR {
+            get => pHD2GuideChartShowSNR;
+            set {
+                if (pHD2GuideChartShowSNR != value) {
+                    pHD2GuideChartShowSNR = value;
                     RaisePropertyChanged();
                 }
             }

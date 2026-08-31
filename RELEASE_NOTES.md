@@ -1,4 +1,4 @@
-﻿# N.I.N.A. - Nighttime Imaging 'N' Astronomy Changelog
+# N.I.N.A. - Nighttime Imaging 'N' Astronomy Changelog
 
 If N.I.N.A. helps you on your journey to capture amazing deep sky images, please consider a donation. Every contribution helps keep the project alive and active.  
 More details at <a href="https://nighttime-imaging.eu/donate/" target="_blank">nighttime-imaging.eu/donate/</a>
@@ -22,6 +22,12 @@ This allows you to safely return to a stable release if needed.
 - The application now runs on .NET 10, bringing performance improvements and access to the latest runtime features.
 
 ## Bugfixes
+- The Connect All and Disconnect All commands can no longer run at the same time, preventing conflicting device operations during slow connections.
+- Cached Offline Sky Map and Sky Atlas image tiles now keep a stable orientation across zoom levels instead of occasionally rotating by 180 degrees.
+- Center After Drift triggers in completed or otherwise inactive sequence containers no longer consume images or publish drift results while a later container is running.
+- Launching N.I.N.A. with a nonexistent `--profileid` now writes an error log and returns a non-zero exit code instead of failing silently.
+- Sun and Moon altitude calculations no longer return transient incorrect values when plugins calculate solar-system body positions concurrently.
+- Installer upgrades and repairs now restore missing, locally changed and higher-version application files instead of potentially leaving skipped files absent.
 - Autofocus after HFR Increase HFRTrendPercentage is now calculated correctly and will no longer underestimate the change on large HFR drift
 - ToupTek based filter wheels and focusers will no longer be listed in the camera connector.
 - When updating the application, the color schema upgrades now properly apply updated or added colors
@@ -39,8 +45,16 @@ This allows you to safely return to a stable release if needed.
 - QHY cameras now re-apply gain and offset after a read mode change. Previously a frame taken across a read mode switch was exposed with the new mode's power-on defaults while its metadata still recorded the requested values.
 - QHY cameras connected in a read mode that fixes the offset in hardware, such as Linearity HDR, no longer misreport their offset for the remainder of the session.
 - QHY cameras now really have their cooler turned off when they are disconnected. The cooler shutdown was skipped on every disconnect, so a camera that was cooling kept regulating to its old set point after being disconnected or after N.I.N.A. was closed, while the next session reported the cooler as off.
+- Captures now switch to the exposure's readout mode before applying gain and offset, so the first frame after a mode change is digitized and logged with the settings for that mode.
+- ASCOM cameras that report extremely large binning ranges no longer take minutes to connect while N.I.N.A. builds the selectable binning modes.
+- Canceling a native Nikon automatic shutter exposure no longer sends an unsupported Bulb termination command that could terminate N.I.N.A.
 
 ## Improvements
+- The Legacy Sequencer can now reset progress for every target in the current Target Set with one confirmed action.
+- URLs throughout the application can now be copied from their right-click context menu.
+- The simple sequencer's Active Sequence Details now shows the configured camera readout mode when multiple modes are available.
+- Mount Dither can now enforce a configurable minimum movement between exposures, preventing randomly selected offsets that are too small to be useful.
+- PHD2 users can optionally show guide-star mass and SNR in the guide graphs, using PHD2-style independent scaling in the upper half of the chart.
 - **Autofocus after HFR Increase Trigger**
     - new Trend per Filter checkbox to consider HFR Trend per filter (default) or across all filters to earlier trigger autofocus runs when imaging with continues filter loops 
 - When a safety monitor is connected and is reporting unsafe conditions, the imaging related core triggers will no longer fire as the conditions aren't safe anyways to execute them.
@@ -56,11 +70,14 @@ This allows you to safely return to a stable release if needed.
 - Native Nikon and Canon camera drivers can now be configured to use the file format selection, such as FITS or XISF, instead of always saving native camera RAW files.
 - Sky brightness readings in the Weather device windows have been increased from 2 decimal places to 5 so that measurements obtained in low light conditions are adequately displayed.
 - Improved Sky Atlas search performance.
+- Added a Utility sequencer instruction that loads a saved Imaging tab layout during a sequence.
 - **Offline framing sky map improvements**
-    - All map layers and camera framing rectangles now refresh continuously while dragging, with substantially lower rendering overhead, fewer temporary allocations, and bounded decoded-image memory use.
+    - All map layers and camera framing rectangles now refresh continuously while dragging, with substantially lower rendering overhead, fewer temporary allocations and bounded decoded-image memory use.
+    - Drag updates are now scheduled at up to 60 FPS in both rendering modes. Software-only rendering composites cached map tiles into one reusable full-viewport surface using a reduced-resolution scratch frame, substantially improving responsiveness when hardware acceleration is disabled while keeping targets, framing overlays and annotations aligned.
     - The grid and viewport projection can be switched between Equatorial and Alt/Az coordinates, with clear compass direction indicators along the zero-altitude line that remain visible over the horizon overlay, planetarium handedness and correct image and camera orientation.
     - An optional local or custom horizon hides annotations and cached imagery below it, including in wide-field views.
     - Offline-only date and time steppers provide a current or fixed observation context for the map and horizon, while the selected date drives the altitude chart.
+    - The zoom buttons now adjust the offline map's field of view, matching mouse-wheel navigation, while other image sources retain image scaling.
 - **Autofocus & Star Measurements**
     - The native star detector now measures HFR from a centroid-refined curve of growth instead of using a first-moment approximation
     - Local star background estimation now uses a robust sigma-clipped median to reduce bias from nearby stars and outliers
@@ -147,6 +164,8 @@ This allows you to safely return to a stable release if needed.
   - Improved reliability, lifetime handling, and positioning across multiple monitors.
   - Added configurable notification placement: primary screen, same screen as the app, or application window, as well as adjustable corner positioning via Options > General > Advanced.
   - Notifications now reposition automatically on window moves, DPI changes, and display configuration changes.
+- **Canon Driver Error Messages**
+  - Improved the "Invalid Mode" error message to guide users to check the Movie/Still switch on cameras like the EOS 6D, preventing confusion when the camera is in Movie mode.
 
 ### File formats
 - **XISF ZStandard Compression**
