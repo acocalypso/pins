@@ -21,8 +21,11 @@ namespace NINA.Profile.Interfaces {
         string GuiderName { get; set; }
         string LastDeviceName { get; set; }
         double DitherPixels { get; set; }
+        double MountDitherMinimumPixels { get; set; }
         bool DitherRAOnly { get; set; }
         GuiderScaleEnum PHD2GuiderScale { get; set; }
+        bool PHD2GuideChartShowStarMass { get; set; }
+        bool PHD2GuideChartShowSNR { get; set; }
         double MaxY { get; set; }
         int PHD2HistorySize { get; set; }
         int PHD2ServerPort { get; set; }

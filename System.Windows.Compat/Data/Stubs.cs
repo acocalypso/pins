@@ -596,6 +596,8 @@ namespace System.Windows {
         public double Width { get; set; } = 800;
         public double Height { get; set; } = 600;
         public bool Topmost { get; set; }
+        public bool ShowActivated { get; set; } = true;
+        public bool ShowInTaskbar { get; set; } = true;
 
         public bool? ShowDialog() => true;
         public void Show() { }
@@ -950,6 +952,9 @@ namespace System.Windows {
     /// Provides the base class for framework content elements.
     /// </summary>
     public class FrameworkContentElement : DependencyObject {
+        public static readonly DependencyProperty ContextMenuProperty =
+            DependencyProperty.Register("ContextMenu", typeof(System.Windows.Controls.ContextMenu), typeof(FrameworkContentElement), new PropertyMetadata(null));
+
         public DependencyObject Parent { get; set; }
         public DependencyObject TemplatedParent { get; set; }
     }

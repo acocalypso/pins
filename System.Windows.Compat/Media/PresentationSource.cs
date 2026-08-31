@@ -72,6 +72,29 @@ namespace System.Windows.Media {
         }
 
         /// <summary>
+        /// Appends a rotation of <paramref name="angle"/> degrees about the point
+        /// (<paramref name="centerX"/>, <paramref name="centerY"/>), as WPF's Matrix.RotateAt
+        /// does: the rotation is applied after whatever this matrix already represents.
+        /// </summary>
+        public void RotateAt(double angle, double centerX, double centerY) {
+            double radians = angle * Math.PI / 180.0;
+            double cos = Math.Cos(radians);
+            double sin = Math.Sin(radians);
+
+            // Row-vector rotation, so a point maps as p' = (p - c) * R + c, which is R with the
+            // offset c - c * R folded in.
+            var rotateAt = new Matrix(
+                cos,
+                sin,
+                -sin,
+                cos,
+                centerX - (centerX * cos) + (centerY * sin),
+                centerY - (centerX * sin) - (centerY * cos));
+
+            this = Multiply(this, rotateAt);
+        }
+
+        /// <summary>
         /// Row-vector composition: transforming by the result applies <paramref name="a"/>
         /// first, then <paramref name="b"/> (v * a * b), matching WPF's Matrix.Multiply.
         /// </summary>

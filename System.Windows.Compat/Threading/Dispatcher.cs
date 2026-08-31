@@ -55,8 +55,8 @@ namespace System.Windows.Threading {
             return System.Threading.Tasks.Task.CompletedTask;
         }
 
-        public System.Threading.Tasks.Task<T> InvokeAsync<T>(Func<T> callback) {
-            return System.Threading.Tasks.Task.FromResult(callback());
+        public DispatcherOperation<T> InvokeAsync<T>(Func<T> callback) {
+            return new DispatcherOperation<T>(System.Threading.Tasks.Task.FromResult(callback()));
         }
 
         public System.Threading.Tasks.Task InvokeAsync(Action callback, DispatcherPriority priority, System.Threading.CancellationToken cancellationToken = default) {

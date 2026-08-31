@@ -188,6 +188,10 @@ namespace AvalonDock.Layout {
                 // Stub implementation - doesn't actually serialize in headless mode
             }
 
+            public void Serialize(System.IO.TextWriter writer) {
+                // Stub implementation - doesn't actually serialize in headless mode
+            }
+
             public void Deserialize(string path) {
                 // Stub implementation - doesn't actually deserialize in headless mode
             }

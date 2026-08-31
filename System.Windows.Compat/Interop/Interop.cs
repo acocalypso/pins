@@ -18,4 +18,12 @@ namespace System.Windows.Interop {
     /// </summary>
     internal static class Interop {
     }
+
+    /// <summary>
+    /// Specifies the render mode preference for the process.
+    /// </summary>
+    public enum RenderMode {
+        Default = 0,
+        SoftwareOnly = 1
+    }
 }

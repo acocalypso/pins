@@ -458,7 +458,21 @@ namespace System.Windows.Media {
     /// RenderOptions for controlling rendering quality
     /// </summary>
     public static class RenderOptions {
+        /// <summary>
+        /// Selects the process-wide render mode. Defaults to Default as in WPF, so callers that
+        /// want the software compositing path have to opt into it the same way they do upstream.
+        /// </summary>
+        public static System.Windows.Interop.RenderMode ProcessRenderMode { get; set; } = System.Windows.Interop.RenderMode.Default;
+
         public static void SetBitmapScalingMode(Drawing drawing, BitmapScalingMode mode) {
+            // Stub - no-op in headless mode
+        }
+
+        /// <summary>
+        /// WPF's actual signature takes a DependencyObject. The shim's Drawing does not derive
+        /// from DependencyObject, so both targets need their own overload.
+        /// </summary>
+        public static void SetBitmapScalingMode(DependencyObject target, BitmapScalingMode mode) {
             // Stub - no-op in headless mode
         }
     }

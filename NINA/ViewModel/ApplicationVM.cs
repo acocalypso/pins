@@ -37,6 +37,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 using System.Globalization;
+using System.Threading;
+using NINA.WPF.Base.View;
 using System.Threading.Tasks;
 using NINA.INDI;
 using NINA.Sequencer;
@@ -138,6 +140,11 @@ namespace NINA.ViewModel {
         public void ChangeTab(ApplicationTab tab) {
             TabIndex = (int)tab;
         }
+
+        public Task LoadImagingLayout(string filePath, CancellationToken token) {
+            return dockManager.LoadImagingLayout(filePath, token);
+        }
+
         public string Version => CoreUtil.VersionFriendlyName;
 
         public string Title => CoreUtil.Title;

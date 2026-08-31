@@ -52,7 +52,10 @@ namespace System.Windows.Documents {
         public Hyperlink() { }
         public Hyperlink(Inline childInline) { }
         public Uri NavigateUri { get; set; }
+        public object CommandParameter { get; set; }
+        public System.Windows.Controls.ContextMenu ContextMenu { get; set; }
         public event System.Windows.Navigation.RequestNavigateEventHandler RequestNavigate;
+        public event System.Windows.ContextMenuEventHandler ContextMenuOpening;
     }
 
     /// <summary>

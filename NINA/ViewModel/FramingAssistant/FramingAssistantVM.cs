@@ -184,12 +184,19 @@ namespace NINA.ViewModel.FramingAssistant {
             LoadImageCommand = new AsyncCommand<bool>(async () => { return await LoadImage(); });
             CancelLoadImageFromFileCommand = new RelayCommand((object o) => { CancelLoadImage(); });
             CancelLoadImageCommand = new RelayCommand((object o) => { CancelLoadImage(); });
+            DragStartCommand = new RelayCommand((object o) => SkyMapAnnotator.BeginInteraction());
             DragStopCommand = new RelayCommand(DragStop);
             DragMoveCommand = new RelayCommand(DragMove);
             ClearCacheCommand = new RelayCommand(ClearCache, (object o) => Cache != null);
             DeleteCacheEntryCommand = new RelayCommand(DeleteCacheEntry, (object o) => Cache != null);
             ResetObservationTimeCommand = new RelayCommand((object o) => TimeContext.ResetToCurrentTime());
             MouseWheelCommand = new RelayCommand(MouseWheel);
+            ZoomInCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(
+                () => MouseWheel(new MouseWheelResult { Delta = 1 }),
+                () => SkyMapAnnotator.DynamicFoV);
+            ZoomOutCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(
+                () => MouseWheel(new MouseWheelResult { Delta = -1 }),
+                () => SkyMapAnnotator.DynamicFoV);
             GetRotationFromCameraCommand = new AsyncCommand<bool>(GetRotationFromCamera, (object o) => RectangleCalculated && cameraMediator.GetInfo().Connected && cameraMediator.IsFreeToCapture(this));
             CancelGetRotationFromCameraCommand = new RelayCommand(o => { try { getRotationTokenSource?.Cancel(); } catch { } });
 
@@ -461,33 +468,36 @@ namespace NINA.ViewModel.FramingAssistant {
 
         private void MouseWheel(object obj) {
             var delta = ((MouseWheelResult)obj).Delta;
+            var adjustedFieldOfView = AdjustFieldOfView(FieldOfView, delta);
+            if (adjustedFieldOfView != FieldOfView) {
+                FieldOfView = adjustedFieldOfView;
+            }
 
+            CalculateRectangle(SkyMapAnnotator.ChangeFoV(FieldOfView), updatePlacements: false);
+            SkyMapAnnotator.UpdateSkyMap();
+        }
+
+        internal static double AdjustFieldOfView(double fieldOfView, int delta) {
             double stepSize;
-            if (FieldOfView < 2) {
+            if (fieldOfView < 2) {
                 stepSize = 0.5;
-            } else if (FieldOfView < 10) {
+            } else if (fieldOfView < 10) {
                 stepSize = 1;
-            } else if (FieldOfView < 30) {
+            } else if (fieldOfView < 30) {
                 stepSize = 2;
-            } else if (FieldOfView < 50) {
+            } else if (fieldOfView < 50) {
                 stepSize = 5;
-            } else if (FieldOfView < 100) {
+            } else if (fieldOfView < 100) {
                 stepSize = 10;
             } else {
                 stepSize = 20;
             }
 
             if (delta > 0) {
-                if (FieldOfView > 1) {
-                    FieldOfView = Math.Max(1, FieldOfView - stepSize);
-                }
-            } else {
-                if (FieldOfView < 200) {
-                    FieldOfView = Math.Min(200, FieldOfView + stepSize);
-                }
+                return fieldOfView > 1 ? Math.Max(1, fieldOfView - stepSize) : fieldOfView;
             }
-            CalculateRectangle(SkyMapAnnotator.ChangeFoV(FieldOfView), updatePlacements: false);
-            SkyMapAnnotator.UpdateSkyMap();
+
+            return fieldOfView < 200 ? Math.Min(200, fieldOfView + stepSize) : fieldOfView;
         }
 
         private async void ResizeTimer_Tick(object sender, EventArgs e) {
@@ -659,7 +669,15 @@ namespace NINA.ViewModel.FramingAssistant {
             }
         }
 
-        public async Task<bool> SetCoordinates(DeepSkyObject dso) {
+        public Task<bool> SetCoordinates(DeepSkyObject dso) {
+            if (!_dispatcher.CheckAccess()) {
+                return _dispatcher.InvokeAsync(() => SetCoordinatesCore(dso)).Task.Unwrap();
+            }
+
+            return SetCoordinatesCore(dso);
+        }
+
+        private async Task<bool> SetCoordinatesCore(DeepSkyObject dso) {
             DeepSkyObjectSearchVM.SetTargetNameWithoutSearch(dso.Name);
             this.DSO = new DeepSkyObject(dso.Name, dso.Coordinates, profileService.ActiveProfile.AstrometrySettings.Horizon);
             FramingAssistantSource = profileService.ActiveProfile.FramingAssistantSettings.LastSelectedImageSource;
@@ -1479,11 +1497,19 @@ namespace NINA.ViewModel.FramingAssistant {
                 }
             } else {
                 ProjectedRectangle.Update(Rectangle.X, Rectangle.Y, Rectangle.Rotation);
+                Matrix mosaicRotation = Matrix.Identity;
+                mosaicRotation.RotateAt(
+                    Rectangle.Rotation,
+                    Rectangle.Width / 2,
+                    Rectangle.Height / 2);
                 for (int i = 0; i < ProjectedCameraRectangles.Count; i++) {
                     FramingRectangle rectangle = CameraRectangles[i];
+                    Point panelCenter = mosaicRotation.Transform(new Point(
+                        rectangle.X + rectangle.Width / 2,
+                        rectangle.Y + rectangle.Height / 2));
                     ProjectedCameraRectangles[i].Update(
-                        Rectangle.X + rectangle.X,
-                        Rectangle.Y + rectangle.Y,
+                        Rectangle.X + panelCenter.X - rectangle.Width / 2,
+                        Rectangle.Y + panelCenter.Y - rectangle.Height / 2,
                         Rectangle.Rotation + rectangle.Rotation);
                 }
             }
@@ -1494,7 +1520,7 @@ namespace NINA.ViewModel.FramingAssistant {
             DSO.Coordinates = Rectangle.Coordinates;
             ImageParameter.Coordinates = SkyMapAnnotator.ViewportFoV.CenterCoordinates;
             RaiseCoordinatesChanged();
-            SkyMapAnnotator.UpdateSkyMap();
+            SkyMapAnnotator.EndInteraction();
         }
         private void DragMove(object obj) {
             if (RectangleCalculated) {
@@ -1721,9 +1747,12 @@ namespace NINA.ViewModel.FramingAssistant {
         public ICommand CancelLoadImageFromFileCommand { get; private set; }
         public ICommand ClearCacheCommand { get; private set; }
         public ICommand DeleteCacheEntryCommand { get; private set; }
+        public ICommand DragStartCommand { get; private set; }
         public ICommand ScrollViewerSizeChangedCommand { get; private set; }
         public ICommand ResetObservationTimeCommand { get; private set; }
         public ICommand MouseWheelCommand { get; private set; }
+        public ICommand ZoomInCommand { get; private set; }
+        public ICommand ZoomOutCommand { get; private set; }
         public IAsyncCommand GetRotationFromCameraCommand { get; private set; }
         public ICommand CancelGetRotationFromCameraCommand { get; private set; }
 

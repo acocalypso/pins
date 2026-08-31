@@ -42,6 +42,7 @@ namespace NINA.WPF.Base.Interfaces.ViewModel {
         double DecSeconds { get; set; }
         IDeepSkyObjectSearchVM DeepSkyObjectSearchVM { get; }
         int DownloadProgressValue { get; set; }
+        ICommand DragStartCommand => null;
         ICommand DragMoveCommand { get; }
         ICommand DragStopCommand { get; }
         DeepSkyObject DSO { get; set; }
@@ -54,6 +55,8 @@ namespace NINA.WPF.Base.Interfaces.ViewModel {
         SkySurveyImage ImageParameter { get; set; }
         IAsyncCommand LoadImageCommand { get; }
         ICommand MouseWheelCommand { get; }
+        ICommand ZoomInCommand { get; }
+        ICommand ZoomOutCommand { get; }
         bool NegativeDec { get; set; }
         double Opacity { get; set; }
         double OverlapPercentage { get; set; }

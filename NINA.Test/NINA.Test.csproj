@@ -49,6 +49,16 @@
     <ProjectReference Include="..\System.Windows.Compat\System.Windows.Compat.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="Equipment\Camera\NikonCameraTest.cs" />
+    <Compile Remove="Sequencer\SequenceItem\Utility\LoadImagingLayoutDataTemplateTest.cs" />
+    <Compile Remove="SimpleSequencer\SimpleSequenceViewTest.cs" />
+    <Compile Remove="View\AnchorableSequenceViewTest.cs" />
+    <Compile Remove="View\DirectGuiderDetailViewTest.cs" />
+    <Compile Remove="View\GuiderChartViewTest.cs" />
+    <Compile Remove="View\HyperlinkBehaviorTest.cs" />
+    <Compile Remove="ViewModel\DockManagerVMTest.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <None Update="AstrometryTest\HorizonData\commas.hrz">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

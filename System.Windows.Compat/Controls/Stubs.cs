@@ -101,6 +101,14 @@ namespace System.Windows.Controls {
     }
 
     /// <summary>
+    /// Specifies whether a control lays its content out horizontally or vertically.
+    /// </summary>
+    public enum Orientation {
+        Horizontal = 0,
+        Vertical = 1
+    }
+
+    /// <summary>
     /// Specifies the visibility of a scrollbar.
     /// </summary>
     public enum ScrollBarVisibility {
@@ -113,6 +121,9 @@ namespace System.Windows.Controls {
     /// Represents a menu item control.
     /// </summary>
     public class MenuItem : FrameworkElement {
+        public static readonly DependencyProperty HeaderProperty =
+            DependencyProperty.Register("Header", typeof(object), typeof(MenuItem), new PropertyMetadata(null));
+
         public string Header { get; set; }
         public System.Collections.Generic.List<MenuItem> Items { get; set; } = new System.Collections.Generic.List<MenuItem>();
         public System.Windows.Input.ICommand Command { get; set; }
@@ -121,6 +132,23 @@ namespace System.Windows.Controls {
         public bool IsSubmenuOpen { get; set; }
 
         public event System.Windows.RoutedEventHandler Loaded;
+        public event System.Windows.RoutedEventHandler Click;
+    }
+
+    /// <summary>
+    /// Represents a context menu. Headless has no menu surface, so this only holds the item
+    /// collection callers build up.
+    /// </summary>
+    public class ContextMenu : ItemsControl {
+        public bool IsOpen { get; set; }
+        public IInputElement PlacementTarget { get; set; }
+        public System.Windows.Controls.Primitives.PlacementMode Placement { get; set; }
+    }
+
+    /// <summary>
+    /// Represents a horizontal or vertical separator between menu or list items.
+    /// </summary>
+    public class Separator : FrameworkElement {
     }
 
     /// <summary>
