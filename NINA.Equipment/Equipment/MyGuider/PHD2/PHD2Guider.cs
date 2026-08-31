@@ -192,7 +192,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
             var telescopeInfo = telescopeMediator.GetInfo();
             if (!telescopeInfo.Connected || string.IsNullOrEmpty(telescopeInfo.DeviceId)) {
                 Logger.Error("No mount is connected in NINA. Cannot connect guider without a mount.");
-                Notification.ShowError(Loc.Instance["LblPhd2NoMountConfigured"] ?? "No mount is connected in NINA");
+                Notification.ShowError(Loc.Instance["LblPhd2NoMountConfigured"]);
                 return false;
             }
 
@@ -201,7 +201,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
             var phd2CameraId = profileService.ActiveProfile.GuiderSettings.PHD2CameraId;
             if (string.IsNullOrEmpty(phd2Camera) || phd2Camera == "None") {
                 Logger.Error("No guide camera connected in NINA. Cannot connect guider without a camera.");
-                Notification.ShowError(Loc.Instance["LblPhd2NoCameraConfigured"] ?? "No guide camera is connected in NINA");
+                Notification.ShowError(Loc.Instance["LblPhd2NoCameraConfigured"]);
                 return false;
             }
 
@@ -260,7 +260,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     // Validate that PHD2 mount matches NINA mount
                     if (!await ValidateMountMatch(telescopeInfo, selectedMount)) {
                         Logger.Warning($"Failed to synchronize mounts: NINA mount is '{telescopeInfo.Name}' but PHD2 has '{selectedMount}' selected");
-                        Notification.ShowWarning(Loc.Instance["LblPhd2MountMismatch"] ?? $"Failed to synchronize PHD2 mount with NINA. NINA: '{telescopeInfo.Name}', PHD2: '{selectedMount}'");
+                        Notification.ShowWarning(string.Format(Loc.Instance["LblPhd2MountMismatch"], telescopeInfo.Name, selectedMount));
                     }
 
                     string selectedCamera = await GetSelectedCamera() ?? "None";
@@ -269,7 +269,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     // Set camera if it differs
                     if (!await ValidateCameraMatch(phd2Camera, phd2CameraId, selectedCamera, selectedCameraId)) {
                         Logger.Warning($"Failed to synchronize cameras: NINA camera is '{phd2CameraId} ({phd2Camera})' but PHD2 has '{selectedCameraId} ({selectedCamera})' selected");
-                        Notification.ShowWarning(Loc.Instance["LblPhd2CameraMismatch"] ?? $"Failed to synchronize PHD2 camera with NINA. NINA: '{phd2CameraId}', PHD2: '{selectedCameraId}'");
+                        Notification.ShowWarning(string.Format(Loc.Instance["LblPhd2CameraMismatch"], phd2CameraId, selectedCameraId));
                     }
 
                     // Fetch bit depth after camera selection may have been changed by ValidateCameraMatch,
@@ -281,7 +281,7 @@ namespace NINA.Equipment.Equipment.MyGuider.PHD2 {
                     bool bitDepthChanged = selectedCameraDepth != bitDepth;
                     if (!await ValidateCameraBitDepth(bitDepth, selectedCameraDepth)) {
                         Logger.Warning($"Failed to synchronize bit depth to {bitDepth} bit. Currently: {selectedCameraDepth} bit");
-                        Notification.ShowWarning(Loc.Instance["LblPhd2DepthMismatch"] ?? $"Failed to set PHD2 camera to {bitDepth} bit");
+                        Notification.ShowWarning(string.Format(Loc.Instance["LblPhd2DepthMismatch"], bitDepth));
                     } else if (bitDepthChanged && await IsPHD2EquipmentConnected()) {
                         // set_camera_bitdepth only writes the PHD2 profile; the new depth takes effect
                         // on the next camera connect. If the equipment is already connected, disconnect
