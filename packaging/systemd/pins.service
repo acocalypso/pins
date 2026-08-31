@@ -4,6 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
+Environment="LD_LIBRARY_PATH=/opt/opencvsharp/lib:/usr/lib/aarch64-linux-gnu"
 ExecStart=/home/pi/pins/NINA
 WorkingDirectory=/home/pi/pins/
 User=pi

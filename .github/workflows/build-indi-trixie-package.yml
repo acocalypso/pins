@@ -1,0 +1,390 @@
+name: Build INDI Debian Trixie Package
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: build-indi-trixie-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  INDI_VERSION: 2.2.3.1
+  STRICT_WARNINGS: 0
+  DEB_PACKAGE_RUNTIME: indi-bin
+  DEB_PACKAGE_LIB: libindi1
+  DEB_PACKAGE_DATA: libindi-data
+  DEB_PACKAGE_DEV: libindi-dev
+  DEB_ARCH: arm64
+  DEB_ROOT: artifacts/indi-debroot
+  ARTIFACT_DIR: artifacts
+
+jobs:
+  build-indi-trixie:
+    name: Build INDI v2.2.3.1 (.deb)
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: debian:trixie
+    permissions:
+      contents: write
+
+    steps:
+      - name: Bootstrap build tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates \
+            git \
+            ninja-build \
+            cmake \
+            build-essential \
+            pkg-config \
+            dpkg-dev \
+            fakeroot \
+            rsync \
+            cdbs \
+            dkms \
+            fxload \
+            libgps-dev \
+            libraw-dev \
+            libusb-dev \
+            libftdi-dev \
+            libkrb5-dev \
+            libtiff-dev \
+            libfftw3-dev \
+            librtlsdr-dev \
+            libcfitsio-dev \
+            libgphoto2-dev \
+            libdc1394-dev \
+            libboost-regex-dev \
+            libcurl4-gnutls-dev \
+            libtheora-dev \
+            libxisf-dev \
+            libnova-dev \
+            libusb-1.0-0-dev \
+            libgsl-dev \
+            libjpeg-dev \
+            zlib1g-dev \
+            libev-dev \
+            libudev-dev
+
+      - name: Clone INDI source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --branch v${{ env.INDI_VERSION }} --depth 1 https://github.com/indilib/indi.git indi
+
+      - name: Configure INDI build
+        shell: bash
+        working-directory: indi
+        run: |
+          set -euo pipefail
+
+          extra_c_flags=""
+          extra_cxx_flags=""
+
+          if [ "${{ env.STRICT_WARNINGS }}" != "1" ]; then
+            # Keep warnings visible, but do not fail package builds on known
+            # GCC diagnostics currently emitted by upstream sources on Trixie.
+            extra_c_flags="-Wno-error=stringop-truncation -Wno-error=stringop-overread"
+            extra_cxx_flags="-Wno-error=stringop-truncation -Wno-error=stringop-overread"
+          fi
+
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_C_FLAGS="$extra_c_flags" \
+            -DCMAKE_CXX_FLAGS="$extra_cxx_flags" \
+            -DUDEVRULES_INSTALL_DIR=/lib/udev/rules.d \
+            -DINDI_BUILD_SERVER=ON \
+            -DINDI_BUILD_CLIENT=ON \
+            -DINDI_BUILD_DRIVERS=ON \
+            -DINDI_BUILD_COMMON=ON \
+            -DINDI_BUILD_QT_CLIENT=OFF \
+            -DINDI_BUILD_UNITTESTS=OFF \
+            -DINDI_BUILD_INTEGTESTS=OFF \
+            -DINDI_BUILD_EXAMPLES=OFF \
+            -DINDI_BUILD_STATIC=OFF
+
+      - name: Compile INDI
+        shell: bash
+        working-directory: indi
+        run: |
+          set -euo pipefail
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Stage Debian filesystem
+        shell: bash
+        working-directory: indi
+        run: |
+          set -euo pipefail
+
+          deb_root_base="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
+          runtime_root="$deb_root_base/runtime"
+          lib_root="$deb_root_base/lib"
+          data_root="$deb_root_base/data"
+          dev_root="$deb_root_base/dev"
+          runtime_control_dir="$runtime_root/DEBIAN"
+          lib_control_dir="$lib_root/DEBIAN"
+          data_control_dir="$data_root/DEBIAN"
+          dev_control_dir="$dev_root/DEBIAN"
+          full_stage_dir="$(mktemp -d)"
+          package_version="${{ env.INDI_VERSION }}+${GITHUB_RUN_NUMBER}"
+
+          rm -rf "$deb_root_base"
+          mkdir -p "$runtime_control_dir" "$lib_control_dir" "$data_control_dir" "$dev_control_dir"
+
+          DESTDIR="$full_stage_dir" cmake --install build
+
+          # -------------------------
+          # Runtime package: indi-bin
+          # -------------------------
+          rsync -a "$full_stage_dir/" "$runtime_root/"
+
+          # Remove development artifacts from runtime package.
+          rm -rf "$runtime_root/usr/include"
+          rm -rf "$runtime_root/usr/lib/pkgconfig" "$runtime_root/usr/lib/aarch64-linux-gnu/pkgconfig"
+          rm -rf "$runtime_root/usr/lib/cmake" "$runtime_root/usr/lib/aarch64-linux-gnu/cmake"
+
+          # -------------------------
+          # Runtime libraries package: libindi1
+          # -------------------------
+          mkdir -p "$lib_root/usr/lib" "$lib_root/usr/lib/aarch64-linux-gnu"
+
+          for librel in "usr/lib" "usr/lib/aarch64-linux-gnu"; do
+            runtime_dir="$runtime_root/$librel"
+            lib_dir="$lib_root/$librel"
+
+            if [ -d "$runtime_dir" ]; then
+              find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.so.*' -exec cp -a {} "$lib_dir/" \;
+              find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.so.*' -delete
+              find "$runtime_dir" -maxdepth 1 -type l -name 'lib*.so' -delete
+              find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.so' -delete
+              find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.a' -delete
+            fi
+          done
+
+          # Move INDI runtime plugin/shared-object trees to lib package.
+          for librel in "usr/lib/indi" "usr/lib/aarch64-linux-gnu/indi"; do
+            runtime_plugin_dir="$runtime_root/$librel"
+            lib_plugin_dir="$lib_root/$librel"
+            if [ -d "$runtime_plugin_dir" ]; then
+              mkdir -p "$lib_plugin_dir"
+              rsync -a "$runtime_plugin_dir/" "$lib_plugin_dir/"
+              rm -rf "$runtime_plugin_dir"
+            fi
+          done
+
+          # -------------------------
+          # Data package: libindi-data
+          # -------------------------
+          if [ -d "$runtime_root/usr/share/indi" ]; then
+            mkdir -p "$data_root/usr/share/indi"
+            rsync -a "$runtime_root/usr/share/indi/" "$data_root/usr/share/indi/"
+            rm -rf "$runtime_root/usr/share/indi"
+          fi
+
+          runtime_installed_size=$(du -sk "$runtime_root/usr" | cut -f1)
+
+          {
+            echo "Package: ${{ env.DEB_PACKAGE_RUNTIME }}"
+            echo "Version: $package_version"
+            echo "Section: misc"
+            echo "Priority: optional"
+            echo "Architecture: ${{ env.DEB_ARCH }}"
+            echo "Maintainer: PINS CI <noreply@github.com>"
+            echo "Depends: ${{ env.DEB_PACKAGE_LIB }} (= $package_version), ${{ env.DEB_PACKAGE_DATA }} (= $package_version), libc6, libstdc++6"
+            echo "Provides: indi-core"
+            echo "Replaces: indi-bin (<< 2.1.9), indi-core (<< 2.1.9)"
+            echo "Installed-Size: $runtime_installed_size"
+            echo "Description: INDI core library, server, and drivers built from upstream v${{ env.INDI_VERSION }}"
+          } > "$runtime_control_dir/control"
+
+          if ! find "$lib_root/usr" -type f -name 'lib*.so.*' | grep -q .; then
+            echo "Expected runtime shared libraries were not staged for ${{ env.DEB_PACKAGE_LIB }}" >&2
+            exit 1
+          fi
+
+          lib_installed_size=$(du -sk "$lib_root/usr" | cut -f1)
+
+          {
+            echo "Package: ${{ env.DEB_PACKAGE_LIB }}"
+            echo "Version: $package_version"
+            echo "Section: libs"
+            echo "Priority: optional"
+            echo "Architecture: ${{ env.DEB_ARCH }}"
+            echo "Maintainer: PINS CI <noreply@github.com>"
+            echo "Depends: libc6, libstdc++6"
+            echo "Replaces: libindi1 (<< 2.1.9)"
+            echo "Installed-Size: $lib_installed_size"
+            echo "Description: INDI runtime shared libraries built from upstream v${{ env.INDI_VERSION }}"
+          } > "$lib_control_dir/control"
+
+          if [ ! -d "$data_root/usr/share/indi" ]; then
+            echo "Expected INDI data files were not staged for ${{ env.DEB_PACKAGE_DATA }}" >&2
+            exit 1
+          fi
+
+          data_installed_size=$(du -sk "$data_root/usr" | cut -f1)
+
+          {
+            echo "Package: ${{ env.DEB_PACKAGE_DATA }}"
+            echo "Version: $package_version"
+            echo "Section: misc"
+            echo "Priority: optional"
+            echo "Architecture: ${{ env.DEB_ARCH }}"
+            echo "Maintainer: PINS CI <noreply@github.com>"
+            echo "Depends: libc6"
+            echo "Replaces: libindi-data (<< 2.1.9)"
+            echo "Installed-Size: $data_installed_size"
+            echo "Description: INDI shared data files built from upstream v${{ env.INDI_VERSION }}"
+          } > "$data_control_dir/control"
+
+          # --------------------------
+          # Development package: libindi-dev
+          # --------------------------
+          mkdir -p "$dev_root/usr"
+          if [ -d "$full_stage_dir/usr/include" ]; then
+            mkdir -p "$dev_root/usr/include"
+            rsync -a "$full_stage_dir/usr/include/" "$dev_root/usr/include/"
+          fi
+
+          for rel in "usr/lib/pkgconfig" "usr/lib/aarch64-linux-gnu/pkgconfig" "usr/lib/cmake" "usr/lib/aarch64-linux-gnu/cmake"; do
+            src="$full_stage_dir/$rel"
+            dst="$dev_root/$rel"
+            if [ -d "$src" ]; then
+              mkdir -p "$dst"
+              rsync -a "$src/" "$dst/"
+            fi
+          done
+
+          for librel in "usr/lib" "usr/lib/aarch64-linux-gnu"; do
+            src="$full_stage_dir/$librel"
+            dst="$dev_root/$librel"
+            if [ -d "$src" ]; then
+              mkdir -p "$dst"
+              find "$src" -maxdepth 1 \( -type l -o -type f \) \( -name 'lib*.so' -o -name 'lib*.a' \) -exec cp -a {} "$dst/" \;
+            fi
+          done
+
+          if [ ! -d "$dev_root/usr/include/libindi" ]; then
+            echo "Expected development headers were not staged under $dev_root/usr/include/libindi" >&2
+            exit 1
+          fi
+
+          dev_installed_size=$(du -sk "$dev_root/usr" | cut -f1)
+
+          {
+            echo "Package: ${{ env.DEB_PACKAGE_DEV }}"
+            echo "Version: $package_version"
+            echo "Section: libdevel"
+            echo "Priority: optional"
+            echo "Architecture: ${{ env.DEB_ARCH }}"
+            echo "Maintainer: PINS CI <noreply@github.com>"
+            echo "Depends: ${{ env.DEB_PACKAGE_LIB }} (= $package_version), libc6, libstdc++6"
+            echo "Replaces: libindi-dev (<< 2.1.9)"
+            echo "Installed-Size: $dev_installed_size"
+            echo "Description: INDI development headers and build metadata built from upstream v${{ env.INDI_VERSION }}"
+          } > "$dev_control_dir/control"
+
+      - name: Determine release version
+        id: release_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_date=$(date +%d%m%Y)
+          release_version="v${release_date}-${GITHUB_RUN_NUMBER}"
+          echo "Release version: $release_version"
+          echo "Release date: $release_date"
+          echo "RELEASE_DATE=$release_date" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+          echo "value=$release_version" >> "$GITHUB_OUTPUT"
+          echo "date=$release_date" >> "$GITHUB_OUTPUT"
+
+      - name: Build Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          deb_root_base="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
+          runtime_root="$deb_root_base/runtime"
+          lib_root="$deb_root_base/lib"
+          data_root="$deb_root_base/data"
+          dev_root="$deb_root_base/dev"
+          package_version="${{ env.INDI_VERSION }}+${GITHUB_RUN_NUMBER}"
+          release_date="${RELEASE_DATE:-$(date +%d%m%Y)}"
+          runtime_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_RUNTIME }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
+          lib_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_LIB }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
+          data_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_DATA }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
+          dev_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_DEV }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
+
+          mkdir -p "${{ env.ARTIFACT_DIR }}"
+
+          if [ ! -f "$runtime_root/DEBIAN/control" ]; then
+            echo "Missing control file at $runtime_root/DEBIAN/control" >&2
+            echo "Contents of $runtime_root:" >&2
+            find "$runtime_root" -maxdepth 3 -print >&2 || true
+            exit 1
+          fi
+
+          if [ ! -f "$dev_root/DEBIAN/control" ]; then
+            echo "Missing control file at $dev_root/DEBIAN/control" >&2
+            echo "Contents of $dev_root:" >&2
+            find "$dev_root" -maxdepth 3 -print >&2 || true
+            exit 1
+          fi
+
+          if [ ! -f "$lib_root/DEBIAN/control" ]; then
+            echo "Missing control file at $lib_root/DEBIAN/control" >&2
+            echo "Contents of $lib_root:" >&2
+            find "$lib_root" -maxdepth 3 -print >&2 || true
+            exit 1
+          fi
+
+          if [ ! -f "$data_root/DEBIAN/control" ]; then
+            echo "Missing control file at $data_root/DEBIAN/control" >&2
+            echo "Contents of $data_root:" >&2
+            find "$data_root" -maxdepth 3 -print >&2 || true
+            exit 1
+          fi
+
+          dpkg-deb --root-owner-group --build "$runtime_root" "$runtime_output_file"
+          dpkg-deb -I "$runtime_output_file" | sed -n '/^ Package:/,/^ Description:/p'
+          sha256sum "$runtime_output_file" > "$runtime_output_file.sha256"
+
+          dpkg-deb --root-owner-group --build "$lib_root" "$lib_output_file"
+          dpkg-deb -I "$lib_output_file" | sed -n '/^ Package:/,/^ Description:/p'
+          sha256sum "$lib_output_file" > "$lib_output_file.sha256"
+
+          dpkg-deb --root-owner-group --build "$data_root" "$data_output_file"
+          dpkg-deb -I "$data_output_file" | sed -n '/^ Package:/,/^ Description:/p'
+          sha256sum "$data_output_file" > "$data_output_file.sha256"
+
+          dpkg-deb --root-owner-group --build "$dev_root" "$dev_output_file"
+          dpkg-deb -I "$dev_output_file" | sed -n '/^ Package:/,/^ Description:/p'
+          sha256sum "$dev_output_file" > "$dev_output_file.sha256"
+
+      - name: Publish INDI GitHub release
+        uses: softprops/action-gh-release@v3
+        if: success()
+        with:
+          tag_name: indi-${{ steps.release_tag.outputs.value }}
+          name: Release ${{ steps.release_tag.outputs.value }}
+          body: |
+            Automated INDI release ${{ steps.release_tag.outputs.value }} containing Debian packages for INDI runtime, libraries, data, and development files.
+          files: |
+            artifacts/*.deb
+            artifacts/*.deb.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload INDI Debian artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: indi-trixie-deb
+          path: |
+            artifacts/*.deb
+            artifacts/*.deb.sha256
+          retention-days: 30
