@@ -22,7 +22,12 @@ This allows you to safely return to a stable release if needed.
 - The application now runs on .NET 10, bringing performance improvements and access to the latest runtime features.
 
 ## Bugfixes
-- Pinsdaemon packages now include the ASTAP data-link helper required to expose database files installed under `/opt/astap` to the command-line solver.
+- The Connect All and Disconnect All commands can no longer run at the same time, preventing conflicting device operations during slow connections.
+- Cached Offline Sky Map and Sky Atlas image tiles now keep a stable orientation across zoom levels instead of occasionally rotating by 180 degrees.
+- Center After Drift triggers in completed or otherwise inactive sequence containers no longer consume images or publish drift results while a later container is running.
+- Launching N.I.N.A. with a nonexistent `--profileid` now writes an error log and returns a non-zero exit code instead of failing silently.
+- Sun and Moon altitude calculations no longer return transient incorrect values when plugins calculate solar-system body positions concurrently.
+- Installer upgrades and repairs now restore missing, locally changed and higher-version application files instead of potentially leaving skipped files absent.
 - Autofocus after HFR Increase HFRTrendPercentage is now calculated correctly and will no longer underestimate the change on large HFR drift
 - ToupTek based filter wheels and focusers will no longer be listed in the camera connector.
 - When updating the application, the color schema upgrades now properly apply updated or added colors
@@ -45,7 +50,11 @@ This allows you to safely return to a stable release if needed.
 - Canceling a native Nikon automatic shutter exposure no longer sends an unsupported Bulb termination command that could terminate N.I.N.A.
 
 ## Improvements
-- Raspberry Pi package workflows now include and validate the complete pinsdaemon runtime payload, including Wi-Fi recovery, diagnostics, persistent journaling, and mDNS service files.
+- The Legacy Sequencer can now reset progress for every target in the current Target Set with one confirmed action.
+- URLs throughout the application can now be copied from their right-click context menu.
+- The simple sequencer's Active Sequence Details now shows the configured camera readout mode when multiple modes are available.
+- Mount Dither can now enforce a configurable minimum movement between exposures, preventing randomly selected offsets that are too small to be useful.
+- PHD2 users can optionally show guide-star mass and SNR in the guide graphs, using PHD2-style independent scaling in the upper half of the chart.
 - **Autofocus after HFR Increase Trigger**
     - new Trend per Filter checkbox to consider HFR Trend per filter (default) or across all filters to earlier trigger autofocus runs when imaging with continues filter loops 
 - When a safety monitor is connected and is reporting unsafe conditions, the imaging related core triggers will no longer fire as the conditions aren't safe anyways to execute them.
