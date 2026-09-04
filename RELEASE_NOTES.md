@@ -22,6 +22,7 @@ This allows you to safely return to a stable release if needed.
 - The application now runs on .NET 10, bringing performance improvements and access to the latest runtime features.
 
 ## Bugfixes
+- ASCOM and Alpaca cameras now apply their reported Bayer X/Y offsets when automatically debayering previews, so non-RGGB phases display the correct colors while preserving the original image metadata.
 - The Connect All and Disconnect All commands can no longer run at the same time, preventing conflicting device operations during slow connections.
 - Cached Offline Sky Map and Sky Atlas image tiles now keep a stable orientation across zoom levels instead of occasionally rotating by 180 degrees.
 - Center After Drift triggers in completed or otherwise inactive sequence containers no longer consume images or publish drift results while a later container is running.
@@ -50,6 +51,7 @@ This allows you to safely return to a stable release if needed.
 - Canceling a native Nikon automatic shutter exposure no longer sends an unsupported Bulb termination command that could terminate N.I.N.A.
 
 ## Improvements
+- "Cool Camera" now waits until the sensor enters the target temperature tolerance whether approaching from above or below.
 - The Legacy Sequencer can now reset progress for every target in the current Target Set with one confirmed action.
 - URLs throughout the application can now be copied from their right-click context menu.
 - The simple sequencer's Active Sequence Details now shows the configured camera readout mode when multiple modes are available.
