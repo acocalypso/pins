@@ -492,6 +492,9 @@ jobs:
               plugin-orbuculum)
                 git clone https://github.com/nitr57/nina.plugin.orbuculum NINA.Plugins/nina.plugin.orbuculum
                 ;;
+              plugin-perihelion)
+                git clone https://github.com/OryxAstro/perihelion ../perihelion
+                ;;
               plugin-phd2tools)
                 git clone https://github.com/nitr57/nina.plugin.phd2tools NINA.Plugins/nina.plugin.phd2tools
                 ;;
@@ -762,6 +765,10 @@ jobs:
             plugin-orbuculum)
               clone_selected_plugin_repo
               build_plugin_package "NINA.Plugins/nina.plugin.orbuculum/Orbuculum/Orbuculum.csproj" "Orbuculum" "pins-plugin-orbuculum" "^\s*\[assembly:\s*AssemblyVersion" "no" "no"
+              ;;
+            plugin-perihelion)
+              clone_selected_plugin_repo
+              build_plugin_package "../perihelion/Perihelion/Perihelion.csproj" "Perihelion" "pins-plugin-perihelion" "^\s*\[assembly:\s*AssemblyVersion" "no" "no"
               ;;
             plugin-phd2tools)
               clone_selected_plugin_repo
