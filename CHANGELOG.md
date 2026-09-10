@@ -7,11 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 1.1.56 - 2026-09-07
 ### Fixed
 - ToupTek-alike cameras (ToupTek, Altair, Omegon, SVBony, Ogma, ...) could stop delivering images during fast exposure series such as bias frames, or stay unresponsive after an aborted exposure, until they were reconnected. Frames that arrive while no exposure is waiting for them (duplicate image events, frames from aborted or timed-out exposures) are now discarded right before the next exposure is triggered instead of after every download, a failed download and a stopped exposure flush the SDK frame queue, and the software trigger mode is re-armed after an exposure was stopped. Live view keeps discarding stale frames after every pull
+- PHD2: the "no mount configured" and "no guide camera configured" errors and the mount/camera/bit-depth mismatch warnings shown while connecting the guider displayed a raw `MISSING LABEL Lbl...` placeholder instead of a message. The five `LblPhd2*` labels were never added to the locale file, and `Loc.Instance[key]` returns that placeholder rather than null, so the `?? "..."` fallback written behind each one could never fire; the labels now exist and the three mismatch warnings are formatted with the actual mount, camera and bit-depth values
+- System.Windows.Compat: added the drawing and control surface the 3.3.0.1057 framing-assistant raster renderer and the centralized hyperlink navigation need to run headless: `ImageAttributes` and the destination-parallelogram `DrawImage` overload, `Bitmap.RotateFlip`, `Graphics.ScaleTransform`, compositing mode and quality, `ContextMenu`/`Separator`/`Orientation`/`MenuItem.Header`, plus `DispatcherOperation` and `NINA.WPF.Base.View` namespace stubs
+### Changed
+- Updated NINA to 3.3.0.1057-nightly
+- `NINA.Test` no longer compiles the upstream tests that bind to XAML views (Nikon camera, imaging-layout data template, simple sequencer / anchorable sequence / guider chart / direct guider views, hyperlink behavior, dock manager), which cannot build against the headless shim
 
 ## 1.1.55 - 2026-08-05
 ### Fixed
 - Relative-only INDI focusers (open-loop DC focusers with no absolute-position feedback, e.g. HitecAstro DC) failed every move with `Number property 'ABS_FOCUS_POSITION' not found`: the low-level move always wrote the absolute position instead of `FOCUS_MOTION`/`REL_FOCUS_POSITION`, movement state was tracked from a property such devices never send, a missing `FOCUS_MAX` was treated as a real limit of 0/-1 (clamping every target position or collapsing the per-step chunking), and a failed move left the focuser stuck reporting "moving" forever. Absolute focusers are unaffected
 - INDI mounts: "Find home" failed with "Mount refused the home command" on drivers that expose both a home *search* and a go-to-home action (e.g. iOptron): the search action was always picked because it comes first in the driver's element list, and it is refused outright by some drivers. The go-to-home action is now preferred, which is also what NINA's Find Home means
+- System.Windows.Compat: added the drawing surface the new offline framing sky map (Alt/Az grid, horizon and observation time) needs to render headless: a real `HatchBrush` covering the GDI+ hatch styles, `Graphics.FillPolygon`/`DrawLines`/`VisibleClipBounds`, `WriteableBitmap`'s back-buffer protocol, transform recording on `DrawingVisual`/`DrawingContext`, and `Dispatcher` on `DispatcherObject` for the thread-affinity checks
+### Changed
+- Updated NINA to 3.3.0.1053-nightly
 
 ## 1.1.54 - 2026-07-28
 ### Fixed
@@ -27,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - HocusFocus's "Replay Settings" prompt (shown when re-running a saved AutoFocus analysis from Touch-N-Stars) would open and hang forever: the headless dialog bridge only recognized OK/Cancel/Yes/No-style command names, so the prompt's actual choices never got wired to buttons, and dismissing its dead fallback button didn't notify the waiting backend either. Dialog view models that expose a `RequestClose` event (the pattern used by HocusFocus's headless-safe dialogs) now get all of their commands surfaced as buttons, and closing a headless dialog now raises `OnClosed` like a real window does
 - Other headless dialogs sharing the same bridge as the Replay Settings fix above were still broken in related ways: the star-detection import dialog only ever showed "Cancel" (its "Apply" command was silently dropped whenever a recognized command name like Cancel was also present), and the HocusFocus frame-review dialog closed itself the moment you clicked Prev/Next/Fit to page through frames instead of just navigating. Both are fixed, and the modal's X/dismiss button now also works for dialogs with more than one button (it previously only worked when a dialog had exactly one)
+### Changed
+- Updated NINA to 3.3.0.1050-nightly
 
 ## 1.1.51 - 2026-07-20
 ### Fixed
