@@ -77,7 +77,7 @@ namespace NINA.Equipment.Equipment.MyCamera.ToupTekAlike {
         public IToupTekAlikeCameraSDK Open(string id) {
             using var _ = lockObj.EnterScope();
             this.sdk = Ogmacam.Open(id);
-            return this;
+            return this.sdk == null ? null : this;
         }
 
         public uint MaxSpeed {
@@ -96,7 +96,7 @@ namespace NINA.Equipment.Equipment.MyCamera.ToupTekAlike {
 
         public void Close() {
             using var _ = lockObj.EnterScope();
-            sdk.Close();
+            sdk?.Close();
             sdk = null;
         }
 

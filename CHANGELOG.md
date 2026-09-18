@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 1.1.58 - 2026-09-18
 ### Fixed
 - INDI devices on a network (TCP) connection could fail with `Error! Server address is missing or invalid.` although address and port were configured: pins checked only once, before the connection mode was applied, whether the driver had a `DEVICE_ADDRESS` property, and a driver still in serial mode was remembered as having none. Transport properties are now re-checked after the mode switch, for serial, network and HTTP alike
+- Altair, Ogma, Omegon, MallinCam, Risingcam and SVBony cameras could not connect, failing with a `NullReferenceException` in `put_Option`: the SDK bindings passed the camera id to the native library as a UTF-16 string on Linux, so the SDK saw only its first character, found no camera and returned no handle, which went unnoticed until the first option was set. The id is now passed as a plain C string, as the ToupTek binding already did. A camera, filter wheel or focuser of these brands that cannot be opened now reports "Could not open ..." instead of crashing
 
 ### Added
 - INDI mounts on a network (TCP) connection expose a `rawCommandBatch` action that sends several raw LX200 commands in one write, so a plugin reading many values at once pays one round trip instead of one per command

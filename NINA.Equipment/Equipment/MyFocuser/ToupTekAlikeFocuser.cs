@@ -172,7 +172,7 @@ namespace NINA.Equipment.Equipment.MyFocuser {
             return Task<bool>.Run(() => {
                 var success = false;
                 try {
-                    sdk = sdk.Open(internalId);
+                    sdk = sdk.Open(internalId) ?? throw new Exception($"{Category} - Could not open focuser");
                     success = true;
                     var profile = profileService.ActiveProfile.FocuserSettings;
 

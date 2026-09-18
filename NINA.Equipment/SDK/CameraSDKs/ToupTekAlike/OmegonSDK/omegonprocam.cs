@@ -2501,11 +2501,7 @@ namespace Omegon {
     };
 #endif
 
-#if LINUX    
     private const UnmanagedType ut = UnmanagedType.LPStr;
-#else        
-        private const UnmanagedType ut = UnmanagedType.LPWStr;
-#endif
 
         public delegate void DelegateEventCallback(eEVENT nEvent);
         public delegate void DelegateDataCallbackV4(IntPtr pData, ref FrameInfoV3 info, bool bSnap);

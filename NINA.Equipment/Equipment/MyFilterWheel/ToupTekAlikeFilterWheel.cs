@@ -184,7 +184,7 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
                     SlotNum = profile.SlotNum;
 
                     // Open connection
-                    sdk = sdk.Open(this.internalId);
+                    sdk = sdk.Open(this.internalId) ?? throw new Exception($"{Category} - Could not open filter wheel");
 
                     // If no slot number stored in profile, fetch it from hardware
                     if (SlotNum < 1) {
