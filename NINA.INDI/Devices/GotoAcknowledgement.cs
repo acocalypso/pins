@@ -30,7 +30,7 @@ namespace NINA.INDI.Devices {
         /// <summary>EQUATORIAL_EOD_COORD turned Busy: the driver started the slew.</summary>
         Busy,
 
-        /// <summary>EQUATORIAL_EOD_COORD turned Alert with a new timestamp: the driver refused the goto.</summary>
+        /// <summary>EQUATORIAL_EOD_COORD turned Alert: the driver refused the goto. An Alert that was already there before the send and is only re-broadcast does not count.</summary>
         Rejected,
 
         /// <summary>
@@ -71,6 +71,7 @@ namespace NINA.INDI.Devices {
         private readonly string deviceName;
         private readonly double targetRaHours;
         private readonly double targetDecDegrees;
+        private readonly PropertyState preSendState;
         private readonly string preSendTimestamp;
 
         private bool targetEchoed;
@@ -79,11 +80,13 @@ namespace NINA.INDI.Devices {
         /// <param name="deviceName">Used only to prefix log lines.</param>
         /// <param name="targetRaHours">Requested RA in hours, as sent.</param>
         /// <param name="targetDecDegrees">Requested Dec in degrees, as sent.</param>
-        /// <param name="preSendTimestamp">EQUATORIAL_EOD_COORD timestamp before sending, to tell a new Alert from a stale one.</param>
-        public GotoAcknowledgement(string deviceName, double targetRaHours, double targetDecDegrees, string preSendTimestamp) {
+        /// <param name="preSendState">EQUATORIAL_EOD_COORD state before sending; only an Alert that was already there can be stale.</param>
+        /// <param name="preSendTimestamp">EQUATORIAL_EOD_COORD timestamp before sending, to tell a re-broadcast Alert from a new one.</param>
+        public GotoAcknowledgement(string deviceName, double targetRaHours, double targetDecDegrees, PropertyState preSendState, string preSendTimestamp) {
             this.deviceName = deviceName;
             this.targetRaHours = targetRaHours;
             this.targetDecDegrees = targetDecDegrees;
+            this.preSendState = preSendState;
             this.preSendTimestamp = preSendTimestamp ?? string.Empty;
         }
 
@@ -152,10 +155,9 @@ namespace NINA.INDI.Devices {
                 return;
             }
 
-            if (property.State == PropertyState.Alert && IsNewerThanPreSend(property.Timestamp)) {
-                // Same rule as SetNumberValuesAsync. It also takes an Alert the driver raises because a
-                // status read failed while the goto was queued (Telescope::TimerHit); the caller's single
-                // retry absorbs that.
+            if (property.State == PropertyState.Alert && IsFreshAlert(property.Timestamp)) {
+                // This also takes an Alert the driver raises because a status read failed while the goto
+                // was queued (Telescope::TimerHit); the caller's single retry absorbs that.
                 completion.TrySetResult(GotoAcknowledgementKind.Rejected);
                 return;
             }
@@ -171,8 +173,17 @@ namespace NINA.INDI.Devices {
                         "most likely the driver's status poll rather than its reply to this goto");
         }
 
-        private bool IsNewerThanPreSend(string timestamp) {
-            return string.IsNullOrEmpty(preSendTimestamp) || timestamp != preSendTimestamp;
+        /// <summary>
+        /// An Alert is stale only when EQUATORIAL_EOD_COORD already was in Alert before the goto was sent and
+        /// the driver merely re-broadcast it. A property that was Ok, Idle or Busy and turns Alert afterwards
+        /// is the driver refusing this goto, even when the refusal carries the same timestamp as the last
+        /// update: INDI timestamps have one-second resolution, and a driver that answers within milliseconds
+        /// lands in that second routinely. Judging by the timestamp alone took such refusals for stale ones.
+        /// </summary>
+        private bool IsFreshAlert(string timestamp) {
+            return preSendState != PropertyState.Alert
+                || string.IsNullOrEmpty(preSendTimestamp)
+                || timestamp != preSendTimestamp;
         }
 
         private bool MatchesTarget(double raHours, double decDegrees) {
