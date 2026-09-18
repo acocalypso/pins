@@ -79,7 +79,6 @@ namespace NINA.INDI.Devices
             // Other connection properties
             _hasConnectionModeProperty = HasProperties(["CONNECTION_MODE"]);
             _hasDevicePortProperty = HasProperties(["DEVICE_PORT"]);
-            _hasDeviceBaudRateProperty = HasProperties(["DEVICE_BAUD_RATE"]);
             _hasAutoSearchProperty = HasProperties(["DEVICE_AUTO_SEARCH"]);
             _hasDeviceAddressProperty = HasProperties(["DEVICE_ADDRESS"]);
 
@@ -100,7 +99,6 @@ namespace NINA.INDI.Devices
         private readonly bool _isDirectUsbDevice;
         private readonly bool _hasConnectionModeProperty;
         private readonly bool _hasDevicePortProperty;
-        private readonly bool _hasDeviceBaudRateProperty;
         private readonly bool _hasAutoSearchProperty;
         private readonly bool _hasDeviceAddressProperty;
 
@@ -909,7 +907,14 @@ namespace NINA.INDI.Devices
             bool HasConnectionMode = _hasConnectionModeProperty && !string.IsNullOrEmpty(_connectionMode);
             bool HasAddress = !string.IsNullOrEmpty(_address);
             bool HasPort = !string.IsNullOrEmpty(_port);
-            bool IsAutoMode = _autoSearch && _hasAutoSearchProperty;
+            // DEVICE_AUTO_SEARCH belongs to the serial plugin and may not exist yet when the driver
+            // started in another mode, so a device whose mode we are about to switch counts as
+            // auto-search-capable here; the SERIAL branch confirms it against the live property
+            // table once the mode has been applied. Gated on HasConnectionMode rather than on
+            // _hasConnectionModeProperty: with no mode configured there is no switch to wait for,
+            // and the validation below reads IsAutoMode in a term that HasConnectionMode does not
+            // short-circuit.
+            bool IsAutoMode = _autoSearch && (_hasAutoSearchProperty || HasConnectionMode);
 
             // Determine actual connection mode
             bool IsUsingSerialMode = HasConnectionMode &&
@@ -973,11 +978,22 @@ namespace NINA.INDI.Devices
                 Logger.Info($"[{DeviceName}] CONNECTION_MODE successfully set to {_connectionMode}");
             }
 
+            // Transport properties (DEVICE_PORT, DEVICE_BAUD_RATE, DEVICE_AUTO_SEARCH,
+            // DEVICE_ADDRESS) exist only while their connection plugin is the active one: INDI
+            // defines them in Connection::Serial/TCP::Activated() and deletes them again in
+            // Deactivated(). The constructor-time snapshot therefore describes whichever mode the
+            // driver happened to start in, NOT the mode selected just above, so every write below
+            // must consult the live property table instead of the cached _has*Property flags.
+            // Activated() runs before the CONNECTION_MODE ack is applied, and the client applies
+            // elements in wire order, so the properties are normally present the moment the ack
+            // resolves; the grace period only covers drivers that define them out of band.
+            var propertyGrace = HasConnectionMode ? TimeSpan.FromSeconds(5) : TimeSpan.Zero;
+
             if (IsUsingSerialMode)
             {
                 Logger.Info($"[{DeviceName}] Configuring SERIAL mode connection");
                 // Process SERIAL mode
-                if (IsAutoMode)
+                if (_autoSearch && await WaitForPropertyAsync("DEVICE_AUTO_SEARCH", propertyGrace, ct))
                 {
                     // Just set auto mode and return
                     Logger.Info($"[{DeviceName}] Enabling DEVICE_AUTO_SEARCH");
@@ -994,13 +1010,15 @@ namespace NINA.INDI.Devices
                 }
 
                 // Disable auto mode (only if this device actually has the auto-search property —
-                // secondary devices from a multi-device driver typically do not)
-                if (_hasAutoSearchProperty)
+                // secondary devices from a multi-device driver typically do not). Checked without
+                // a grace period: disabling a property the driver never publishes is a no-op, so
+                // there is nothing to wait for.
+                if (HasProperties(["DEVICE_AUTO_SEARCH"]))
                 {
                     await SetSwitchValueAsync("DEVICE_AUTO_SEARCH", "INDI_DISABLED", true, TimeSpan.FromSeconds(10), ct);
                 }
 
-                if (_hasDevicePortProperty)
+                if (await WaitForPropertyAsync("DEVICE_PORT", propertyGrace, ct))
                 {
                     Logger.Info($"[{DeviceName}] Setting DEVICE_PORT to {_port}");
                     if (!await SetTextValueAsync("DEVICE_PORT", "PORT", _port, TimeSpan.FromSeconds(10), ct))
@@ -1010,7 +1028,7 @@ namespace NINA.INDI.Devices
                     }
                     Logger.Info($"[{DeviceName}] DEVICE_PORT set to {_port}");
                 }
-                if (_hasDeviceBaudRateProperty)
+                if (await WaitForPropertyAsync("DEVICE_BAUD_RATE", propertyGrace, ct))
                 {
                     Logger.Info($"[{DeviceName}] Setting DEVICE_BAUD_RATE to {_baudRate}");
                     if (!await SetSwitchValueAsync("DEVICE_BAUD_RATE", $"{_baudRate}", true, TimeSpan.FromSeconds(10), ct))
@@ -1029,13 +1047,9 @@ namespace NINA.INDI.Devices
                 // asynchronously. Wait briefly for either variant to appear.
                 if (HasAddress)
                 {
-                    var addrPropStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                    while (!HasProperties(["DEVICE_BASE_URL"]) && !HasProperties(["DEVICE_ADDRESS"]) && addrPropStopwatch.Elapsed < TimeSpan.FromSeconds(10) && !ct.IsCancellationRequested)
-                    {
-                        await CoreUtil.Wait(TimeSpan.FromMilliseconds(200), ct);
-                    }
+                    var addressProperty = await WaitForAnyPropertyAsync(["DEVICE_BASE_URL", "DEVICE_ADDRESS"], propertyGrace, ct);
 
-                    if (HasProperties(["DEVICE_BASE_URL"]))
+                    if (addressProperty == "DEVICE_BASE_URL")
                     {
                         // Drivers like indi_starbook_ten use DEVICE_BASE_URL.BASE_URL with a full URL value.
                         var baseUrl = _address.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || _address.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
@@ -1049,7 +1063,7 @@ namespace NINA.INDI.Devices
                         }
                         Logger.Info($"[{DeviceName}] HTTP mode configuration complete - BASE_URL={baseUrl}");
                     }
-                    else if (HasProperties(["DEVICE_ADDRESS"]))
+                    else if (addressProperty == "DEVICE_ADDRESS")
                     {
                         Logger.Info($"[{DeviceName}] Setting DEVICE_ADDRESS to {_address}");
                         if (!await SetTextValueAsync("DEVICE_ADDRESS", "ADDRESS", _address, TimeSpan.FromSeconds(10), ct))
@@ -1072,12 +1086,12 @@ namespace NINA.INDI.Devices
                 // Process TCP mode
                 if (HasAddress)
                 {
-                    if (!_hasDeviceAddressProperty)
+                    if (!await WaitForPropertyAsync("DEVICE_ADDRESS", propertyGrace, ct))
                     {
                         // The driver does not expose DEVICE_ADDRESS at all (e.g. a simulator in
                         // serial mode, or a device that reached this branch due to stale
                         // address/port in the profile). Nothing to write — skip, mirroring how
-                        // the SERIAL branch gates writes on _hasDevicePortProperty.
+                        // the SERIAL branch gates writes on DEVICE_PORT.
                         Logger.Info($"[{DeviceName}] Device has no DEVICE_ADDRESS property - skipping TCP address configuration");
                     }
                     else
@@ -1131,6 +1145,59 @@ namespace NINA.INDI.Devices
                 }
             }
             return true;
+        }
+
+        /// <summary>
+        /// Waits until <paramref name="propertyName"/> is present on this device, up to
+        /// <paramref name="timeout"/>. Returns immediately when the property is already there, and
+        /// a zero/negative timeout degrades to a plain presence check.
+        /// </summary>
+        /// <remarks>
+        /// Used for the connection-plugin properties, whose presence depends on the currently
+        /// active CONNECTION_MODE and therefore cannot be cached (see OnPreConnect).
+        /// </remarks>
+        private async Task<bool> WaitForPropertyAsync(string propertyName, TimeSpan timeout, CancellationToken ct)
+        {
+            return await WaitForAnyPropertyAsync([propertyName], timeout, ct) != null;
+        }
+
+        /// <summary>
+        /// Waits until any one of <paramref name="propertyNames"/> is present and returns the name
+        /// of the first one found, or null if none appeared within <paramref name="timeout"/>.
+        /// Names are probed in the given order, so it doubles as a preference list.
+        /// </summary>
+        private async Task<string> WaitForAnyPropertyAsync(string[] propertyNames, TimeSpan timeout, CancellationToken ct)
+        {
+            string FirstPresent()
+            {
+                foreach (var propertyName in propertyNames)
+                {
+                    if (HasProperties([propertyName]))
+                    {
+                        return propertyName;
+                    }
+                }
+                return null;
+            }
+
+            var found = FirstPresent();
+            if (found != null || timeout <= TimeSpan.Zero)
+            {
+                return found;
+            }
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            while (stopwatch.Elapsed < timeout && !ct.IsCancellationRequested)
+            {
+                await CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
+                found = FirstPresent();
+                if (found != null)
+                {
+                    Logger.Debug($"[{DeviceName}] {found} appeared after {stopwatch.ElapsedMilliseconds} ms");
+                    return found;
+                }
+            }
+            return null;
         }
 
         public virtual void OnSwitchPropertyUpdated(INDISwitchProperty p)
@@ -1439,11 +1506,23 @@ namespace NINA.INDI.Devices
             _preConnectDelay = delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
         }
 
-        #region Unsupported
-        public virtual IList<string> SupportedActions => new List<string>();
+        #region Actions
+        /// <summary>
+        /// Sends several raw LX200 commands in one write and returns their replies concatenated.
+        /// Every command in the batch must answer with a '#'-terminated reply: the number of
+        /// replies read is the number of '#' in the batch.
+        /// </summary>
+        public const string RawCommandBatchAction = "rawCommandBatch";
+
+        public virtual IList<string> SupportedActions =>
+            IsRawTcpConfigured ? new List<string> { RawCommandBatchAction } : new List<string>();
 
         public virtual string Action(string actionName, string actionParameters)
         {
+            if (actionName == RawCommandBatchAction)
+            {
+                return CommandBatch(actionParameters);
+            }
             throw new NotImplementedException();
         }
         #endregion
@@ -1546,6 +1625,62 @@ namespace NINA.INDI.Devices
                     if (ch == '#') break;
                 }
                 return response.ToString();
+            }
+        }
+
+        private string SendRawTcpBatch(string commands)
+        {
+            int expectedReplies = commands.Count(c => c == '#');
+            lock (_lx200Lock)
+            {
+                var stream = EnsureLx200Stream();
+                var bytes = Encoding.ASCII.GetBytes(commands);
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush();
+                var response = new StringBuilder();
+                int replies = 0;
+                while (replies < expectedReplies)
+                {
+                    int b = stream.ReadByte();
+                    // Unlike a single command, a partial batch must not be returned: the caller
+                    // matches replies to commands by position.
+                    if (b == -1)
+                    {
+                        throw new System.IO.IOException($"Connection closed after {replies} of {expectedReplies} batch replies");
+                    }
+                    var ch = (char)b;
+                    response.Append(ch);
+                    if (ch == '#') replies++;
+                }
+                return response.ToString();
+            }
+        }
+
+        private bool IsRawTcpConfigured => !string.IsNullOrEmpty(_address) && _connectionMode == "CONNECTION_TCP";
+
+        private string CommandBatch(string commands)
+        {
+            if (!IsRawTcpConfigured)
+            {
+                throw new NotImplementedException();
+            }
+            if (string.IsNullOrEmpty(commands))
+            {
+                return string.Empty;
+            }
+            try
+            {
+                return SendRawTcpBatch(commands);
+            }
+            catch (Exception)
+            {
+                // Same as the single commands: never leave unread replies on the stream, or
+                // they would be handed to the next command as its answer.
+                lock (_lx200Lock)
+                {
+                    DisposeLx200Connection();
+                }
+                throw;
             }
         }
 
