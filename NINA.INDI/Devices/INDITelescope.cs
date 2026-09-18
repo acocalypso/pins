@@ -985,7 +985,7 @@ namespace NINA.INDI.Devices {
             await SendGotoAsync(ra, dec);
         }
 
-        private readonly record struct GotoSent(GotoAcknowledgementKind Kind, bool TargetEchoed, DateTime SentAt, string PreSendTimestamp);
+        private readonly record struct GotoSent(GotoAcknowledgementKind Kind, bool TargetEchoed, DateTime SentAt, PropertyState PreSendState, string PreSendTimestamp);
 
         /// <summary>
         /// Sends the goto and waits for the driver's reply to it, identified by
@@ -1020,9 +1020,10 @@ namespace NINA.INDI.Devices {
                     throw new InvalidOperationException("Mount rejected coordinates");
                 }
 
+                var preSendState = coordinates.State;
                 var preSendTimestamp = coordinates.Timestamp ?? string.Empty;
-                var acknowledgement = new GotoAcknowledgement(DeviceName, ra, dec, preSendTimestamp);
-                Logger.Info($"[{DeviceName}] Goto sending RA={ra:F5}h Dec={dec:F5}°; pre-send state={coordinates.State}, " +
+                var acknowledgement = new GotoAcknowledgement(DeviceName, ra, dec, preSendState, preSendTimestamp);
+                Logger.Info($"[{DeviceName}] Goto sending RA={ra:F5}h Dec={dec:F5}°; pre-send state={preSendState}, " +
                             $"timestamp={(string.IsNullOrEmpty(preSendTimestamp) ? "n/a" : preSendTimestamp)}");
 
                 // Registered before sending, so no reply can slip past it.
@@ -1059,7 +1060,7 @@ namespace NINA.INDI.Devices {
                                    $"({ignored} status update(s) ignored) - waiting for the mount to start moving instead of trusting its state");
                 }
 
-                return new GotoSent(kind, targetEchoed, sentAt, preSendTimestamp);
+                return new GotoSent(kind, targetEchoed, sentAt, preSendState, preSendTimestamp);
             } catch (ArgumentException ex) {
                 throw new NotImplementedException(ex.Message, ex);
             } catch (Exception ex) {
@@ -1081,8 +1082,12 @@ namespace NINA.INDI.Devices {
             var started = DateTime.UtcNow;
             while (!ct.IsCancellationRequested) {
                 var coordinates = GetProperty("EQUATORIAL_EOD_COORD");
+                // Same freshness rule as GotoAcknowledgement: only an Alert that was already there before the
+                // send and still carries its timestamp can be a re-broadcast.
                 if (coordinates?.State == PropertyState.Alert
-                    && (string.IsNullOrEmpty(sent.PreSendTimestamp) || coordinates.Timestamp != sent.PreSendTimestamp)) {
+                    && (sent.PreSendState != PropertyState.Alert
+                        || string.IsNullOrEmpty(sent.PreSendTimestamp)
+                        || coordinates.Timestamp != sent.PreSendTimestamp)) {
                     Logger.Error($"[{DeviceName}] EQUATORIAL_EOD_COORD turned Alert before the unacknowledged goto started moving - slew rejected by mount");
                     throw new InvalidOperationException("Slew rejected by mount - check mount limits and target accessibility");
                 }

@@ -26,8 +26,8 @@ namespace NINA.Test.INDI {
         private const double TargetDec = 65.33879066134072;
         private const string PreSend = "2026-09-14T19:28:44";
 
-        private static GotoAcknowledgement NewAcknowledgement(string preSendTimestamp = PreSend) {
-            return new GotoAcknowledgement(Device, TargetRa, TargetDec, preSendTimestamp);
+        private static GotoAcknowledgement NewAcknowledgement(PropertyState preSendState = PropertyState.Ok, string preSendTimestamp = PreSend) {
+            return new GotoAcknowledgement(Device, TargetRa, TargetDec, preSendState, preSendTimestamp);
         }
 
         private static INDINumberProperty Coordinates(PropertyState state, string timestamp, double ra = 2.196, double dec = 77.92) {
@@ -140,7 +140,7 @@ namespace NINA.Test.INDI {
 
         [Test]
         public void TargetEchoAcrossTheRaWrap_Matches() {
-            var ack = new GotoAcknowledgement(Device, 23.9999999, 10.0, PreSend);
+            var ack = new GotoAcknowledgement(Device, 23.9999999, 10.0, PropertyState.Ok, PreSend);
 
             ack.Observe(Target(0.0000001, 10.0));
 
@@ -157,8 +157,20 @@ namespace NINA.Test.INDI {
         }
 
         [Test]
-        public void AlertWithPreSendTimestamp_IsStaleAndIgnored() {
-            var ack = NewAcknowledgement();
+        public void AlertInTheSameSecondAsThePreSendUpdate_IsRejected() {
+            // A driver that refuses within milliseconds stamps its Alert with the same one-second INDI
+            // timestamp as the last position update. The property was Ok before the send, so the Alert
+            // cannot be a re-broadcast. Seen with the 10micron: pre-send Ok 19:25:36, Alert 19:25:36.
+            var ack = NewAcknowledgement(PropertyState.Ok, PreSend);
+
+            ack.Observe(Coordinates(PropertyState.Alert, PreSend));
+
+            Assert.That(ack.Completion.Result, Is.EqualTo(GotoAcknowledgementKind.Rejected));
+        }
+
+        [Test]
+        public void AlertWithPreSendTimestamp_IsStale_WhenTheGotoWasSentOntoAnAlert() {
+            var ack = NewAcknowledgement(PropertyState.Alert, PreSend);
 
             ack.Observe(Coordinates(PropertyState.Alert, PreSend));
 
@@ -167,8 +179,17 @@ namespace NINA.Test.INDI {
         }
 
         [Test]
+        public void AlertWithNewTimestamp_IsRejected_EvenWhenTheGotoWasSentOntoAnAlert() {
+            var ack = NewAcknowledgement(PropertyState.Alert, PreSend);
+
+            ack.Observe(Coordinates(PropertyState.Alert, "2026-09-14T19:28:45"));
+
+            Assert.That(ack.Completion.Result, Is.EqualTo(GotoAcknowledgementKind.Rejected));
+        }
+
+        [Test]
         public void StaleAlertAfterTargetEcho_IsNotTakenAsTheUpdateAfterTheEcho() {
-            var ack = NewAcknowledgement();
+            var ack = NewAcknowledgement(PropertyState.Alert, PreSend);
 
             ack.Observe(Target(TargetRa, TargetDec));
             ack.Observe(Coordinates(PropertyState.Alert, PreSend));
@@ -177,8 +198,9 @@ namespace NINA.Test.INDI {
         }
 
         [Test]
-        public void AlertWithoutPreSendTimestamp_IsRejected() {
-            var ack = NewAcknowledgement(preSendTimestamp: string.Empty);
+        public void AlertWithoutPreSendTimestamp_IsRejected_EvenWhenTheGotoWasSentOntoAnAlert() {
+            // Without a timestamp to compare, an Alert cannot be proven to be a re-broadcast.
+            var ack = NewAcknowledgement(PropertyState.Alert, preSendTimestamp: string.Empty);
 
             ack.Observe(Coordinates(PropertyState.Alert, "2026-09-14T19:28:45"));
 
