@@ -122,7 +122,7 @@ jobs:
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
       - name: Prepare core linux-arm64 publish payload
-        if: ${{ inputs.package_key == 'pins' || startsWith(inputs.package_key, 'plugin-') }}
+        if: ${{ inputs.package_key == 'pins' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -751,10 +751,14 @@ jobs:
             control_dir="$deb_root/DEBIAN"
             mkdir -p "$control_dir"
             installed_size=$(du -sk "$deb_root${PLUGINS_INSTALL_BASE}" | cut -f1)
-            shlib_depends=$(debian_generate_shlib_depends \
-              "$deb_package" \
-              "$deb_root" \
-              "$core_publish_dir|pins (>= 3.0.0)")
+            if [ -d "$core_publish_dir" ]; then
+              shlib_depends=$(debian_generate_shlib_depends \
+                "$deb_package" \
+                "$deb_root" \
+                "$core_publish_dir|pins (>= 3.0.0)")
+            else
+              shlib_depends=$(debian_generate_shlib_depends "$deb_package" "$deb_root")
+            fi
             package_depends=$(debian_merge_depends "$shlib_depends" "pins (>= 3.0.0)")
 
             {
@@ -889,11 +893,13 @@ jobs:
             case "$artifact" in
               *.deb)
                 debian_validate_package "$artifact" yes
-                if [[ "$package_key" == plugin-* ]]; then
+                if [[ "$package_key" == plugin-* ]] && [ -d "${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}" ]; then
                   debian_assert_elf_closure "$artifact" "${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
                 else
                   debian_assert_elf_closure "$artifact"
-                  apt-get install --dry-run --no-install-recommends "$(readlink -f "$artifact")"
+                  if [[ "$package_key" != plugin-* ]]; then
+                    apt-get install --dry-run --no-install-recommends "$(readlink -f "$artifact")"
+                  fi
                 fi
                 ;;
             esac

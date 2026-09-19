@@ -74,8 +74,8 @@ jobs:
       - name: Checkout Debian packaging helpers
         uses: actions/checkout@v4
         with:
-          persist-credentials: false
           sparse-checkout: .github/scripts
+          submodules: false
 
       - name: Test Debian packaging helpers
         shell: bash
