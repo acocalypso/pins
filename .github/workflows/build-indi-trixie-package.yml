@@ -408,10 +408,10 @@ jobs:
           # Ask apt to solve the complete package set against a clean Trixie
           # package index. This catches misspelled or unavailable Depends.
           apt-get install --dry-run --no-install-recommends \
-            "$runtime_output_file" \
-            "$lib_output_file" \
-            "$data_output_file" \
-            "$dev_output_file"
+            "$(readlink -f "$runtime_output_file")" \
+            "$(readlink -f "$lib_output_file")" \
+            "$(readlink -f "$data_output_file")" \
+            "$(readlink -f "$dev_output_file")"
 
       - name: Publish INDI GitHub release
         uses: softprops/action-gh-release@v3
