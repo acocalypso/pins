@@ -51,7 +51,9 @@ jobs:
             wget \
             default-jre-headless \
             build-essential \
+            binutils \
             cmake \
+            dpkg-dev \
             git-lfs \
             zip \
             unzip \
@@ -71,6 +73,10 @@ jobs:
         with:
           lfs: ${{ inputs.package_key == 'pins' }}
           submodules: false
+
+      - name: Test Debian packaging helpers
+        shell: bash
+        run: bash .github/scripts/test-debian-package-helpers.sh
 
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v4
@@ -116,7 +122,7 @@ jobs:
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
       - name: Prepare core linux-arm64 publish payload
-        if: ${{ inputs.package_key == 'pins' }}
+        if: ${{ inputs.package_key == 'pins' || startsWith(inputs.package_key, 'plugin-') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -199,6 +205,7 @@ jobs:
           PACKAGE_KEY: ${{ inputs.package_key }}
         run: |
           set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/debian-package-helpers.sh"
 
           package_key="${PACKAGE_KEY}"
           mkdir -p artifacts "${PLUGIN_ARTIFACT_DIR}"
@@ -251,6 +258,11 @@ jobs:
             chmod 755 "$control_dir/postinst" "$control_dir/prerm"
 
             installed_size=$(du -sk "$deb_root/home/pi/pins" | cut -f1)
+            shlib_depends=$(debian_generate_shlib_depends "${DEB_PACKAGE}" "$deb_root")
+            package_depends=$(debian_merge_depends \
+              "$shlib_depends" \
+              "ca-certificates, libc6, libgcc-s1, libgssapi-krb5-2, libicu76, libssl3t64, libstdc++6, tzdata" \
+              "indi-bin, procps, systemd")
             {
               echo "Package: ${DEB_PACKAGE}"
               echo "Version: ${package_version}"
@@ -258,6 +270,7 @@ jobs:
               echo "Priority: optional"
               echo "Architecture: ${DEB_ARCH}"
               echo "Maintainer: PINS Team"
+              echo "Depends: ${package_depends}"
               echo "Installed-Size: ${installed_size}"
               echo "Description: Pins build for Raspberry Pi"
             } > "$control_dir/control"
@@ -336,6 +349,11 @@ jobs:
             filename="pinsdaemon_${full_version}_arm64.deb"
 
             sed -i "s/^Version:.*/Version: ${full_version}/" build/DEBIAN/control
+            existing_depends=$(sed -n 's/^Depends:[[:space:]]*//p' build/DEBIAN/control | head -n 1)
+            package_depends=$(debian_merge_depends \
+              "$existing_depends" \
+              "avahi-daemon, passwd, systemd, udev, util-linux")
+            debian_control_set_depends build/DEBIAN/control "$package_depends"
             dpkg-deb --root-owner-group --build build "$filename"
 
             required_paths=(
@@ -410,6 +428,8 @@ jobs:
 
             local installed_size
             installed_size=$(du -sk "$deb_root/usr" | cut -f1)
+            local shlib_depends
+            shlib_depends=$(debian_generate_shlib_depends "$deb_package" "$deb_root")
             {
               echo "Package: ${deb_package}"
               echo "Version: ${sdk_version}"
@@ -417,6 +437,7 @@ jobs:
               echo "Priority: optional"
               echo "Architecture: ${DEB_ARCH}"
               echo "Maintainer: PINS Team"
+              echo "Depends: ${shlib_depends}"
               echo "Installed-Size: ${installed_size}"
               echo "Description: ${package_description}"
             } > "$control_dir/control"
@@ -596,6 +617,8 @@ jobs:
             local assembly_regex="$4"
             local needs_touch_frontend="$5"
             local needs_pins_sdks="$6"
+            local perihelion_stage=""
+            local -a perihelion_files=()
 
             local plugin_dir
             plugin_dir=$(dirname "$project_path")
@@ -647,6 +670,11 @@ jobs:
 
             plugin_version="${plugin_version}+${CI_BUILD_NUMBER}"
 
+            if [ "$deb_package" = "pins-plugin-perihelion" ]; then
+              perihelion_stage="$HOME/.local/share/NINA/Plugins/3.0.0/Perihelion"
+              rm -rf "$perihelion_stage"
+            fi
+
             dotnet restore "$project_path" -r "${TARGET_RUNTIME}"
             JavaPath=$(which java) dotnet build "$project_path" -c "${BUILD_CONFIGURATION}" -f "${PLUGIN_TARGET_FRAMEWORK}" -r "${TARGET_RUNTIME}" --no-restore ${PLUGIN_MSBUILD_ARGS}
 
@@ -690,9 +718,44 @@ jobs:
               cp -a "$app_dir" "$install_root/app"
             fi
 
+            # Perihelion is a class-library plugin, so its NuGet runtime
+            # dependencies are not guaranteed to be copied into the normal
+            # build output. Upstream's Linux post-build target stages the four
+            # files that are also shipped in its GitHub release ZIP. Copy that
+            # explicit runtime contract after core-file exclusion so EmbedIO
+            # and Swan remain private to the Perihelion plugin directory.
+            if [ "$deb_package" = "pins-plugin-perihelion" ]; then
+              perihelion_files=(
+                Perihelion.dll
+                astronomy.dll
+                EmbedIO.dll
+                Swan.Lite.dll
+              )
+
+              for required_file in "${perihelion_files[@]}"; do
+                source_file=""
+                if [ -s "$tfm_dir/$required_file" ]; then
+                  source_file="$tfm_dir/$required_file"
+                elif [ -s "$perihelion_stage/$required_file" ]; then
+                  source_file="$perihelion_stage/$required_file"
+                fi
+
+                if [ -z "$source_file" ]; then
+                  echo "Perihelion runtime dependency was not produced: $required_file" >&2
+                  return 1
+                fi
+                install -m 0644 "$source_file" "$install_root/$required_file"
+              done
+            fi
+
             control_dir="$deb_root/DEBIAN"
             mkdir -p "$control_dir"
             installed_size=$(du -sk "$deb_root${PLUGINS_INSTALL_BASE}" | cut -f1)
+            shlib_depends=$(debian_generate_shlib_depends \
+              "$deb_package" \
+              "$deb_root" \
+              "$core_publish_dir|pins (>= 3.0.0)")
+            package_depends=$(debian_merge_depends "$shlib_depends" "pins (>= 3.0.0)")
 
             {
               echo "Package: ${deb_package}"
@@ -701,6 +764,7 @@ jobs:
               echo "Priority: optional"
               echo "Architecture: ${DEB_ARCH}"
               echo "Maintainer: PINS Team"
+              echo "Depends: ${package_depends}"
               echo "Installed-Size: ${installed_size}"
               echo "Description: NINA plugin package for ${install_folder}"
             } > "$control_dir/control"
@@ -717,6 +781,18 @@ jobs:
 
             deb_path="${PLUGIN_ARTIFACT_DIR}/${deb_package}_${plugin_version}_${DEB_ARCH}_${RELEASE_DATE}.deb"
             dpkg-deb --root-owner-group --build "$deb_root" "$deb_path"
+
+            if [ "$deb_package" = "pins-plugin-perihelion" ]; then
+              package_contents=$(dpkg-deb --fsys-tarfile "$deb_path" | tar -tf -)
+              for required_file in "${perihelion_files[@]}"; do
+                required_path=".${PLUGINS_INSTALL_BASE}/${install_folder}/${required_file}"
+                if ! grep -Fxq "$required_path" <<< "$package_contents"; then
+                  echo "Perihelion Debian package is missing $required_path" >&2
+                  return 1
+                fi
+              done
+            fi
+
             sha256sum "$deb_path" > "$deb_path.sha256"
 
             echo "$deb_path" >> artifacts/release-files.txt
@@ -808,6 +884,20 @@ jobs:
             echo "No package artifacts found for $package_key" >&2
             exit 1
           fi
+
+          while IFS= read -r artifact; do
+            case "$artifact" in
+              *.deb)
+                debian_validate_package "$artifact" yes
+                if [[ "$package_key" == plugin-* ]]; then
+                  debian_assert_elf_closure "$artifact" "${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
+                else
+                  debian_assert_elf_closure "$artifact"
+                  apt-get install --dry-run --no-install-recommends "$(readlink -f "$artifact")"
+                fi
+                ;;
+            esac
+          done < artifacts/release-files.txt
 
           {
             echo "release_files<<EOF"

@@ -37,6 +37,7 @@ jobs:
           apt-get install -y --no-install-recommends \
             ca-certificates \
             git \
+            binutils \
             ninja-build \
             cmake \
             build-essential \
@@ -69,6 +70,16 @@ jobs:
             zlib1g-dev \
             libev-dev \
             libudev-dev
+
+      - name: Checkout Debian packaging helpers
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Test Debian packaging helpers
+        shell: bash
+        run: bash .github/scripts/test-debian-package-helpers.sh
 
       - name: Clone INDI source
         shell: bash
@@ -120,6 +131,7 @@ jobs:
         working-directory: indi
         run: |
           set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/debian-package-helpers.sh"
 
           deb_root_base="${GITHUB_WORKSPACE}/${{ env.DEB_ROOT }}"
           runtime_root="$deb_root_base/runtime"
@@ -142,6 +154,10 @@ jobs:
           # Runtime package: indi-bin
           # -------------------------
           rsync -a "$full_stage_dir/" "$runtime_root/"
+          # mktemp creates full_stage_dir as 0700 and rsync -a propagates the
+          # source directory mode. Never let a package archive carry 0700 for
+          # its ./ entry, because dpkg would apply it to the extraction root.
+          chmod 0755 "$runtime_root"
 
           # Remove development artifacts from runtime package.
           rm -rf "$runtime_root/usr/include"
@@ -158,8 +174,11 @@ jobs:
             lib_dir="$lib_root/$librel"
 
             if [ -d "$runtime_dir" ]; then
-              find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.so.*' -exec cp -a {} "$lib_dir/" \;
-              find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.so.*' -delete
+              # The runtime library package must own both the versioned file
+              # and the SONAME symlink (libfoo.so.N). Only the unversioned
+              # libfoo.so development link belongs in libindi-dev.
+              find "$runtime_dir" -maxdepth 1 \( -type f -o -type l \) -name 'lib*.so.*' -exec cp -a {} "$lib_dir/" \;
+              find "$runtime_dir" -maxdepth 1 \( -type f -o -type l \) -name 'lib*.so.*' -delete
               find "$runtime_dir" -maxdepth 1 -type l -name 'lib*.so' -delete
               find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.so' -delete
               find "$runtime_dir" -maxdepth 1 -type f -name 'lib*.a' -delete
@@ -187,6 +206,14 @@ jobs:
           fi
 
           runtime_installed_size=$(du -sk "$runtime_root/usr" | cut -f1)
+          lib_shlib_depends=$(debian_generate_shlib_depends "${{ env.DEB_PACKAGE_LIB }}" "$lib_root")
+          runtime_shlib_depends=$(debian_generate_shlib_depends \
+            "${{ env.DEB_PACKAGE_RUNTIME }}" \
+            "$runtime_root" \
+            "$lib_root|${{ env.DEB_PACKAGE_LIB }} (= $package_version)")
+          runtime_depends=$(debian_merge_depends \
+            "$runtime_shlib_depends" \
+            "${{ env.DEB_PACKAGE_LIB }} (= $package_version), ${{ env.DEB_PACKAGE_DATA }} (= $package_version)")
 
           {
             echo "Package: ${{ env.DEB_PACKAGE_RUNTIME }}"
@@ -195,7 +222,7 @@ jobs:
             echo "Priority: optional"
             echo "Architecture: ${{ env.DEB_ARCH }}"
             echo "Maintainer: PINS CI <noreply@github.com>"
-            echo "Depends: ${{ env.DEB_PACKAGE_LIB }} (= $package_version), ${{ env.DEB_PACKAGE_DATA }} (= $package_version), libc6, libstdc++6"
+            echo "Depends: $runtime_depends"
             echo "Provides: indi-core"
             echo "Replaces: indi-bin (<< 2.1.9), indi-core (<< 2.1.9)"
             echo "Installed-Size: $runtime_installed_size"
@@ -216,7 +243,7 @@ jobs:
             echo "Priority: optional"
             echo "Architecture: ${{ env.DEB_ARCH }}"
             echo "Maintainer: PINS CI <noreply@github.com>"
-            echo "Depends: libc6, libstdc++6"
+            echo "Depends: $lib_shlib_depends"
             echo "Replaces: libindi1 (<< 2.1.9)"
             echo "Installed-Size: $lib_installed_size"
             echo "Description: INDI runtime shared libraries built from upstream v${{ env.INDI_VERSION }}"
@@ -234,9 +261,8 @@ jobs:
             echo "Version: $package_version"
             echo "Section: misc"
             echo "Priority: optional"
-            echo "Architecture: ${{ env.DEB_ARCH }}"
+            echo "Architecture: all"
             echo "Maintainer: PINS CI <noreply@github.com>"
-            echo "Depends: libc6"
             echo "Replaces: libindi-data (<< 2.1.9)"
             echo "Installed-Size: $data_installed_size"
             echo "Description: INDI shared data files built from upstream v${{ env.INDI_VERSION }}"
@@ -283,7 +309,7 @@ jobs:
             echo "Priority: optional"
             echo "Architecture: ${{ env.DEB_ARCH }}"
             echo "Maintainer: PINS CI <noreply@github.com>"
-            echo "Depends: ${{ env.DEB_PACKAGE_LIB }} (= $package_version), libc6, libstdc++6"
+            echo "Depends: ${{ env.DEB_PACKAGE_LIB }} (= $package_version), libusb-1.0-0-dev"
             echo "Replaces: libindi-dev (<< 2.1.9)"
             echo "Installed-Size: $dev_installed_size"
             echo "Description: INDI development headers and build metadata built from upstream v${{ env.INDI_VERSION }}"
@@ -317,7 +343,7 @@ jobs:
           release_date="${RELEASE_DATE:-$(date +%d%m%Y)}"
           runtime_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_RUNTIME }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
           lib_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_LIB }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
-          data_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_DATA }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
+          data_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_DATA }}_${package_version}_all_${release_date}.deb"
           dev_output_file="${{ env.ARTIFACT_DIR }}/${{ env.DEB_PACKAGE_DEV }}_${package_version}_${{ env.DEB_ARCH }}_${release_date}.deb"
 
           mkdir -p "${{ env.ARTIFACT_DIR }}"
@@ -365,6 +391,27 @@ jobs:
           dpkg-deb --root-owner-group --build "$dev_root" "$dev_output_file"
           dpkg-deb -I "$dev_output_file" | sed -n '/^ Package:/,/^ Description:/p'
           sha256sum "$dev_output_file" > "$dev_output_file.sha256"
+
+          source "$GITHUB_WORKSPACE/.github/scripts/debian-package-helpers.sh"
+          debian_validate_package "$runtime_output_file" yes
+          debian_validate_package "$lib_output_file" yes
+          # libindi-data contains architecture-independent data and correctly
+          # has no runtime dependency of its own.
+          debian_validate_package "$data_output_file" no
+          debian_validate_package "$dev_output_file" yes
+          debian_assert_elf_closure \
+            "$runtime_output_file" \
+            "$lib_output_file" \
+            "$data_output_file" \
+            "$dev_output_file"
+
+          # Ask apt to solve the complete package set against a clean Trixie
+          # package index. This catches misspelled or unavailable Depends.
+          apt-get install --dry-run --no-install-recommends \
+            "$runtime_output_file" \
+            "$lib_output_file" \
+            "$data_output_file" \
+            "$dev_output_file"
 
       - name: Publish INDI GitHub release
         uses: softprops/action-gh-release@v3

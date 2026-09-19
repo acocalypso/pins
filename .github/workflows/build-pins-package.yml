@@ -47,7 +47,9 @@ jobs:
             wget \
             default-jre-headless \
             build-essential \
+            binutils \
             cmake \
+            dpkg-dev \
             git-lfs \
             zip \
             unzip \
@@ -67,6 +69,10 @@ jobs:
         with:
           lfs: true
           submodules: false
+
+      - name: Test Debian packaging helpers
+        shell: bash
+        run: bash .github/scripts/test-debian-package-helpers.sh
 
       - name: Install system dependencies
         run: |
@@ -1537,6 +1543,80 @@ jobs:
             exit 1
           fi
           echo "All plugin packages built successfully."
+
+      - name: Normalize and validate Debian dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .github/scripts/debian-package-helpers.sh
+
+          shopt -s nullglob globstar
+          packages=(artifacts/**/*.deb)
+          if [ "${#packages[@]}" -eq 0 ]; then
+            echo "No Debian packages were produced." >&2
+            exit 1
+          fi
+
+          core_packages=(artifacts/pins_*.deb)
+          if [ "${#core_packages[@]}" -ne 1 ]; then
+            echo "Expected exactly one pins core package, found ${#core_packages[@]}." >&2
+            exit 1
+          fi
+          core_provider_root="$(mktemp -d)"
+          dpkg-deb -x "${core_packages[0]}" "$core_provider_root"
+
+          for package_path in "${packages[@]}"; do
+            package_root="$(mktemp -d)"
+            rebuilt_path="$(mktemp --suffix=.deb)"
+            dpkg-deb -R "$package_path" "$package_root"
+
+            package_name="$(dpkg-deb -f "$package_path" Package)"
+            existing_depends="$(dpkg-deb -f "$package_path" Depends 2>/dev/null || true)"
+            required_depends=""
+
+            case "$package_name" in
+              pins)
+                required_depends="ca-certificates, libc6, libgcc-s1, libgssapi-krb5-2, libicu76, libssl3t64, libstdc++6, tzdata, indi-bin, procps, systemd"
+                ;;
+              pinsdaemon)
+                required_depends="avahi-daemon, passwd, systemd, udev, util-linux"
+                ;;
+              pins-plugin-*)
+                required_depends="pins (>= 3.0.0)"
+                ;;
+            esac
+
+            if [[ "$package_name" == pins-plugin-* ]]; then
+              shlib_depends="$(debian_generate_shlib_depends \
+                "$package_name" \
+                "$package_root" \
+                "$core_provider_root|pins (>= 3.0.0)")"
+            else
+              shlib_depends="$(debian_generate_shlib_depends "$package_name" "$package_root")"
+            fi
+
+            depends="$(debian_merge_depends "$shlib_depends" "$existing_depends" "$required_depends")"
+            debian_control_set_depends "$package_root/DEBIAN/control" "$depends"
+            chmod 0755 "$package_root"
+            dpkg-deb --root-owner-group --build "$package_root" "$rebuilt_path" >/dev/null
+            mv "$rebuilt_path" "$package_path"
+            sha256sum "$package_path" > "$package_path.sha256"
+            rm -rf "$package_root"
+
+            debian_validate_package "$package_path" yes
+            if [[ "$package_name" == pins-plugin-* ]]; then
+              debian_assert_elf_closure "$package_path" "$core_provider_root"
+            else
+              debian_assert_elf_closure "$package_path"
+            fi
+          done
+          rm -rf "$core_provider_root"
+
+          install_packages=()
+          for package_path in "${packages[@]}"; do
+            install_packages+=("$(readlink -f "$package_path")")
+          done
+          apt-get install --dry-run --no-install-recommends "${install_packages[@]}"
 
       - name: Create firmware bundle zip
         id: firmware_bundle
