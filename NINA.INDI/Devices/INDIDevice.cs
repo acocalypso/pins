@@ -1628,31 +1628,15 @@ namespace NINA.INDI.Devices
             }
         }
 
-        private string SendRawTcpBatch(string commands)
+        private string SendRawTcpBatch(string commands, string replyMask)
         {
-            int expectedReplies = commands.Count(c => c == '#');
             lock (_lx200Lock)
             {
                 var stream = EnsureLx200Stream();
                 var bytes = Encoding.ASCII.GetBytes(commands);
                 stream.Write(bytes, 0, bytes.Length);
                 stream.Flush();
-                var response = new StringBuilder();
-                int replies = 0;
-                while (replies < expectedReplies)
-                {
-                    int b = stream.ReadByte();
-                    // Unlike a single command, a partial batch must not be returned: the caller
-                    // matches replies to commands by position.
-                    if (b == -1)
-                    {
-                        throw new System.IO.IOException($"Connection closed after {replies} of {expectedReplies} batch replies");
-                    }
-                    var ch = (char)b;
-                    response.Append(ch);
-                    if (ch == '#') replies++;
-                }
-                return response.ToString();
+                return BatchReplySpec.Read(stream.ReadByte, replyMask);
             }
         }
 
@@ -1668,9 +1652,11 @@ namespace NINA.INDI.Devices
             {
                 return string.Empty;
             }
+            // Commands may carry a mask saying how each reply ends; see BatchReplySpec.
+            BatchReplySpec.Parse(commands, out string rawCommands, out string replyMask);
             try
             {
-                return SendRawTcpBatch(commands);
+                return SendRawTcpBatch(rawCommands, replyMask);
             }
             catch (Exception)
             {

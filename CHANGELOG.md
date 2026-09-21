@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - INDI mounts on a network (TCP) connection expose a `rawCommandBatch` action that sends several raw LX200 commands in one write, so a plugin reading many values at once pays one round trip instead of one per command
+- `rawCommandBatch` can now also batch the LX200 commands that answer with a single character and no `#` (on 10micron `:Guaf#`, `:Gdat#`, `:GREF#`). The caller appends a mask such as `:Guaf#:GT#|cs` saying how each reply ends; without a mask every reply is still read up to its `#` as before. The 10micron plugin's status poll uses this to read its nine values in one round trip instead of nine, which previously kept the mount busy for about two seconds of every polling interval, including during slews and model builds
 
 ## 1.1.57 - 2026-09-15
 ### Fixed
