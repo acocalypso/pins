@@ -327,14 +327,31 @@ namespace System.Windows.Data {
         public static void ClearAllBindings(DependencyObject target) { }
 
         public static BindingExpressionBase GetBindingExpressionBase(DependencyObject target, DependencyProperty dp) => null;
+
+        public static BindingExpression GetBindingExpression(DependencyObject target, DependencyProperty dp) => null;
     }
 
-    public class BindingExpressionBase { }
+    /// <summary>
+    /// Binding expression plumbing. Headless has no binding engine and BindingOperations never
+    /// hands out an expression, so these members exist for callers that inspect or refresh a
+    /// binding and stay inert.
+    /// </summary>
+    public class BindingExpressionBase {
+        public DependencyObject Target { get; set; }
+        public DependencyProperty TargetProperty { get; set; }
+
+        public void UpdateSource() { }
+
+        public void UpdateTarget() { }
+    }
 
     public interface IValueConverter { }
     public class BindingBase { }
     public enum BindingMode { OneWay, TwoWay, OneTime, OneWayToSource, Default }
-    public class MultiBinding : BindingBase { }
+
+    public class MultiBinding : BindingBase {
+        public BindingMode Mode { get; set; }
+    }
     
     public interface IMultiValueConverter {
         object Convert(object[] values, System.Type targetType, object parameter, System.Globalization.CultureInfo culture);
@@ -357,6 +374,21 @@ namespace System.Windows.Data {
 
     public class BindingExpression : BindingExpressionBase {
         public object ResolvedSource { get; set; }
+        public string ResolvedSourcePropertyName { get; set; }
+
+        // Never null: callers read ParentBinding.Mode without a null check.
+        public Binding ParentBinding { get; set; } = new Binding();
+    }
+
+    public class MultiBindingExpression : BindingExpressionBase {
+        public MultiBinding ParentMultiBinding { get; set; } = new MultiBinding();
+
+        public System.Collections.ObjectModel.ReadOnlyCollection<BindingExpressionBase> BindingExpressions { get; set; }
+            = new System.Collections.ObjectModel.ReadOnlyCollection<BindingExpressionBase>(new List<BindingExpressionBase>());
+    }
+
+    public class PriorityBindingExpression : BindingExpressionBase {
+        public BindingExpressionBase ActiveBindingExpression { get; set; }
     }
 }
 
@@ -457,10 +489,67 @@ namespace System.Windows {
             }
         }
 
+        /// <summary>
+        /// WPF writes the value without replacing an existing binding. Headless has no binding
+        /// engine, so this is an ordinary local set.
+        /// </summary>
+        public void SetCurrentValue(DependencyProperty dp, object value) {
+            SetValue(dp, value);
+        }
+
+        /// <summary>
+        /// Enumerates the locally set values. WPF walks its effective value table; headless keeps
+        /// the same values in a plain dictionary, so this walks a snapshot of it.
+        /// </summary>
+        public LocalValueEnumerator GetLocalValueEnumerator() {
+            var entries = new LocalValueEntry[_propertyValues.Count];
+            int index = 0;
+            foreach (var entry in _propertyValues) {
+                entries[index++] = new LocalValueEntry(entry.Key, entry.Value);
+            }
+            return new LocalValueEnumerator(entries);
+        }
+
         public void BeginAnimation(DependencyProperty dp, Media.Animation.AnimationTimeline animation) {
             // Stub for animation - in headless mode, animations are not executed
             // This method is called but doesn't actually animate anything
         }
+    }
+
+    /// <summary>
+    /// A single locally set dependency property value.
+    /// </summary>
+    public struct LocalValueEntry {
+        internal LocalValueEntry(DependencyProperty property, object value) {
+            Property = property;
+            Value = value;
+        }
+
+        public DependencyProperty Property { get; }
+        public object Value { get; }
+    }
+
+    /// <summary>
+    /// Enumerates the locally set values of a <see cref="DependencyObject"/>.
+    /// </summary>
+    public struct LocalValueEnumerator : System.Collections.IEnumerator {
+        private readonly LocalValueEntry[] _entries;
+        private int _index;
+
+        internal LocalValueEnumerator(LocalValueEntry[] entries) {
+            _entries = entries;
+            _index = -1;
+        }
+
+        public int Count => _entries?.Length ?? 0;
+
+        public LocalValueEntry Current => _entries[_index];
+
+        object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext() => _entries != null && ++_index < _entries.Length;
+
+        public void Reset() => _index = -1;
     }
 
     /// <summary>
@@ -922,6 +1011,8 @@ namespace System.Windows.Controls.Primitives {
 
     public class ButtonBase : System.Windows.FrameworkElement {
         public static readonly System.Windows.RoutedEvent ClickEvent = new System.Windows.RoutedEvent();
+        public System.Windows.Input.ICommand Command { get; set; }
+        public object CommandParameter { get; set; }
     }
 }
 

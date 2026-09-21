@@ -46,6 +46,10 @@ namespace System.Windows {
             return metadata ?? new PropertyMetadata();
         }
 
+        public PropertyMetadata GetMetadata(DependencyObject targetObject) {
+            return metadata ?? new PropertyMetadata();
+        }
+
         public override string ToString() => Name ?? base.ToString();
     }
 
@@ -69,6 +73,27 @@ namespace System.Windows {
     }
 
     /// <summary>
+    /// Framework-level options for a registered dependency property. Only the flags a headless
+    /// run can answer are acted on - layout, rendering and inheritance have no effect without a
+    /// visual tree - but registrations keep passing them, so the whole set is accepted.
+    /// </summary>
+    [System.Flags]
+    public enum FrameworkPropertyMetadataOptions {
+        None = 0,
+        AffectsMeasure = 1,
+        AffectsArrange = 2,
+        AffectsParentMeasure = 4,
+        AffectsParentArrange = 8,
+        AffectsRender = 16,
+        Inherits = 32,
+        OverridesInheritanceBehavior = 64,
+        NotDataBindable = 128,
+        BindsTwoWayByDefault = 256,
+        Journal = 1024,
+        SubPropertiesDoNotAffectRender = 2048
+    }
+
+    /// <summary>
     /// Provides metadata for framework-level dependency properties.
     /// </summary>
     public class FrameworkPropertyMetadata : PropertyMetadata {
@@ -78,6 +103,30 @@ namespace System.Windows {
 
         public FrameworkPropertyMetadata(object defaultValue, PropertyChangedCallback propertyChangedCallback) 
             : base(defaultValue, propertyChangedCallback) { }
+
+        public FrameworkPropertyMetadata(object defaultValue, FrameworkPropertyMetadataOptions flags) : base(defaultValue) {
+            Flags = flags;
+        }
+
+        public FrameworkPropertyMetadata(object defaultValue, FrameworkPropertyMetadataOptions flags, PropertyChangedCallback propertyChangedCallback) 
+            : base(defaultValue, propertyChangedCallback) {
+            Flags = flags;
+        }
+
+        public FrameworkPropertyMetadataOptions Flags { get; set; }
+
+        /// <summary>
+        /// Decides how a binding left at BindingMode.Default transfers. Only registrations that
+        /// pass the flag report true; there is no default WPF metadata table to fall back on.
+        /// </summary>
+        public bool BindsTwoWayByDefault {
+            get => Flags.HasFlag(FrameworkPropertyMetadataOptions.BindsTwoWayByDefault);
+            set => Flags = value
+                ? Flags | FrameworkPropertyMetadataOptions.BindsTwoWayByDefault
+                : Flags & ~FrameworkPropertyMetadataOptions.BindsTwoWayByDefault;
+        }
+
+        public bool Inherits => Flags.HasFlag(FrameworkPropertyMetadataOptions.Inherits);
     }
 
     /// <summary>

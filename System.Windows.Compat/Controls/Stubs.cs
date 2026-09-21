@@ -249,12 +249,36 @@ namespace System.Windows.Controls.Primitives {
     /// Base class for text input controls.
     /// </summary>
     public class TextBoxBase : System.Windows.FrameworkElement {
+        public static readonly System.Windows.DependencyProperty IsUndoEnabledProperty =
+            System.Windows.DependencyProperty.Register("IsUndoEnabled", typeof(bool), typeof(TextBoxBase), new System.Windows.PropertyMetadata(true));
+
+        public bool IsUndoEnabled {
+            get => (bool)GetValue(IsUndoEnabledProperty);
+            set => SetValue(IsUndoEnabledProperty, value);
+        }
     }
 
     /// <summary>
     /// Base class for controls that select items.
     /// </summary>
     public class Selector : System.Windows.FrameworkElement {
+        public static readonly System.Windows.DependencyProperty SelectedItemProperty =
+            System.Windows.DependencyProperty.Register("SelectedItem", typeof(object), typeof(Selector));
+
+        public static readonly System.Windows.DependencyProperty SelectedValueProperty =
+            System.Windows.DependencyProperty.Register("SelectedValue", typeof(object), typeof(Selector));
+
+        public object SelectedItem {
+            get => GetValue(SelectedItemProperty);
+            set => SetValue(SelectedItemProperty, value);
+        }
+
+        public object SelectedValue {
+            get => GetValue(SelectedValueProperty);
+            set => SetValue(SelectedValueProperty, value);
+        }
+
+        public string DisplayMemberPath { get; set; }
     }
 
     /// <summary>
