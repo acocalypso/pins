@@ -3,6 +3,27 @@
 # Shared helpers for the hand-built Debian packages in this repository.
 # The caller is expected to enable `set -euo pipefail`.
 
+# .NET self-contained Linux publishes include an optional LTTng tracepoint
+# provider. Current Debian releases no longer ship the legacy
+# liblttng-ust.so.0 ABI it targets. Remove only that incompatible optional
+# component; retain it automatically if a future runtime targets an available
+# ABI instead.
+debian_prune_optional_dotnet_diagnostics() {
+  local application_root="$1"
+  local trace_provider="$application_root/libcoreclrtraceptprovider.so"
+
+  [ -d "$application_root" ] || {
+    echo "Application root does not exist: $application_root" >&2
+    return 1
+  }
+  [ -f "$trace_provider" ] || return 0
+
+  if readelf -d "$trace_provider" 2>/dev/null | grep -Fq 'Shared library: [liblttng-ust.so.0]'; then
+    rm -f "$trace_provider"
+    echo "Removed optional .NET LTTng provider targeting unavailable liblttng-ust.so.0"
+  fi
+}
+
 debian_merge_depends() {
   local lists=("$@")
   local item key

@@ -245,6 +245,7 @@ jobs:
             rm -rf "$deb_root"
             mkdir -p "$install_root"
             rsync -a "$package_root/pins/" "$install_root/"
+            debian_prune_optional_dotnet_diagnostics "$install_root"
 
             service_path="$deb_root/etc/systemd/system/pins.service"
             mkdir -p "$(dirname "$service_path")"

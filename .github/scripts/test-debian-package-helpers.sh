@@ -9,6 +9,41 @@ source "$script_dir/debian-package-helpers.sh"
 test_root="$(mktemp -d)"
 trap 'rm -rf "$test_root"' EXIT
 
+# A current .NET self-contained publish can carry an optional LTTng provider
+# linked to the obsolete liblttng-ust.so.0 ABI. Verify that only this exact
+# optional component is pruned.
+diagnostics_root="$test_root/diagnostics"
+mkdir -p "$diagnostics_root"
+cat > "$test_root/lttng.c" <<'EOF'
+void lttng_test_symbol(void) {}
+EOF
+cat > "$test_root/trace-provider.c" <<'EOF'
+extern void lttng_test_symbol(void);
+void trace_provider_test(void) { lttng_test_symbol(); }
+EOF
+gcc -fPIC -shared -Wl,-soname,liblttng-ust.so.0 \
+  -o "$test_root/liblttng-ust.so.0" "$test_root/lttng.c"
+ln -s liblttng-ust.so.0 "$test_root/liblttng-ust.so"
+gcc -fPIC -shared \
+  -o "$diagnostics_root/libcoreclrtraceptprovider.so" \
+  "$test_root/trace-provider.c" \
+  -L"$test_root" \
+  -Wl,--no-as-needed \
+  -llttng-ust
+
+debian_prune_optional_dotnet_diagnostics "$diagnostics_root"
+if [ -e "$diagnostics_root/libcoreclrtraceptprovider.so" ]; then
+  echo "Legacy .NET LTTng provider was not pruned" >&2
+  exit 1
+fi
+
+install -m 0755 /bin/true "$diagnostics_root/libcoreclrtraceptprovider.so"
+debian_prune_optional_dotnet_diagnostics "$diagnostics_root"
+if [ ! -e "$diagnostics_root/libcoreclrtraceptprovider.so" ]; then
+  echo "Compatible diagnostics provider was incorrectly pruned" >&2
+  exit 1
+fi
+
 package_root="$test_root/package"
 mkdir -p "$package_root/DEBIAN" "$package_root/usr/bin"
 install -m 0755 /bin/true "$package_root/usr/bin/helper-test"
