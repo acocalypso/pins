@@ -16,6 +16,10 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="Behaviors\SequenceEditBehavior.cs" />
+    <Compile Remove="Editing\PendingSequenceEdit.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="..\LICENSE.txt">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
