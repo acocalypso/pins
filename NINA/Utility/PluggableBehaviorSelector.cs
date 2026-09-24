@@ -32,6 +32,16 @@ namespace NINA.Utility {
         private readonly DefaultT ninaDefault;
         private string selectedContentId;
 
+        /// <summary>
+        /// pins forces HocusFocus for these interfaces whenever it is loaded (there is no options UI to pick
+        /// a behavior on a headless install). Keyed by interface full name, valued by the forced ContentId.
+        /// </summary>
+        private static readonly IReadOnlyDictionary<string, string> ForcedHocusFocusBehaviors = new Dictionary<string, string> {
+            { "NINA.Image.ImageAnalysis.IStarDetection", "NINA.Joko.Plugins.HocusFocus.StarDetection.HocusFocusStarDetection" },
+            { "NINA.Image.ImageAnalysis.IStarAnnotator", "NINA.Joko.Plugins.HocusFocus.StarDetection.HocusFocusStarAnnotator" },
+            { "NINA.WPF.Base.Interfaces.IAutoFocusVMFactory", "NINA.Joko.Plugins.HocusFocus.AutoFocus.HocusFocusVMFactory" }
+        };
+
         public PluggableBehaviorSelector(IProfileService profileService, DefaultT ninaDefault) {
             this.profileService = profileService;
             this.ninaDefault = ninaDefault;
@@ -46,6 +56,7 @@ namespace NINA.Utility {
         private void ProfileService_ProfileChanged(object sender, EventArgs e) {
             this.profileService.ActiveProfile.ApplicationSettings.PropertyChanged += ApplicationSettings_PropertyChanged;
             DetectSelectedBehaviorChanged();
+            PersistForcedSelection();
         }
 
         private void ApplicationSettings_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e) {
@@ -125,29 +136,40 @@ namespace NINA.Utility {
 
         public T GetBehavior() {
             // Force HocusFocus for star detection, annotation, and autofocus
-            string interfaceTypeName = typeof(T).FullName;
-            
-            // Hardcoded selections for HocusFocus
-            if (interfaceTypeName == "NINA.Image.ImageAnalysis.IStarDetection") {
-                var hocusFocusBehavior = behaviors.FirstOrDefault(b => b.ContentId == "NINA.Joko.Plugins.HocusFocus.StarDetection.HocusFocusStarDetection");
-                if (hocusFocusBehavior != null) {
-                    return hocusFocusBehavior;
-                }
-            } else if (interfaceTypeName == "NINA.Image.ImageAnalysis.IStarAnnotator") {
-                var hocusFocusBehavior = behaviors.FirstOrDefault(b => b.ContentId == "NINA.Joko.Plugins.HocusFocus.StarDetection.HocusFocusStarAnnotator");
-                if (hocusFocusBehavior != null) {
-                    return hocusFocusBehavior;
-                }
-            } else if (interfaceTypeName == "NINA.WPF.Base.Interfaces.IAutoFocusVMFactory") {
-                var hocusFocusBehavior = behaviors.FirstOrDefault(b => b.ContentId == "NINA.Joko.Plugins.HocusFocus.AutoFocus.HocusFocusVMFactory");
-                if (hocusFocusBehavior != null) {
-                    return hocusFocusBehavior;
-                }
+            var forced = GetForcedBehavior();
+            if (forced != null) {
+                return forced;
             }
-            
+
             // Fallback to profile settings or default
             profileService.ActiveProfile.ApplicationSettings.SelectedPluggableBehaviorsLookup.TryGetValue(typeof(T).FullName, out string contentId);
             return GetBehavior(contentId);
+        }
+
+        /// <summary>The HocusFocus behavior forced for this interface, or null when none is forced or it is not loaded.</summary>
+        private T GetForcedBehavior() {
+            if (!ForcedHocusFocusBehaviors.TryGetValue(typeof(T).FullName, out var forcedContentId)) {
+                return null;
+            }
+            return behaviors.FirstOrDefault(b => b.ContentId == forcedContentId);
+        }
+
+        /// <summary>
+        /// Records the forced behavior as the profile's selection too. Code that reads the selection straight
+        /// from the profile rather than through this selector (HocusFocus' star detection decides "is this
+        /// NINA's own auto-focus?" that way) would otherwise see no selection, conclude the stock NINA
+        /// auto-focuser runs, and apply NINA's auto-focus crop to HocusFocus runs.
+        /// </summary>
+        private void PersistForcedSelection() {
+            var forced = GetForcedBehavior();
+            if (forced == null) {
+                return;
+            }
+            profileService.ActiveProfile.ApplicationSettings.SelectedPluggableBehaviorsLookup.TryGetValue(typeof(T).FullName, out string contentId);
+            if (contentId != forced.ContentId) {
+                Logger.Info($"Saving {forced.ContentId} as the profile's {typeof(T).Name} selection, as pins always uses it");
+                SelectedBehavior = forced;
+            }
         }
 
         public void AddBehavior(object behavior) {
@@ -157,6 +179,7 @@ namespace NINA.Utility {
             }
 
             Behaviors.Add(typedBehavior);
+            PersistForcedSelection();
         }
     }
 }

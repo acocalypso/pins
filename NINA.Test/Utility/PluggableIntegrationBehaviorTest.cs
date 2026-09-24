@@ -21,6 +21,8 @@ using NINA.Plugin.Interfaces;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
 using NINA.Utility;
+using NINA.WPF.Base.Interfaces;
+using NINA.WPF.Base.Interfaces.ViewModel;
 using System.ComponentModel;
 using System.Threading;
 
@@ -53,6 +55,41 @@ namespace NINA.Test.Utility {
             sut.GetBehavior("missing-plugin").Should().BeSameAs(defaultBehavior);
             changed.Should().Contain(nameof(PluggableBehaviorSelector<ITestBehavior, TestBehavior>.Behaviors));
             changed.Should().Contain(nameof(PluggableBehaviorSelector<ITestBehavior, TestBehavior>.SelectedBehavior));
+        }
+
+        /// <summary>
+        /// Verifies that registering HocusFocus' auto-focuser, which pins always uses, also records it as the profile's
+        /// selection, replacing a stale NINA one, so code that reads the selection from the profile agrees with the selector.
+        /// </summary>
+        [Test]
+        public void PluggableBehaviorSelector_PersistsForcedHocusFocusAutoFocusSelection() {
+            const string hocusFocusContentId = "NINA.Joko.Plugins.HocusFocus.AutoFocus.HocusFocusVMFactory";
+            ApplicationSettings settings = new ApplicationSettings();
+            settings.SelectedPluggableBehaviors.Add(new KeyValuePair<string, string>(typeof(IAutoFocusVMFactory).FullName, "NINA"));
+            Mock<IProfileService> profileService = CreateProfileService(settings);
+            var sut = new PluggableBehaviorSelector<IAutoFocusVMFactory, TestAutoFocusVMFactory>(profileService.Object, new TestAutoFocusVMFactory("NINA", "NINA"));
+            var hocusFocus = new TestAutoFocusVMFactory("Hocus Focus", hocusFocusContentId);
+
+            sut.AddBehavior(hocusFocus);
+
+            sut.GetBehavior().Should().BeSameAs(hocusFocus);
+            settings.SelectedPluggableBehaviors.Should().ContainSingle()
+                .Which.Should().Be(new KeyValuePair<string, string>(typeof(IAutoFocusVMFactory).FullName, hocusFocusContentId));
+        }
+
+        /// <summary>
+        /// Verifies that registering a behavior pins does not force leaves the profile's selection untouched.
+        /// </summary>
+        [Test]
+        public void PluggableBehaviorSelector_DoesNotPersistUnforcedBehaviors() {
+            ApplicationSettings settings = new ApplicationSettings();
+            Mock<IProfileService> profileService = CreateProfileService(settings);
+            var sut = new PluggableBehaviorSelector<IAutoFocusVMFactory, TestAutoFocusVMFactory>(profileService.Object, new TestAutoFocusVMFactory("NINA", "NINA"));
+
+            sut.AddBehavior(new TestAutoFocusVMFactory("Other", "other-auto-focuser"));
+
+            settings.SelectedPluggableBehaviors.Should().BeEmpty();
+            sut.GetBehavior().ContentId.Should().Be("NINA");
         }
 
         /// <summary>
@@ -154,6 +191,20 @@ namespace NINA.Test.Utility {
 
             public string Name { get; }
             public string ContentId { get; }
+        }
+
+        private sealed class TestAutoFocusVMFactory : IAutoFocusVMFactory {
+            public TestAutoFocusVMFactory(string name, string contentId) {
+                Name = name;
+                ContentId = contentId;
+            }
+
+            public string Name { get; }
+            public string ContentId { get; }
+
+            public IAutoFocusVM Create() {
+                throw new NotSupportedException();
+            }
         }
 
         private sealed class OtherBehavior : IPluggableBehavior {
