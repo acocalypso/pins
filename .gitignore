@@ -113,3 +113,7 @@ lfs/
 /NINA.SetupBundle/dotnet-windowsdesktop-runtime-win-x64.exe
 /.dotnet-cli/.dotnet
 .vscode
+/NINA.Plugins
+/NINA/External
+/Touch-N-Stars
+/pinsdaemon
