@@ -20,7 +20,7 @@ env:
 
 jobs:
   build-indi-trixie:
-    name: Build INDI v2.2.3.1 (.deb)
+    name: Build INDI (.deb)
     runs-on: ubuntu-24.04-arm
     container:
       image: debian:trixie
@@ -99,8 +99,8 @@ jobs:
           if [ "${{ env.STRICT_WARNINGS }}" != "1" ]; then
             # Keep warnings visible, but do not fail package builds on known
             # GCC diagnostics currently emitted by upstream sources on Trixie.
-            extra_c_flags="-Wno-error=stringop-truncation -Wno-error=stringop-overread"
-            extra_cxx_flags="-Wno-error=stringop-truncation -Wno-error=stringop-overread"
+            extra_c_flags="-Wno-error=stringop-truncation -Wno-error=stringop-overread -Wno-error=maybe-uninitialized"
+            extra_cxx_flags="-Wno-error=stringop-truncation -Wno-error=stringop-overread -Wno-error=maybe-uninitialized"
           fi
 
           cmake -S . -B build -G Ninja \
