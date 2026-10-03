@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  INDI_VERSION: 2.2.3.1
+  INDI_VERSION: 2.2.5
   STRICT_WARNINGS: 0
   DEB_PACKAGE_RUNTIME: indi-bin
   DEB_PACKAGE_LIB: libindi1
