@@ -290,7 +290,7 @@ jobs:
 
             pushd pinsdaemon >/dev/null
             python3 -m venv .venv
-            .venv/bin/python -m pip install --disable-pip-version-check -r requirements.txt
+            .venv/bin/python -m pip install --disable-pip-version-check -r requirements-dev.txt
             .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
             bash -n scripts/*.sh scripts/pins-rig-name scripts/90-pins-wifi-recovery packaging/DEBIAN/postinst packaging/DEBIAN/prerm
 
@@ -312,6 +312,8 @@ jobs:
             cp scripts/system-upgrade.sh build/usr/local/bin/
             cp scripts/manage-samba.sh build/usr/local/bin/
             cp scripts/manage-localization.sh build/usr/local/bin/
+            cp scripts/manage-swap.py build/usr/local/bin/
+            chmod 755 build/usr/local/bin/manage-swap.py
             cp scripts/wifi-connect.sh build/usr/local/bin/
             cp scripts/pins-wifi-profile.py build/usr/local/bin/
             cp scripts/pins-wifi-viability.py build/usr/local/bin/
@@ -369,6 +371,7 @@ jobs:
               ./usr/local/bin/ensure-required-packages.sh
               ./usr/local/bin/install-astap-star-database.sh
               ./usr/local/bin/manage-localization.sh
+              ./usr/local/bin/manage-swap.py
               ./usr/local/bin/manage-plugin.sh
               ./usr/local/bin/pins-rig-name
               ./usr/local/bin/pins-wifi-profile.py

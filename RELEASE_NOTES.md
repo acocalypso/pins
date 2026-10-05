@@ -22,6 +22,7 @@ This allows you to safely return to a stable release if needed.
 - The application now runs on .NET 10, bringing performance improvements and access to the latest runtime features.
 
 ## Bugfixes
+- PINS full and standalone pinsdaemon package builds now include the swap-size helper and validate its presence in the Debian package.
 - INDI v2.2.5 Debian Trixie package builds now tolerate upstream GCC maybe-uninitialized warnings while keeping the diagnostics visible.
 - Dome parking now checks that the driver reports it is parked after movement stops and reports a failure if it is not. A fixed 10-minute timeout aborts parking if it does not complete.
 - ASCOM and Alpaca cameras now apply their reported Bayer X/Y offsets when automatically debayering previews, so non-RGGB phases display the correct colors while preserving the original image metadata.
