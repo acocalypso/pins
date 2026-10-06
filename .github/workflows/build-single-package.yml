@@ -893,6 +893,11 @@ jobs:
             exit 1
           fi
 
+          if [ "$package_key" = pinsdaemon ]; then
+            bash .github/scripts/configure-raspberrypi-apt.sh
+            apt-get update
+          fi
+
           while IFS= read -r artifact; do
             case "$artifact" in
               *.deb)

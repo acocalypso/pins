@@ -1622,6 +1622,8 @@ jobs:
           for package_path in "${packages[@]}"; do
             install_packages+=("$(readlink -f "$package_path")")
           done
+          bash .github/scripts/configure-raspberrypi-apt.sh
+          apt-get update
           apt-get install --dry-run --no-install-recommends "${install_packages[@]}"
 
       - name: Create firmware bundle zip
