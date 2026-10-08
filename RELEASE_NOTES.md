@@ -19,6 +19,7 @@ This allows you to safely return to a stable release if needed.
 # Version 3.3 NIGHTLY
 
 ## General
+- Added a manual workflow that builds PINS and ninaAPI from their upstream unstable branches and publishes both ARM64 Debian packages in one prerelease.
 - The application now runs on .NET 10, bringing performance improvements and access to the latest runtime features.
 
 ## Bugfixes

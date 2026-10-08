@@ -1,0 +1,446 @@
+# Copied from build-single-package.yml for a combined upstream unstable release.
+name: Build PINS and ninaAPI unstable packages
+'on':
+  workflow_dispatch: null
+permissions:
+  contents: write
+concurrency:
+  group: build-unstable-packages
+  cancel-in-progress: false
+env:
+  BUILD_CONFIGURATION: Release
+  TARGET_RUNTIME: linux-arm64
+  PLUGIN_TARGET_FRAMEWORK: net10.0
+  INSTALL_DIRECTORY: /home/pi/pins
+  PUBLISH_DIRECTORY: artifacts/publish
+  PACKAGE_ROOT: artifacts/package
+  DEB_ROOT: artifacts/debroot
+  DEB_ARCH: arm64
+  DEB_PACKAGE: pins
+  PLUGINS_INSTALL_BASE: /home/pi/.local/share/NINA/Plugins/3.0.0
+  PLUGIN_DEB_BASE: artifacts/plugin-debroot
+  PLUGIN_ARTIFACT_DIR: artifacts/plugins
+  PLUGIN_MSBUILD_ARGS: -p:DisableImplicitSystemDrawingReference=true -p:Platform=AnyCPU -p:PlatformTarget=AnyCPU -p:SatelliteResourceLanguages="en-US"
+jobs:
+  build:
+    name: Build and release unstable ARM64 packages
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: debian:trixie
+    defaults:
+      run:
+        shell: bash
+        working-directory: source
+    steps:
+    - name: Bootstrap container tooling
+      shell: bash
+      run: |
+        set -euo pipefail
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y --no-install-recommends \
+          ca-certificates \
+          curl \
+          git \
+          gnupg \
+          wget \
+          default-jre-headless \
+          build-essential \
+          binutils \
+          cmake \
+          dpkg-dev \
+          git-lfs \
+          zip \
+          unzip \
+          autoconf \
+          autoconf-archive \
+          libtool \
+          pkg-config \
+          libudev-dev \
+          libjsoncpp-dev \
+          libgpiod-dev \
+          libssl-dev \
+          libicu-dev \
+          rsync
+      working-directory: ${{ github.workspace }}
+    - name: Checkout packaging tooling
+      uses: actions/checkout@v4
+      with:
+        path: workflow-tooling
+        persist-credentials: false
+    - name: Checkout PINS unstable
+      uses: actions/checkout@v4
+      with:
+        repository: nitr57/pins
+        ref: unstable
+        path: source
+        lfs: true
+        submodules: false
+        persist-credentials: false
+    - name: Checkout ninaAPI unstable
+      uses: actions/checkout@v4
+      with:
+        repository: nitr57/ninaAPI
+        ref: unstable
+        path: source/NINA.Plugins/ninaAPI
+        persist-credentials: false
+    - name: Test Debian packaging helpers
+      run: bash "$GITHUB_WORKSPACE/workflow-tooling/.github/scripts/test-debian-package-helpers.sh"
+    - name: Setup .NET 10 SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        global-json-file: source/global.json
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-${{ runner.arch }}-unstable-nuget-${{ hashFiles('source/**/*.csproj', 'source/**/*.props', 'source/**/*.targets', 'source/global.json',
+          'source/**/nuget.config') }}
+        restore-keys: ${{ runner.os }}-${{ runner.arch }}-unstable-nuget-
+    - name: Determine unstable release metadata
+      id: meta
+      run: |
+        set -euo pipefail
+        ci_build_number="${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+        release_date=$(date -u +%d%m%Y)
+        release_tag="unstable-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        echo "CI_BUILD_NUMBER=$ci_build_number" >> "$GITHUB_ENV"
+        echo "RELEASE_DATE=$release_date" >> "$GITHUB_ENV"
+        echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+        echo "pins_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "ninaapi_sha=$(git -C NINA.Plugins/ninaAPI rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+    - name: Prepare core linux-arm64 publish payload
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        apt-get update
+        apt-get install -y libudev-dev libjsoncpp-dev libgpiod-dev autoconf autoconf-archive libtool pkg-config
+
+        wget https://mirrors.edge.kernel.org/pub/software/libs/libgpiod/libgpiod-2.2.tar.gz
+        tar -xzf libgpiod-2.2.tar.gz
+        cd libgpiod-2.2
+        ./configure --prefix=/usr --enable-tools=yes --enable-bindings-cxx
+        make
+        make install
+        ldconfig
+        cd ..
+
+        rm -rf NINA/External
+        GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch main https://github.com/nitr57/pins.external NINA/External
+
+        jpleph_url="https://github.com/isbeorn/nina.external/raw/refs/heads/master/JPLEPH"
+        curl -L --fail --retry 3 --retry-delay 5 -o "NINA/External/JPLEPH" "$jpleph_url"
+
+        rm -rf "NINA/External/linux-x64"
+        rm -f "NINA/External/.gitignore" "NINA/External/.gitattributes"
+
+        if [ ! -d "NINA/External/${TARGET_RUNTIME}" ]; then
+          echo "NINA/External/${TARGET_RUNTIME} not found after repository clone" >&2
+          exit 1
+        fi
+
+        # Rebuild NOVAS and sync generated files into the existing external layout.
+        pushd NOVAS31 >/dev/null
+        make clean || true
+        make
+        popd >/dev/null
+
+        mkdir -p "NINA/External/${TARGET_RUNTIME}/NOVAS"
+        cp -f NOVAS31/libnovas_c.so "NINA/External/${TARGET_RUNTIME}/NOVAS/libnovas_c.so"
+        cp -f NOVAS31/cio_ra.bin "NINA/External/${TARGET_RUNTIME}/NOVAS/cio_ra.bin"
+
+        if [ ! -f "NINA/External/JPLEPH" ]; then
+          echo "NINA/External/JPLEPH not found" >&2
+          exit 1
+        fi
+
+        # SOFA makefile builds static lib by default, so build a shared object explicitly.
+        pushd SOFA/SOFA/src >/dev/null
+        make clean || true
+        make
+        rm -f ./*.o libsofa_c.so
+        for src in ./*.c; do
+          if [ "$(basename "$src")" = "t_sofa_c.c" ]; then
+            continue
+          fi
+          gcc -fPIC -O2 -c "$src"
+        done
+        gcc -shared -o libsofa_c.so ./*.o -lm
+        popd >/dev/null
+
+        mkdir -p "NINA/External/${TARGET_RUNTIME}/SOFA"
+        cp -f SOFA/SOFA/src/libsofa_c.so "NINA/External/${TARGET_RUNTIME}/SOFA/libsofa_c.so"
+
+        # Keep only NOVAS and SOFA under the runtime-specific external folder.
+        find "NINA/External/${TARGET_RUNTIME}" -mindepth 1 -maxdepth 1 ! -name 'NOVAS' ! -name 'SOFA' -exec rm -rf {} +
+
+        dotnet restore NINA/NINA.csproj -r "${TARGET_RUNTIME}"
+        dotnet restore System.Windows.Compat/System.Windows.Compat.csproj
+        dotnet build System.Windows.Compat/System.Windows.Compat.csproj -c "${BUILD_CONFIGURATION}" --no-restore
+        dotnet build NINA/NINA.csproj -c "${BUILD_CONFIGURATION}" -r "${TARGET_RUNTIME}" --no-restore
+        dotnet publish NINA/NINA.csproj -c "${BUILD_CONFIGURATION}" -r "${TARGET_RUNTIME}" --no-build -o "${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
+
+        publish_root="${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
+        mkdir -p "$publish_root/External"
+        rsync -a NINA/External/ "$publish_root/External/"
+    - name: Build and validate both Debian packages
+      id: build
+      run: |
+        set -euo pipefail
+        source "$GITHUB_WORKSPACE/workflow-tooling/.github/scripts/debian-package-helpers.sh"
+        mkdir -p artifacts "${PLUGIN_ARTIFACT_DIR}"
+        : > artifacts/release-files.txt
+        get_core_version() {
+          local base_version
+          base_version=$(grep -m1 'AssemblyInformationalVersion' CommonAssemblyInfo.cs | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$base_version" ]; then
+            echo "Failed to determine version from CommonAssemblyInfo.cs" >&2
+            return 1
+          fi
+          base_version=$(echo "$base_version" | sed 's/-canary/-pins-canary/')
+          echo "${base_version}~unstable+${CI_BUILD_NUMBER}"
+        }
+
+        build_pins_package() {
+          local package_version
+          package_version=$(get_core_version)
+
+          publish_root="${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
+          package_root="${PACKAGE_ROOT}"
+          rm -rf "$package_root"
+          mkdir -p "$package_root/pins"
+          rsync -a "$publish_root/" "$package_root/pins/"
+          echo "${INSTALL_DIRECTORY}" > "$package_root/pins/.install_path"
+
+          compat_dll="System.Windows.Compat/bin/${BUILD_CONFIGURATION}/net10.0/System.Windows.dll"
+          if [ ! -f "$compat_dll" ]; then
+            echo "Compat build missing at $compat_dll" >&2
+            return 1
+          fi
+          cp -f "$compat_dll" "$package_root/pins/System.Windows.dll"
+
+          deb_root="${DEB_ROOT}"
+          install_root="$deb_root/home/pi/pins"
+          rm -rf "$deb_root"
+          mkdir -p "$install_root"
+          rsync -a "$package_root/pins/" "$install_root/"
+          debian_prune_optional_dotnet_diagnostics "$install_root"
+
+          service_path="$deb_root/etc/systemd/system/pins.service"
+          mkdir -p "$(dirname "$service_path")"
+          cp packaging/systemd/pins.service "$service_path"
+          chmod 644 "$service_path"
+
+          control_dir="$deb_root/DEBIAN"
+          mkdir -p "$control_dir"
+          cp packaging/debian/postinst "$control_dir/postinst"
+          cp packaging/debian/prerm "$control_dir/prerm"
+          chmod 755 "$control_dir/postinst" "$control_dir/prerm"
+
+          installed_size=$(du -sk "$deb_root/home/pi/pins" | cut -f1)
+          shlib_depends=$(debian_generate_shlib_depends "${DEB_PACKAGE}" "$deb_root")
+          package_depends=$(debian_merge_depends \
+            "$shlib_depends" \
+            "ca-certificates, libc6, libgcc-s1, libgssapi-krb5-2, libicu76, libssl3t64, libstdc++6, tzdata" \
+            "indi-bin, procps, systemd")
+          {
+            echo "Package: ${DEB_PACKAGE}"
+            echo "Version: ${package_version}"
+            echo "Section: misc"
+            echo "Priority: optional"
+            echo "Architecture: ${DEB_ARCH}"
+            echo "Maintainer: PINS Team"
+            echo "Depends: ${package_depends}"
+            echo "Installed-Size: ${installed_size}"
+            echo "Description: Pins build for Raspberry Pi"
+          } > "$control_dir/control"
+
+          deb_path="artifacts/${DEB_PACKAGE}_${package_version}_${DEB_ARCH}_${RELEASE_DATE}.deb"
+          dpkg-deb --root-owner-group --build "$deb_root" "$deb_path"
+          sha256sum "$deb_path" > "$deb_path.sha256"
+
+          echo "$deb_path" >> artifacts/release-files.txt
+          echo "$deb_path.sha256" >> artifacts/release-files.txt
+        }
+
+        build_plugin_package() {
+          local project_path="$1"
+          local install_folder="$2"
+          local deb_package="$3"
+          local assembly_regex=""
+
+          local plugin_dir
+          plugin_dir=$(dirname "$project_path")
+          local plugin_dir_abs
+          plugin_dir_abs="$(pwd)/$plugin_dir"
+
+          local assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
+          if [ ! -f "$assembly_info" ]; then
+            assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
+          fi
+          if [ -z "$assembly_info" ] || [ ! -f "$assembly_info" ]; then
+            echo "AssemblyInfo.cs not found for ${deb_package}" >&2
+            return 1
+          fi
+
+          local assembly_version_line
+          if [ -n "$assembly_regex" ]; then
+            assembly_version_line=$(grep -E "$assembly_regex" "$assembly_info" | head -n 1 || true)
+          else
+            assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyInformationalVersion' "$assembly_info" | head -n 1 || true)
+          fi
+
+          if [ -z "$assembly_version_line" ]; then
+            assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyFileVersion' "$assembly_info" | head -n 1 || true)
+          fi
+
+          if [ -z "$assembly_version_line" ]; then
+            assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyVersion' "$assembly_info" | head -n 1 || true)
+          fi
+
+          if [ -z "$assembly_version_line" ]; then
+            assembly_version_line=$(grep -E 'AssemblyInformationalVersion|AssemblyFileVersion|AssemblyVersion' "$assembly_info" | head -n 1 || true)
+          fi
+
+          local plugin_version
+          plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^"]+)".*/\1/' | head -n 1 | tr -d '\r\n')
+          if [ -z "$plugin_version" ]; then
+            echo "No supported assembly version attribute found in $assembly_info" >&2
+            return 1
+          fi
+
+          plugin_version="${plugin_version}~unstable+${CI_BUILD_NUMBER}"
+
+          dotnet restore "$project_path" -r "${TARGET_RUNTIME}"
+          JavaPath=$(which java) dotnet build "$project_path" -c "${BUILD_CONFIGURATION}" -f "${PLUGIN_TARGET_FRAMEWORK}" -r "${TARGET_RUNTIME}" --no-restore ${PLUGIN_MSBUILD_ARGS}
+
+          tfm_dir="$plugin_dir/bin/${BUILD_CONFIGURATION}/${PLUGIN_TARGET_FRAMEWORK}/${TARGET_RUNTIME}"
+          if [ ! -d "$tfm_dir" ]; then
+            build_root="$plugin_dir/bin/${BUILD_CONFIGURATION}"
+            tfm_dir=$(find "$build_root" -maxdepth 1 -type d -name 'net*' | head -n 1)
+            if [ -z "$tfm_dir" ]; then
+              echo "Could not locate target framework output under $build_root" >&2
+              return 1
+            fi
+          fi
+
+          deb_root="${PLUGIN_DEB_BASE}/${deb_package}"
+          install_root="$deb_root${PLUGINS_INSTALL_BASE}/${install_folder}"
+          rm -rf "$deb_root"
+          mkdir -p "$install_root"
+
+          core_publish_dir="${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
+          if [ -d "$core_publish_dir" ]; then
+            exclude_list="$(pwd)/core_excludes.txt"
+            (cd "$core_publish_dir" && find . -type f -printf '%P\n') > "$exclude_list"
+            rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
+            rm -f "$exclude_list"
+          else
+            echo "Core publish directory not found at $core_publish_dir; packaging plugin without core file exclusion."
+            rsync -a "$tfm_dir/" "$install_root/"
+          fi
+
+          find "$install_root" -mindepth 1 -maxdepth 1 -type d -name '??-??' -exec rm -rf {} +
+          find "$install_root" -mindepth 1 -maxdepth 1 -type d -name '??' -exec rm -rf {} +
+
+          extra_libs="$plugin_dir/extra-libs"
+          if [ -d "$extra_libs" ]; then
+            find "$extra_libs" -maxdepth 1 -type f -name '*.dll' -exec cp {} "$install_root/" \;
+          fi
+
+          app_dir="$plugin_dir/app"
+          if [ -d "$app_dir" ]; then
+            rm -rf "$install_root/app"
+            cp -a "$app_dir" "$install_root/app"
+          fi
+
+          control_dir="$deb_root/DEBIAN"
+          mkdir -p "$control_dir"
+          installed_size=$(du -sk "$deb_root${PLUGINS_INSTALL_BASE}" | cut -f1)
+          if [ -d "$core_publish_dir" ]; then
+            shlib_depends=$(debian_generate_shlib_depends \
+              "$deb_package" \
+              "$deb_root" \
+              "$core_publish_dir|pins (>= 3.0.0)")
+          else
+            shlib_depends=$(debian_generate_shlib_depends "$deb_package" "$deb_root")
+          fi
+          package_depends=$(debian_merge_depends "$shlib_depends" "pins (= $(get_core_version))")
+
+          {
+            echo "Package: ${deb_package}"
+            echo "Version: ${plugin_version}"
+            echo "Section: misc"
+            echo "Priority: optional"
+            echo "Architecture: ${DEB_ARCH}"
+            echo "Maintainer: PINS Team"
+            echo "Depends: ${package_depends}"
+            echo "Installed-Size: ${installed_size}"
+            echo "Description: NINA plugin package for ${install_folder}"
+          } > "$control_dir/control"
+
+          {
+            echo '#!/bin/sh'
+            echo 'set -e'
+            echo "chown pi:pi $(dirname ${PLUGINS_INSTALL_BASE}) || true"
+            echo "chown pi:pi ${PLUGINS_INSTALL_BASE} || true"
+            echo "chown -R pi:pi \"${PLUGINS_INSTALL_BASE}/${install_folder}\" || true"
+            echo 'exit 0'
+          } > "$control_dir/postinst"
+          chmod 755 "$control_dir/postinst"
+
+          deb_path="${PLUGIN_ARTIFACT_DIR}/${deb_package}_${plugin_version}_${DEB_ARCH}_${RELEASE_DATE}.deb"
+          dpkg-deb --root-owner-group --build "$deb_root" "$deb_path"
+
+          sha256sum "$deb_path" > "$deb_path.sha256"
+
+          echo "$deb_path" >> artifacts/release-files.txt
+          echo "$deb_path.sha256" >> artifacts/release-files.txt
+        }
+
+        build_pins_package
+        build_plugin_package "NINA.Plugins/ninaAPI/ninaAPI/ninaAPI.csproj" "ninaAPI" "pins-plugin-ninaapi"
+
+        shopt -s nullglob
+        packages=(artifacts/pins_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb)
+        if [ "${#packages[@]}" -ne 2 ]; then
+          echo "Expected one PINS package and one ninaAPI package." >&2
+          exit 1
+        fi
+        for package_path in "${packages[@]}"; do
+          debian_validate_package "$package_path" yes
+          debian_assert_elf_closure "$package_path" "${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
+        done
+        apt-get install --dry-run --no-install-recommends "$(readlink -f "${packages[0]}")" "$(readlink -f "${packages[1]}")"
+        {
+          echo "release_files<<EOF"
+          sed 's|^|source/|' artifacts/release-files.txt
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+    - name: Upload unstable package artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: unstable-debs
+        path: ${{ steps.build.outputs.release_files }}
+        if-no-files-found: error
+        retention-days: 30
+    - name: Publish combined unstable prerelease
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.meta.outputs.release_tag }}
+        target_commitish: ${{ github.sha }}
+        name: PINS + ninaAPI unstable ${{ steps.meta.outputs.release_tag }}
+        prerelease: true
+        make_latest: 'false'
+        fail_on_unmatched_files: true
+        body: |
+          Unstable Debian Trixie ARM64 packages built together from both unstable branches.
+
+          PINS: https://github.com/nitr57/pins/commit/${{ steps.meta.outputs.pins_sha }}
+          ninaAPI: https://github.com/nitr57/ninaAPI/commit/${{ steps.meta.outputs.ninaapi_sha }}
+
+          Install both packages together. The ninaAPI package requires the PINS version included in this release.
+        files: ${{ steps.build.outputs.release_files }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

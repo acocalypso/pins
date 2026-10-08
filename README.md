@@ -6,6 +6,23 @@ This repository contains the source code for **PI.N.S. (PI 'N' Stars)**, a Linux
 
 PI.N.S. aims to bring the powerful features of N.I.N.A. to Linux users.
 
+## Combined unstable packages
+
+Run **Build PINS and ninaAPI unstable packages** from the GitHub Actions tab to
+build Debian Trixie ARM64 packages from `nitr57/pins@unstable` and
+`nitr57/ninaAPI@unstable`. The workflow builds ninaAPI against the same PINS
+source and publishes one GitHub prerelease in the repository running the workflow.
+
+Each prerelease contains `pins` and `pins-plugin-ninaapi` Debian packages and
+their SHA-256 checksums. The release description records both source commit IDs.
+Versions include `~unstable` and a unique run identifier; ninaAPI requires the
+exact PINS package version from that release. Install both downloaded packages
+together with `sudo apt install ./pins_*.deb ./pins-plugin-ninaapi_*.deb`.
+
+The workflow is started manually and publishes only after both packages pass
+dependency validation and a combined APT installation dry run. It is defined in
+[build-unstable-packages.yml](.github/workflows/build-unstable-packages.yml).
+
 ---
 
 ## 🧭 About
