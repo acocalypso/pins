@@ -1,5 +1,5 @@
 # Copied from build-single-package.yml for a combined upstream unstable release.
-name: Build PINS and ninaAPI unstable packages
+name: Build PINS, ninaAPI and Touch-N-Stars unstable packages
 'on':
   workflow_dispatch: null
 permissions:
@@ -84,6 +84,40 @@ jobs:
         ref: unstable
         path: source/NINA.Plugins/ninaAPI
         persist-credentials: false
+    - name: Checkout Touch-N-Stars plugin unstable
+      uses: actions/checkout@v4
+      with:
+        repository: nitr57/N.I.N.A-Plugin-for-Touch-N-Stars
+        ref: unstable
+        path: source/NINA.Plugins/Touch-N-Stars
+        persist-credentials: false
+    - name: Checkout Touch-N-Stars frontend develop
+      uses: actions/checkout@v4
+      with:
+        repository: Touch-N-Stars/Touch-N-Stars
+        ref: develop
+        path: frontend
+        persist-credentials: false
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: npm
+        cache-dependency-path: frontend/package-lock.json
+    - name: Build Touch-N-Stars frontend
+      working-directory: frontend
+      env:
+        HUSKY: '0'
+      run: |
+        set -euo pipefail
+        # The frontend lockfile contains a public GitHub dependency resolved over SSH.
+        git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+        npm ci
+        npm run build
+        test -s dist/index.html
+        app_dir="$GITHUB_WORKSPACE/source/NINA.Plugins/Touch-N-Stars/Touch-N-Stars/app"
+        mkdir -p "$app_dir"
+        rsync -a --delete dist/ "$app_dir/"
     - name: Test Debian packaging helpers
       run: bash "$GITHUB_WORKSPACE/workflow-tooling/.github/scripts/test-debian-package-helpers.sh"
     - name: Setup .NET 10 SDK
@@ -109,6 +143,8 @@ jobs:
         echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
         echo "pins_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "ninaapi_sha=$(git -C NINA.Plugins/ninaAPI rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "touch_plugin_sha=$(git -C NINA.Plugins/Touch-N-Stars rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "touch_frontend_sha=$(git -C "$GITHUB_WORKSPACE/frontend" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
     - name: Prepare core linux-arm64 publish payload
       shell: bash
       run: |
@@ -184,7 +220,7 @@ jobs:
         publish_root="${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
         mkdir -p "$publish_root/External"
         rsync -a NINA/External/ "$publish_root/External/"
-    - name: Build and validate both Debian packages
+    - name: Build and validate all Debian packages
       id: build
       run: |
         set -euo pipefail
@@ -402,17 +438,24 @@ jobs:
         build_pins_package
         build_plugin_package "NINA.Plugins/ninaAPI/ninaAPI/ninaAPI.csproj" "ninaAPI" "pins-plugin-ninaapi"
 
+        build_plugin_package "NINA.Plugins/Touch-N-Stars/Touch-N-Stars/Touch-N-Stars.csproj" "Touch-N-Stars" "pins-plugin-touch-n-stars"
+        touch_install_root="${PLUGIN_DEB_BASE}/pins-plugin-touch-n-stars${PLUGINS_INSTALL_BASE}/Touch-N-Stars"
+        test -s "$touch_install_root/TouchNStars.dll"
+        test -s "$touch_install_root/app/index.html"
+
         shopt -s nullglob
-        packages=(artifacts/pins_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb)
-        if [ "${#packages[@]}" -ne 2 ]; then
-          echo "Expected one PINS package and one ninaAPI package." >&2
+        packages=(artifacts/pins_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb)
+        if [ "${#packages[@]}" -ne 3 ]; then
+          echo "Expected one PINS package, one ninaAPI package and one Touch-N-Stars package." >&2
           exit 1
         fi
+        install_packages=()
         for package_path in "${packages[@]}"; do
+          install_packages+=("$(readlink -f "$package_path")")
           debian_validate_package "$package_path" yes
           debian_assert_elf_closure "$package_path" "${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
         done
-        apt-get install --dry-run --no-install-recommends "$(readlink -f "${packages[0]}")" "$(readlink -f "${packages[1]}")"
+        apt-get install --dry-run --no-install-recommends "${install_packages[@]}"
         {
           echo "release_files<<EOF"
           sed 's|^|source/|' artifacts/release-files.txt
@@ -430,17 +473,20 @@ jobs:
       with:
         tag_name: ${{ steps.meta.outputs.release_tag }}
         target_commitish: ${{ github.sha }}
-        name: PINS + ninaAPI unstable ${{ steps.meta.outputs.release_tag }}
+        name: PINS + ninaAPI + Touch-N-Stars unstable ${{ steps.meta.outputs.release_tag }}
         prerelease: true
         make_latest: 'false'
         fail_on_unmatched_files: true
         body: |
-          Unstable Debian Trixie ARM64 packages built together from both unstable branches.
+          Unstable Debian Trixie ARM64 packages built together from the PINS and plugin unstable branches, with the Touch-N-Stars frontend from develop.
 
           PINS: https://github.com/nitr57/pins/commit/${{ steps.meta.outputs.pins_sha }}
           ninaAPI: https://github.com/nitr57/ninaAPI/commit/${{ steps.meta.outputs.ninaapi_sha }}
 
-          Install both packages together. The ninaAPI package requires the PINS version included in this release.
+          Touch-N-Stars plugin: https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars/commit/${{ steps.meta.outputs.touch_plugin_sha }}
+          Touch-N-Stars frontend: https://github.com/Touch-N-Stars/Touch-N-Stars/commit/${{ steps.meta.outputs.touch_frontend_sha }}
+
+          Install all three packages together. Both plugins require the PINS version included in this release.
         files: ${{ steps.build.outputs.release_files }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

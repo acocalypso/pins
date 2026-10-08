@@ -323,6 +323,7 @@ jobs:
             cp scripts/install-indi-package.sh build/usr/local/bin/
             cp scripts/ensure-required-packages.sh build/usr/local/bin/
             cp scripts/manage-plugin.sh build/usr/local/bin/
+            cp scripts/manage-repository.py build/usr/local/bin/
             cp scripts/collect-diagnostics.sh build/usr/local/bin/
             cp scripts/install-astap-star-database.sh build/usr/local/bin/
             cp scripts/ensure-astap-data-links.sh build/usr/local/bin/

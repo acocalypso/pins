@@ -1163,6 +1163,7 @@ build_pinsdaemon_package() {
   cp README.md build/opt/pinsdaemon/
 
   cp scripts/system-upgrade.sh build/usr/local/bin/
+  cp scripts/manage-repository.py build/usr/local/bin/
   cp scripts/manage-samba.sh build/usr/local/bin/
   cp scripts/wifi-connect.sh build/usr/local/bin/
   cp scripts/wifi-automanage.py build/usr/local/bin/

@@ -8,20 +8,27 @@ PI.N.S. aims to bring the powerful features of N.I.N.A. to Linux users.
 
 ## Combined unstable packages
 
-Run **Build PINS and ninaAPI unstable packages** from the GitHub Actions tab to
-build Debian Trixie ARM64 packages from `nitr57/pins@unstable` and
-`nitr57/ninaAPI@unstable`. The workflow builds ninaAPI against the same PINS
-source and publishes one GitHub prerelease in the repository running the workflow.
+Run **Build PINS, ninaAPI and Touch-N-Stars unstable packages** from the GitHub
+Actions tab to build Debian Trixie ARM64 packages from `nitr57/pins@unstable`,
+`nitr57/ninaAPI@unstable` and `nitr57/N.I.N.A-Plugin-for-Touch-N-Stars@unstable`.
+The Touch-N-Stars plugin bundles the frontend from
+`Touch-N-Stars/Touch-N-Stars@develop`. Both plugins build against the same PINS
+source and publish in one GitHub prerelease in the repository running the workflow.
 
-Each prerelease contains `pins` and `pins-plugin-ninaapi` Debian packages and
-their SHA-256 checksums. The release description records both source commit IDs.
-Versions include `~unstable` and a unique run identifier; ninaAPI requires the
-exact PINS package version from that release. Install both downloaded packages
-together with `sudo apt install ./pins_*.deb ./pins-plugin-ninaapi_*.deb`.
+Each prerelease contains `pins`, `pins-plugin-ninaapi` and
+`pins-plugin-touch-n-stars` Debian packages and their SHA-256 checksums. The
+release description records all four source commit IDs. Versions include
+`~unstable` and a unique run identifier; both plugins require the exact PINS
+package version from that release. Install all three downloaded packages together:
 
-The workflow is started manually and publishes only after both packages pass
-dependency validation and a combined APT installation dry run. It is defined in
-[build-unstable-packages.yml](.github/workflows/build-unstable-packages.yml).
+```sh
+sudo apt install ./pins_*.deb ./pins-plugin-ninaapi_*.deb ./pins-plugin-touch-n-stars_*.deb
+```
+
+The workflow is started manually and publishes only after all three packages pass
+dependency validation and a combined APT installation dry run. It also checks that
+the Touch-N-Stars package includes its plugin DLL and built frontend. It is defined
+in [build-unstable-packages.yml](.github/workflows/build-unstable-packages.yml).
 
 ---
 
