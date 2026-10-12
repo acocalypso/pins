@@ -1,7 +1,20 @@
 # Copied from build-single-package.yml for a combined upstream unstable release.
-name: Build PINS, ninaAPI and Touch-N-Stars unstable packages
+name: Build PINS, plugins and local AI unstable packages
 'on':
-  workflow_dispatch: null
+  workflow_dispatch:
+    inputs:
+      ai_ref:
+        description: pins-ai revision (resolved SHA recorded in release)
+        default: main
+        type: string
+      frontend_repository:
+        description: Frontend repository containing MCP chat
+        default: acocalypso/Touch-N-Stars
+        type: string
+      frontend_ref:
+        description: Frontend revision
+        default: develop
+        type: string
 permissions:
   contents: write
 concurrency:
@@ -62,6 +75,7 @@ jobs:
           libssl-dev \
           libicu-dev \
           rsync
+        apt-get install -y --no-install-recommends python3
       working-directory: ${{ github.workspace }}
     - name: Checkout packaging tooling
       uses: actions/checkout@v4
@@ -94,9 +108,17 @@ jobs:
     - name: Checkout Touch-N-Stars frontend develop
       uses: actions/checkout@v4
       with:
-        repository: Touch-N-Stars/Touch-N-Stars
-        ref: develop
+        repository: ${{ inputs.frontend_repository || 'acocalypso/Touch-N-Stars' }}
+        ref: ${{ inputs.frontend_ref || 'develop' }}
         path: frontend
+        persist-credentials: false
+    - name: Checkout PINS AI plugin and asset manifest
+      uses: actions/checkout@v4
+      with:
+        repository: acocalypso/pins-ai
+        ref: ${{ inputs.ai_ref || 'main' }}
+        path: pins-ai
+        lfs: true
         persist-credentials: false
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -145,6 +167,7 @@ jobs:
         echo "ninaapi_sha=$(git -C NINA.Plugins/ninaAPI rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "touch_plugin_sha=$(git -C NINA.Plugins/Touch-N-Stars rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "touch_frontend_sha=$(git -C "$GITHUB_WORKSPACE/frontend" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "ai_sha=$(git -C "$GITHUB_WORKSPACE/pins-ai" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
     - name: Prepare core linux-arm64 publish payload
       shell: bash
       run: |
@@ -443,10 +466,19 @@ jobs:
         test -s "$touch_install_root/TouchNStars.dll"
         test -s "$touch_install_root/app/index.html"
 
+        # Build against the same host DLLs. This package includes verified model,
+        # separate adapter, pinned ARM64 runtime and licenses; no install-time downloads.
+        bash "$GITHUB_WORKSPACE/pins-ai/scripts/build-debian.sh" \
+          "$(pwd)/${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}" "$(get_core_version)" \
+          "$(pwd)/${PLUGIN_ARTIFACT_DIR}" "0.2.0~unstable+${CI_BUILD_NUMBER}"
+        ai_deb="${PLUGIN_ARTIFACT_DIR}/pins-plugin-ai_0.2.0~unstable+${CI_BUILD_NUMBER}_arm64.deb"
+        echo "$ai_deb" >> artifacts/release-files.txt
+        echo "$ai_deb.sha256" >> artifacts/release-files.txt
+
         shopt -s nullglob
-        packages=(artifacts/pins_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb)
-        if [ "${#packages[@]}" -ne 3 ]; then
-          echo "Expected one PINS package, one ninaAPI package and one Touch-N-Stars package." >&2
+        packages=(artifacts/pins_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-ai_*.deb)
+        if [ "${#packages[@]}" -ne 4 ]; then
+          echo "Expected PINS, ninaAPI, Touch-N-Stars and bundled AI packages." >&2
           exit 1
         fi
         install_packages=()
@@ -473,7 +505,7 @@ jobs:
       with:
         tag_name: ${{ steps.meta.outputs.release_tag }}
         target_commitish: ${{ github.sha }}
-        name: PINS + ninaAPI + Touch-N-Stars unstable ${{ steps.meta.outputs.release_tag }}
+        name: PINS + ninaAPI + Touch-N-Stars + Local AI unstable ${{ steps.meta.outputs.release_tag }}
         prerelease: true
         make_latest: 'false'
         fail_on_unmatched_files: true
@@ -484,9 +516,14 @@ jobs:
           ninaAPI: https://github.com/nitr57/ninaAPI/commit/${{ steps.meta.outputs.ninaapi_sha }}
 
           Touch-N-Stars plugin: https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars/commit/${{ steps.meta.outputs.touch_plugin_sha }}
-          Touch-N-Stars frontend: https://github.com/Touch-N-Stars/Touch-N-Stars/commit/${{ steps.meta.outputs.touch_frontend_sha }}
+          Touch-N-Stars frontend: https://github.com/${{ inputs.frontend_repository || 'acocalypso/Touch-N-Stars' }}/commit/${{ steps.meta.outputs.touch_frontend_sha }}
+          PINS AI: https://github.com/acocalypso/pins-ai/commit/${{ steps.meta.outputs.ai_sha }}
 
-          Install all three packages together. Both plugins require the PINS version included in this release.
+          Install all four packages together. Plugins require the exact PINS version included in this release.
+          AI includes the diagnostic checkpoint-700 model/adapter, native runtime, hashes and licenses.
+          Install when PINS is idle: the core package stops/restarts the service during upgrade.
+          Existing AI settings and MCP tokens are preserved; missing chat enablement is migrated.
+          Restart PINS after all four packages finish installing to load their final configuration.
         files: ${{ steps.build.outputs.release_files }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
