@@ -468,8 +468,8 @@ jobs:
 
         # Build against the same host DLLs. This package includes verified model,
         # separate adapter, pinned ARM64 runtime and licenses; no install-time downloads.
-        dotnet run --project "$GITHUB_WORKSPACE/pins-ai/tests/Mcp.GatewayTests" -c Release -- "$GITHUB_WORKSPACE/pins-ai/PINS_MCP_AI_Training_v2/data/verified-tools-list.json"
-        bash "$GITHUB_WORKSPACE/pins-ai/scripts/build-debian.sh" \
+        dotnet run --project "$GITHUB_WORKSPACE/pins-ai/plugin/tests/Mcp.GatewayTests" -c Release -- "$GITHUB_WORKSPACE/pins-ai/training/datasets/mcp-v2/data/verified-tools-list.json"
+        bash "$GITHUB_WORKSPACE/pins-ai/plugin/scripts/build-debian.sh" \
           "$(pwd)/${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}" "$(get_core_version)" \
           "$(pwd)/${PLUGIN_ARTIFACT_DIR}" "0.2.0~unstable+${CI_BUILD_NUMBER}"
         ai_deb="${PLUGIN_ARTIFACT_DIR}/pins-plugin-ai_0.2.0~unstable+${CI_BUILD_NUMBER}_arm64.deb"
