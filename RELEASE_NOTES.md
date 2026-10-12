@@ -19,7 +19,6 @@ This allows you to safely return to a stable release if needed.
 # Version 3.3 NIGHTLY
 
 ## General
-- Unstable package workflow now includes PINS Local AI with its verified Qwen3 base, diagnostic checkpoint-700 adapter, pinned ARM64 runtime and licenses, alongside the MCP chat frontend from the selected develop repository.
 - PINS daemon package builds now include the helper for switching between stable and unstable APT repositories.
 - Added a manual workflow that builds PINS, ninaAPI and the Touch-N-Stars plugin from their upstream unstable branches, bundles the Touch-N-Stars develop frontend, and publishes all three ARM64 Debian packages in one prerelease.
 - The application now runs on .NET 10, bringing performance improvements and access to the latest runtime features.
