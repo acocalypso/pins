@@ -2,19 +2,6 @@
 name: Build PINS, plugins and local AI unstable packages
 'on':
   workflow_dispatch:
-    inputs:
-      ai_ref:
-        description: pins-ai revision (resolved SHA recorded in release)
-        default: main
-        type: string
-      frontend_repository:
-        description: Frontend repository containing MCP chat
-        default: acocalypso/Touch-N-Stars
-        type: string
-      frontend_ref:
-        description: Frontend revision
-        default: develop
-        type: string
 permissions:
   contents: write
 concurrency:
@@ -108,15 +95,15 @@ jobs:
     - name: Checkout Touch-N-Stars frontend develop
       uses: actions/checkout@v4
       with:
-        repository: ${{ inputs.frontend_repository || 'acocalypso/Touch-N-Stars' }}
-        ref: ${{ inputs.frontend_ref || 'develop' }}
+        repository: Touch-N-Stars/Touch-N-Stars
+        ref: develop
         path: frontend
         persist-credentials: false
     - name: Checkout PINS AI plugin and asset manifest
       uses: actions/checkout@v4
       with:
         repository: acocalypso/pins-ai
-        ref: ${{ inputs.ai_ref || 'main' }}
+        ref: main
         path: pins-ai
         lfs: true
         persist-credentials: false
@@ -517,7 +504,7 @@ jobs:
           ninaAPI: https://github.com/nitr57/ninaAPI/commit/${{ steps.meta.outputs.ninaapi_sha }}
 
           Touch-N-Stars plugin: https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars/commit/${{ steps.meta.outputs.touch_plugin_sha }}
-          Touch-N-Stars frontend: https://github.com/${{ inputs.frontend_repository || 'acocalypso/Touch-N-Stars' }}/commit/${{ steps.meta.outputs.touch_frontend_sha }}
+          Touch-N-Stars frontend: https://github.com/Touch-N-Stars/Touch-N-Stars/commit/${{ steps.meta.outputs.touch_frontend_sha }}
           PINS AI: https://github.com/acocalypso/pins-ai/commit/${{ steps.meta.outputs.ai_sha }}
 
           Install all four packages together. Plugins require the exact PINS version included in this release.
