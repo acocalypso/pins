@@ -21,6 +21,7 @@ env:
   PLUGIN_DEB_BASE: artifacts/plugin-debroot
   PLUGIN_ARTIFACT_DIR: artifacts/plugins
   PLUGIN_MSBUILD_ARGS: -p:DisableImplicitSystemDrawingReference=true -p:Platform=AnyCPU -p:PlatformTarget=AnyCPU -p:SatelliteResourceLanguages="en-US"
+  CustomAfterMicrosoftCommonTargets: ${{ github.workspace }}/workflow-tooling/.github/scripts/packaging-compat.targets
 jobs:
   build:
     name: Build and release unstable ARM64 packages
@@ -140,6 +141,8 @@ jobs:
         key: ${{ runner.os }}-${{ runner.arch }}-unstable-nuget-${{ hashFiles('source/**/*.csproj', 'source/**/*.props', 'source/**/*.targets', 'source/global.json',
           'source/**/nuget.config') }}
         restore-keys: ${{ runner.os }}-${{ runner.arch }}-unstable-nuget-
+    - name: Verify pinned Linux drawing compatibility references
+      run: python3 "$GITHUB_WORKSPACE/workflow-tooling/.github/scripts/test-packaging-compat.py"
     - name: Determine unstable release metadata
       id: meta
       run: |
@@ -509,6 +512,7 @@ jobs:
 
           Install all four packages together. Plugins require the exact PINS version included in this release.
           AI includes the diagnostic checkpoint-700 model/adapter, native runtime, hashes and licenses.
+          Excluded System.Drawing.Common compatibility references are pinned to 10.0.12 for reproducible Linux restores.
           Install when PINS is idle: the core package stops/restarts the service during upgrade.
           Existing AI settings and MCP tokens are preserved; missing chat enablement is migrated.
           Restart PINS after all four packages finish installing to load their final configuration.

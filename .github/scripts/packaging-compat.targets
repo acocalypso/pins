@@ -1,0 +1,10 @@
+<Project>
+  <!-- Linux uses our drawing compatibility types, not these excluded assets.
+       Pin only the floating compatibility references: publication of a new
+       package must not change the restore graph between identical CI runs. -->
+  <ItemGroup>
+    <PackageReference Update="System.Drawing.Common">
+      <Version Condition="'%(PackageReference.Version)' == '*' And '%(PackageReference.ExcludeAssets)' == 'all'">[10.0.12]</Version>
+    </PackageReference>
+  </ItemGroup>
+</Project>
