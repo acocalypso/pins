@@ -407,6 +407,7 @@ jobs:
           chmod 755 build/usr/local/bin/manage-swap.py
           cp scripts/wifi-connect.sh build/usr/local/bin/
           cp scripts/pins-wifi-profile.py build/usr/local/bin/
+          cp scripts/pins-wifi-networks.py build/usr/local/bin/
           cp scripts/pins-wifi-viability.py build/usr/local/bin/
           cp scripts/wifi-automanage.py build/usr/local/bin/
           cp scripts/wifi-scan.py build/usr/local/bin/
@@ -428,6 +429,7 @@ jobs:
           cp scripts/90-pins-wifi-recovery build/etc/NetworkManager/dispatcher.d/
           chmod 755 build/etc/NetworkManager/dispatcher.d/90-pins-wifi-recovery
           chmod 755 build/usr/local/bin/pins-wifi-profile.py
+          chmod 755 build/usr/local/bin/pins-wifi-networks.py
           chmod 755 build/usr/local/bin/pins-wifi-viability.py
           
           # Systemd
@@ -475,6 +477,7 @@ jobs:
             ./usr/local/bin/manage-plugin.sh
             ./usr/local/bin/pins-rig-name
             ./usr/local/bin/pins-wifi-profile.py
+            ./usr/local/bin/pins-wifi-networks.py
             ./usr/local/bin/pins-wifi-viability.py
             ./usr/local/bin/pins-wifi-watchdog.sh
           )
