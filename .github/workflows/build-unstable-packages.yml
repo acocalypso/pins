@@ -93,6 +93,13 @@ jobs:
         ref: unstable
         path: source/NINA.Plugins/Touch-N-Stars
         persist-credentials: false
+    - name: Checkout LuckyCapture plugin
+      uses: actions/checkout@v4
+      with:
+        repository: acocalypso/pins.LuckyCapture
+        ref: main
+        path: source/NINA.Plugins/pins.LuckyCapture
+        persist-credentials: false
     - name: Checkout Touch-N-Stars frontend develop
       uses: actions/checkout@v4
       with:
@@ -156,6 +163,7 @@ jobs:
         echo "pins_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "ninaapi_sha=$(git -C NINA.Plugins/ninaAPI rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "touch_plugin_sha=$(git -C NINA.Plugins/Touch-N-Stars rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "luckycapture_sha=$(git -C NINA.Plugins/pins.LuckyCapture rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "touch_frontend_sha=$(git -C "$GITHUB_WORKSPACE/frontend" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "ai_sha=$(git -C "$GITHUB_WORKSPACE/pins-ai" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
     - name: Prepare core linux-arm64 publish payload
@@ -318,6 +326,11 @@ jobs:
           local install_folder="$2"
           local deb_package="$3"
           local assembly_regex=""
+          local runtime_dependencies="${4:-}"
+          local source_args=()
+          if [ "$deb_package" = "pins-plugin-luckycapture" ]; then
+            source_args=(-p:PinsRoot="$(pwd)")
+          fi
 
           local plugin_dir
           plugin_dir=$(dirname "$project_path")
@@ -361,8 +374,8 @@ jobs:
 
           plugin_version="${plugin_version}~unstable+${CI_BUILD_NUMBER}"
 
-          dotnet restore "$project_path" -r "${TARGET_RUNTIME}"
-          JavaPath=$(which java) dotnet build "$project_path" -c "${BUILD_CONFIGURATION}" -f "${PLUGIN_TARGET_FRAMEWORK}" -r "${TARGET_RUNTIME}" --no-restore ${PLUGIN_MSBUILD_ARGS}
+          dotnet restore "$project_path" -r "${TARGET_RUNTIME}" "${source_args[@]}"
+          JavaPath=$(which java) dotnet build "$project_path" -c "${BUILD_CONFIGURATION}" -f "${PLUGIN_TARGET_FRAMEWORK}" -r "${TARGET_RUNTIME}" --no-restore ${PLUGIN_MSBUILD_ARGS} "${source_args[@]}"
 
           tfm_dir="$plugin_dir/bin/${BUILD_CONFIGURATION}/${PLUGIN_TARGET_FRAMEWORK}/${TARGET_RUNTIME}"
           if [ ! -d "$tfm_dir" ]; then
@@ -380,7 +393,10 @@ jobs:
           mkdir -p "$install_root"
 
           core_publish_dir="${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}"
-          if [ -d "$core_publish_dir" ]; then
+          if [ "$deb_package" = "pins-plugin-luckycapture" ]; then
+            # PINS supplies the host assemblies; ship only this plugin's own files.
+            rsync -a --include='/PINS.LuckyCapture.*' --exclude='*' "$tfm_dir/" "$install_root/"
+          elif [ -d "$core_publish_dir" ]; then
             exclude_list="$(pwd)/core_excludes.txt"
             (cd "$core_publish_dir" && find . -type f -printf '%P\n') > "$exclude_list"
             rsync -a --exclude-from="$exclude_list" "$tfm_dir/" "$install_root/"
@@ -415,7 +431,7 @@ jobs:
           else
             shlib_depends=$(debian_generate_shlib_depends "$deb_package" "$deb_root")
           fi
-          package_depends=$(debian_merge_depends "$shlib_depends" "pins (= $(get_core_version))")
+          package_depends=$(debian_merge_depends "pins (= $(get_core_version))" "$shlib_depends" "$runtime_dependencies")
 
           {
             echo "Package: ${deb_package}"
@@ -456,6 +472,11 @@ jobs:
         test -s "$touch_install_root/TouchNStars.dll"
         test -s "$touch_install_root/app/index.html"
 
+        build_plugin_package "NINA.Plugins/pins.LuckyCapture/src/PINS.LuckyCapture/PINS.LuckyCapture.csproj" "PINS.LuckyCapture" "pins-plugin-luckycapture" "ffmpeg"
+        lucky_install_root="${PLUGIN_DEB_BASE}/pins-plugin-luckycapture${PLUGINS_INSTALL_BASE}/PINS.LuckyCapture"
+        test -s "$lucky_install_root/PINS.LuckyCapture.dll"
+        test ! -e "$lucky_install_root/NINA.Plugin.dll"
+
         # Build against the same host DLLs. This package includes verified model,
         # separate adapter, pinned ARM64 runtime and licenses; no install-time downloads.
         dotnet run --project "$GITHUB_WORKSPACE/pins-ai/plugin/tests/Mcp.GatewayTests" -c Release -- "$GITHUB_WORKSPACE/pins-ai/training/dataset/data/verified-tools-list.json"
@@ -467,9 +488,9 @@ jobs:
         echo "$ai_deb.sha256" >> artifacts/release-files.txt
 
         shopt -s nullglob
-        packages=(artifacts/pins_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-ai_*.deb)
-        if [ "${#packages[@]}" -ne 4 ]; then
-          echo "Expected PINS, ninaAPI, Touch-N-Stars and bundled AI packages." >&2
+        packages=(artifacts/pins_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-ai_*.deb artifacts/plugins/pins-plugin-luckycapture_*.deb)
+        if [ "${#packages[@]}" -ne 5 ]; then
+          echo "Expected PINS, ninaAPI, Touch-N-Stars, LuckyCapture and bundled AI packages." >&2
           exit 1
         fi
         install_packages=()
@@ -496,26 +517,28 @@ jobs:
       with:
         tag_name: ${{ steps.meta.outputs.release_tag }}
         target_commitish: ${{ github.sha }}
-        name: PINS + ninaAPI + Touch-N-Stars + Local AI unstable ${{ steps.meta.outputs.release_tag }}
+        name: PINS + ninaAPI + Touch-N-Stars + LuckyCapture + Local AI unstable ${{ steps.meta.outputs.release_tag }}
         prerelease: true
         make_latest: 'false'
         fail_on_unmatched_files: true
         body: |
-          Unstable Debian Trixie ARM64 packages built together from the PINS and plugin unstable branches, with the Touch-N-Stars frontend from develop.
+          Unstable Debian Trixie ARM64 packages built together from the PINS and plugin unstable branches, with the Touch-N-Stars frontend from develop and LuckyCapture from main.
 
           PINS: https://github.com/nitr57/pins/commit/${{ steps.meta.outputs.pins_sha }}
           ninaAPI: https://github.com/nitr57/ninaAPI/commit/${{ steps.meta.outputs.ninaapi_sha }}
 
           Touch-N-Stars plugin: https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars/commit/${{ steps.meta.outputs.touch_plugin_sha }}
           Touch-N-Stars frontend: https://github.com/Touch-N-Stars/Touch-N-Stars/commit/${{ steps.meta.outputs.touch_frontend_sha }}
+          LuckyCapture: https://github.com/acocalypso/pins.LuckyCapture/commit/${{ steps.meta.outputs.luckycapture_sha }}
           PINS AI: https://github.com/acocalypso/pins-ai/commit/${{ steps.meta.outputs.ai_sha }}
 
-          Install all four packages together. Plugins require the exact PINS version included in this release.
+          Install all five packages together. Plugins require the exact PINS version included in this release.
+          LuckyCapture requires FFmpeg for lossless AVI capture.
           AI includes the diagnostic checkpoint-700 model/adapter, native runtime, hashes and licenses.
           Excluded System.Drawing.Common compatibility references are pinned to 10.0.12 for reproducible Linux restores.
           Install when PINS is idle: the core package stops/restarts the service during upgrade.
           Existing AI settings and MCP tokens are preserved; missing chat enablement is migrated.
-          Restart PINS after all four packages finish installing to load their final configuration.
+          Restart PINS after all five packages finish installing to load their final configuration.
         files: ${{ steps.build.outputs.release_files }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
