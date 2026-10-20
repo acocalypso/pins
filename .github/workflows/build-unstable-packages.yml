@@ -103,8 +103,8 @@ jobs:
     - name: Checkout Touch-N-Stars LuckyCapture frontend
       uses: actions/checkout@v4
       with:
-        repository: acocalypso/Touch-N-Stars
-        ref: feat/luckycapture
+        repository: Touch-N-Stars/Touch-N-Stars
+        ref: develop
         path: frontend
         persist-credentials: false
     - name: Checkout PINS AI plugin and asset manifest
