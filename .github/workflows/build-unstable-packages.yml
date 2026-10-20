@@ -93,17 +93,17 @@ jobs:
         ref: unstable
         path: source/NINA.Plugins/Touch-N-Stars
         persist-credentials: false
-    - name: Checkout LuckyCapture plugin
+    - name: Checkout LuckyCapture plugin unstable
       uses: actions/checkout@v4
       with:
         repository: acocalypso/pins.LuckyCapture
-        ref: main
+        ref: unstable
         path: source/NINA.Plugins/pins.LuckyCapture
         persist-credentials: false
     - name: Checkout Touch-N-Stars frontend develop
       uses: actions/checkout@v4
       with:
-        repository: Touch-N-Stars/Touch-N-Stars
+        repository: acocalypso/Touch-N-Stars
         ref: develop
         path: frontend
         persist-credentials: false
@@ -522,7 +522,7 @@ jobs:
         make_latest: 'false'
         fail_on_unmatched_files: true
         body: |
-          Unstable Debian Trixie ARM64 packages built together from the PINS and plugin unstable branches, with the Touch-N-Stars frontend from develop and LuckyCapture from main.
+          Unstable Debian Trixie ARM64 packages built together from the PINS and plugin unstable branches, with the Touch-N-Stars frontend from acocalypso/Touch-N-Stars develop.
 
           PINS: https://github.com/nitr57/pins/commit/${{ steps.meta.outputs.pins_sha }}
           ninaAPI: https://github.com/nitr57/ninaAPI/commit/${{ steps.meta.outputs.ninaapi_sha }}
