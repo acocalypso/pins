@@ -138,6 +138,13 @@ jobs:
         ref: unstable
         path: source/NINA.Plugins/pins.LuckyCapture
         persist-credentials: false
+    - name: Checkout LiveStack plugin unstable
+      uses: actions/checkout@v4
+      with:
+        repository: nitr57/nina.plugin.livestack
+        ref: unstable
+        path: source/NINA.Plugins/LiveStack
+        persist-credentials: false
     - name: Checkout Touch-N-Stars LuckyCapture frontend
       uses: actions/checkout@v4
       with:
@@ -203,6 +210,7 @@ jobs:
         echo "ninaapi_sha=$(git -C NINA.Plugins/ninaAPI rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "touch_plugin_sha=$(git -C NINA.Plugins/Touch-N-Stars rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "luckycapture_sha=$(git -C NINA.Plugins/pins.LuckyCapture rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "livestack_sha=$(git -C NINA.Plugins/LiveStack rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "touch_frontend_sha=$(git -C "$GITHUB_WORKSPACE/frontend" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "ai_sha=$(git -C "$GITHUB_WORKSPACE/pins-ai" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
     - name: Prepare core linux-arm64 publish payload
@@ -426,38 +434,43 @@ jobs:
           local plugin_dir_abs
           plugin_dir_abs="$(pwd)/$plugin_dir"
 
-          local assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
-          if [ ! -f "$assembly_info" ]; then
-            assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
-          fi
-          if [ -z "$assembly_info" ] || [ ! -f "$assembly_info" ]; then
-            echo "AssemblyInfo.cs not found for ${deb_package}" >&2
-            return 1
-          fi
-
-          local assembly_version_line
-          if [ -n "$assembly_regex" ]; then
-            assembly_version_line=$(grep -E "$assembly_regex" "$assembly_info" | head -n 1 || true)
-          else
-            assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyInformationalVersion' "$assembly_info" | head -n 1 || true)
-          fi
-
-          if [ -z "$assembly_version_line" ]; then
-            assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyFileVersion' "$assembly_info" | head -n 1 || true)
-          fi
-
-          if [ -z "$assembly_version_line" ]; then
-            assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyVersion' "$assembly_info" | head -n 1 || true)
-          fi
-
-          if [ -z "$assembly_version_line" ]; then
-            assembly_version_line=$(grep -E 'AssemblyInformationalVersion|AssemblyFileVersion|AssemblyVersion' "$assembly_info" | head -n 1 || true)
-          fi
-
           local plugin_version
-          plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^"]+)".*/\1/' | head -n 1 | tr -d '\r\n')
+          if [ "$deb_package" = "pins-plugin-livestack" ]; then
+            # LiveStack generates assembly attributes from the evaluated project version.
+            plugin_version=$(dotnet msbuild "$project_path" -nologo -getProperty:Version)
+          else
+            local assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
+            if [ ! -f "$assembly_info" ]; then
+              assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
+            fi
+            if [ -z "$assembly_info" ] || [ ! -f "$assembly_info" ]; then
+              echo "AssemblyInfo.cs not found for ${deb_package}" >&2
+              return 1
+            fi
+
+            local assembly_version_line
+            if [ -n "$assembly_regex" ]; then
+              assembly_version_line=$(grep -E "$assembly_regex" "$assembly_info" | head -n 1 || true)
+            else
+              assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyInformationalVersion' "$assembly_info" | head -n 1 || true)
+            fi
+
+            if [ -z "$assembly_version_line" ]; then
+              assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyFileVersion' "$assembly_info" | head -n 1 || true)
+            fi
+
+            if [ -z "$assembly_version_line" ]; then
+              assembly_version_line=$(grep -E '^\s*\[assembly:\s*AssemblyVersion' "$assembly_info" | head -n 1 || true)
+            fi
+
+            if [ -z "$assembly_version_line" ]; then
+              assembly_version_line=$(grep -E 'AssemblyInformationalVersion|AssemblyFileVersion|AssemblyVersion' "$assembly_info" | head -n 1 || true)
+            fi
+
+            plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^"]+)".*/\1/' | head -n 1 | tr -d '\r\n')
+          fi
           if [ -z "$plugin_version" ]; then
-            echo "No supported assembly version attribute found in $assembly_info" >&2
+            echo "Could not determine plugin version for $project_path" >&2
             return 1
           fi
 
@@ -567,6 +580,10 @@ jobs:
         test -s "$lucky_install_root/PINS.LuckyCapture.dll"
         test ! -e "$lucky_install_root/NINA.Plugin.dll"
 
+        build_plugin_package "NINA.Plugins/LiveStack/nina.plugin.livestack.csproj" "LiveStack" "pins-plugin-livestack"
+        livestack_install_root="${PLUGIN_DEB_BASE}/pins-plugin-livestack${PLUGINS_INSTALL_BASE}/LiveStack"
+        test -s "$livestack_install_root/nina.plugin.livestack.dll"
+
         # Build against the same host DLLs. This package includes verified model,
         # separate adapter, pinned ARM64 runtime and licenses; no install-time downloads.
         dotnet run --project "$GITHUB_WORKSPACE/pins-ai/plugin/tests/Mcp.GatewayTests" -c Release -- "$GITHUB_WORKSPACE/pins-ai/training/dataset/contracts/tools-list.json"
@@ -578,9 +595,9 @@ jobs:
         echo "$ai_deb.sha256" >> artifacts/release-files.txt
 
         shopt -s nullglob
-        packages=(artifacts/pins_*.deb artifacts/pinsdaemon_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-ai_*.deb artifacts/plugins/pins-plugin-luckycapture_*.deb)
-        if [ "${#packages[@]}" -ne 6 ]; then
-          echo "Expected PINS, pinsdaemon, ninaAPI, Touch-N-Stars, LuckyCapture and bundled AI packages." >&2
+        packages=(artifacts/pins_*.deb artifacts/pinsdaemon_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-ai_*.deb artifacts/plugins/pins-plugin-luckycapture_*.deb artifacts/plugins/pins-plugin-livestack_*.deb)
+        if [ "${#packages[@]}" -ne 7 ]; then
+          echo "Expected PINS, pinsdaemon, ninaAPI, Touch-N-Stars, LuckyCapture, LiveStack and bundled AI packages." >&2
           exit 1
         fi
         install_packages=()
@@ -607,7 +624,7 @@ jobs:
       with:
         tag_name: ${{ steps.meta.outputs.release_tag }}
         target_commitish: ${{ github.sha }}
-        name: PINS + pinsdaemon + ninaAPI + Touch-N-Stars + LuckyCapture + Local AI unstable ${{ steps.meta.outputs.release_tag }}
+        name: PINS + pinsdaemon + ninaAPI + Touch-N-Stars + LuckyCapture + LiveStack + Local AI unstable ${{ steps.meta.outputs.release_tag }}
         prerelease: true
         make_latest: 'false'
         fail_on_unmatched_files: true
@@ -621,15 +638,16 @@ jobs:
           Touch-N-Stars plugin: https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars/commit/${{ steps.meta.outputs.touch_plugin_sha }}
           Touch-N-Stars frontend: https://github.com/Touch-N-Stars/Touch-N-Stars/commit/${{ steps.meta.outputs.touch_frontend_sha }}
           LuckyCapture: https://github.com/acocalypso/pins.LuckyCapture/commit/${{ steps.meta.outputs.luckycapture_sha }}
+          LiveStack: https://github.com/nitr57/nina.plugin.livestack/commit/${{ steps.meta.outputs.livestack_sha }}
           PINS AI: https://github.com/acocalypso/pins-ai/commit/${{ steps.meta.outputs.ai_sha }}
 
-          Install all six packages together. Plugins require the exact PINS version included in this release.
+          Install all seven packages together. Plugins require the exact PINS version included in this release.
           LuckyCapture requires FFmpeg for lossless AVI capture.
           AI includes the diagnostic checkpoint-700 model/adapter, native runtime, hashes and licenses.
           Excluded System.Drawing.Common compatibility references are pinned to 10.0.12 for reproducible Linux restores.
           Install when PINS is idle: the core package stops/restarts the service during upgrade.
           Existing AI settings and MCP tokens are preserved; missing chat enablement is migrated.
-          Restart PINS after all six packages finish installing to load their final configuration.
+          Restart PINS after all seven packages finish installing to load their final configuration.
         files: ${{ steps.build.outputs.release_files }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
