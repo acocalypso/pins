@@ -1,4 +1,4 @@
-# Combined unstable release using this fork's selected source revision.
+# Combined unstable release using the upstream unstable core and plugin branches.
 name: Build PINS, pinsdaemon, plugins and local AI unstable packages
 'on':
   workflow_dispatch:
@@ -101,11 +101,11 @@ jobs:
       with:
         path: workflow-tooling
         persist-credentials: false
-    - name: Checkout PINS source from this fork
+    - name: Checkout PINS unstable
       uses: actions/checkout@v4
       with:
-        repository: acocalypso/pins
-        ref: ${{ github.sha }}
+        repository: nitr57/pins
+        ref: unstable
         path: source
         lfs: true
         submodules: false
@@ -612,9 +612,9 @@ jobs:
         make_latest: 'false'
         fail_on_unmatched_files: true
         body: |
-          Unstable Debian Trixie ARM64 packages built from the selected acocalypso/pins revision and plugin unstable branches, with the Touch-N-Stars frontend from develop.
+          Unstable Debian Trixie ARM64 packages built from nitr57/pins unstable and plugin unstable branches, with the Touch-N-Stars frontend from develop.
 
-          PINS: https://github.com/acocalypso/pins/commit/${{ steps.meta.outputs.pins_sha }}
+          PINS: https://github.com/nitr57/pins/commit/${{ steps.meta.outputs.pins_sha }}
           pinsdaemon: https://github.com/Touch-N-Stars/pinsdaemon/commit/${{ steps.meta.outputs.pinsdaemon_sha }}
           ninaAPI: https://github.com/nitr57/ninaAPI/commit/${{ steps.meta.outputs.ninaapi_sha }}
 
