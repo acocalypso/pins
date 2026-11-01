@@ -1,4 +1,4 @@
-# Copied from build-single-package.yml for a combined upstream unstable release.
+# Combined unstable release using this fork's selected source revision.
 name: Build PINS, pinsdaemon, plugins and local AI unstable packages
 'on':
   workflow_dispatch:
@@ -65,16 +65,47 @@ jobs:
           rsync
         apt-get install -y --no-install-recommends python3 python3-venv
       working-directory: ${{ github.workspace }}
+    - name: Configure Raspberry Pi package validation repository
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        # pinsdaemon requires raspi-config, which plain Debian does not ship.
+        # Use the current archive keyring rather than the legacy SHA-1 key.
+        keyring_deb=$(mktemp)
+        keyring_root=$(mktemp -d)
+        trap 'rm -f "$keyring_deb"; rm -rf "$keyring_root"' EXIT
+        curl --fail --location --retry 3 \
+          https://archive.raspberrypi.com/debian/pool/main/r/raspberrypi-archive-keyring/raspberrypi-archive-keyring_2025.1+rpt1_all.deb \
+          -o "$keyring_deb"
+        echo "2e727149d7acb8cc7f604e66d0049161039c8aa1eaf1175e54f9e69d963d60e4  $keyring_deb" | sha256sum -c -
+        dpkg-deb --extract "$keyring_deb" "$keyring_root"
+        install -m 644 "$keyring_root/usr/share/keyrings/raspberrypi-archive-keyring.pgp" /usr/share/keyrings/pins-ci-raspberrypi.pgp
+        printf '%s\n' \
+          'Types: deb' \
+          'URIs: https://archive.raspberrypi.com/debian/' \
+          'Suites: trixie' \
+          'Components: main' \
+          'Architectures: arm64' \
+          'Signed-By: /usr/share/keyrings/pins-ci-raspberrypi.pgp' \
+          > /etc/apt/sources.list.d/pins-ci-raspberrypi.sources
+        # Prefer Debian's packages; use Raspberry Pi packages where needed.
+        printf '%s\n' \
+          'Package: *' \
+          'Pin: origin "archive.raspberrypi.com"' \
+          'Pin-Priority: 100' \
+          > /etc/apt/preferences.d/pins-ci-raspberrypi
+        apt-get update
+        apt-get install --dry-run --no-install-recommends raspi-config
     - name: Checkout packaging tooling
       uses: actions/checkout@v4
       with:
         path: workflow-tooling
         persist-credentials: false
-    - name: Checkout PINS unstable
+    - name: Checkout PINS source from this fork
       uses: actions/checkout@v4
       with:
-        repository: nitr57/pins
-        ref: unstable
+        repository: acocalypso/pins
+        ref: ${{ github.sha }}
         path: source
         lfs: true
         submodules: false
@@ -581,9 +612,9 @@ jobs:
         make_latest: 'false'
         fail_on_unmatched_files: true
         body: |
-          Unstable Debian Trixie ARM64 packages built together from the PINS and plugin unstable branches, with the isolated frontend from acocalypso/Touch-N-Stars feat/luckycapture.
+          Unstable Debian Trixie ARM64 packages built from the selected acocalypso/pins revision and plugin unstable branches, with the Touch-N-Stars frontend from develop.
 
-          PINS: https://github.com/nitr57/pins/commit/${{ steps.meta.outputs.pins_sha }}
+          PINS: https://github.com/acocalypso/pins/commit/${{ steps.meta.outputs.pins_sha }}
           pinsdaemon: https://github.com/Touch-N-Stars/pinsdaemon/commit/${{ steps.meta.outputs.pinsdaemon_sha }}
           ninaAPI: https://github.com/nitr57/ninaAPI/commit/${{ steps.meta.outputs.ninaapi_sha }}
 
