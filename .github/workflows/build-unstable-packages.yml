@@ -1,5 +1,5 @@
 # Copied from build-single-package.yml for a combined upstream unstable release.
-name: Build PINS, plugins and local AI unstable packages
+name: Build PINS, pinsdaemon, plugins and local AI unstable packages
 'on':
   workflow_dispatch:
 permissions:
@@ -63,7 +63,7 @@ jobs:
           libssl-dev \
           libicu-dev \
           rsync
-        apt-get install -y --no-install-recommends python3
+        apt-get install -y --no-install-recommends python3 python3-venv
       working-directory: ${{ github.workspace }}
     - name: Checkout packaging tooling
       uses: actions/checkout@v4
@@ -78,6 +78,13 @@ jobs:
         path: source
         lfs: true
         submodules: false
+        persist-credentials: false
+    - name: Checkout pinsdaemon unstable
+      uses: actions/checkout@v4
+      with:
+        repository: Touch-N-Stars/pinsdaemon
+        ref: unstable
+        path: pinsdaemon
         persist-credentials: false
     - name: Checkout ninaAPI unstable
       uses: actions/checkout@v4
@@ -161,6 +168,7 @@ jobs:
         echo "RELEASE_DATE=$release_date" >> "$GITHUB_ENV"
         echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
         echo "pins_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "pinsdaemon_sha=$(git -C "$GITHUB_WORKSPACE/pinsdaemon" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "ninaapi_sha=$(git -C NINA.Plugins/ninaAPI rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "touch_plugin_sha=$(git -C NINA.Plugins/Touch-N-Stars rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "luckycapture_sha=$(git -C NINA.Plugins/pins.LuckyCapture rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -257,6 +265,56 @@ jobs:
           fi
           base_version=$(echo "$base_version" | sed 's/-canary/-pins-canary/')
           echo "${base_version}~unstable+${CI_BUILD_NUMBER}"
+        }
+
+        build_pinsdaemon_package() {
+          local daemon_root="$GITHUB_WORKSPACE/pinsdaemon"
+          local package_root="$daemon_root/build"
+          local base_version package_version deb_path package_contents required_path
+          pushd "$daemon_root" >/dev/null
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --disable-pip-version-check -r requirements-dev.txt
+          .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+          bash -n scripts/*.sh scripts/pins-rig-name scripts/90-pins-wifi-recovery packaging/DEBIAN/postinst packaging/DEBIAN/prerm
+
+          mkdir -p "$package_root"/{opt/pinsdaemon,usr/local/bin,etc/systemd/system,etc/NetworkManager/dispatcher.d,etc/systemd/journald.conf.d,etc/avahi/services,etc/sudoers.d,home/pi/pins-scripts,lib/udev/rules.d,DEBIAN}
+          chmod 755 "$package_root"
+          rsync -a --exclude=__pycache__ --exclude='*.pyc' app "$package_root/opt/pinsdaemon/"
+          install -m 644 requirements.txt README.md "$package_root/opt/pinsdaemon/"
+          for script in scripts/*.sh scripts/*.py scripts/pins-rig-name; do
+            [ "$script" = scripts/hotspot.sh ] || install -m 755 "$script" "$package_root/usr/local/bin/"
+          done
+          install -m 755 scripts/90-pins-wifi-recovery "$package_root/etc/NetworkManager/dispatcher.d/"
+          install -m 755 scripts/hotspot.sh "$package_root/home/pi/pins-scripts/"
+          install -m 644 systemd/*.service systemd/*.timer "$package_root/etc/systemd/system/"
+          install -m 644 packaging/journald-persistent.conf "$package_root/etc/systemd/journald.conf.d/90-pins-persistent.conf"
+          install -m 644 packaging/pinsdaemon.service "$package_root/etc/avahi/services/"
+          install -m 440 packaging/sudoers "$package_root/etc/sudoers.d/sysupdate-api"
+          install -m 644 packaging/zz-pins.rules "$package_root/lib/udev/rules.d/"
+          install -m 644 packaging/DEBIAN/control "$package_root/DEBIAN/"
+          install -m 755 packaging/DEBIAN/postinst packaging/DEBIAN/prerm "$package_root/DEBIAN/"
+          base_version=$(awk '/^Version:/ { print $2; exit }' packaging/DEBIAN/control)
+          package_version="${base_version}~unstable+${CI_BUILD_NUMBER}"
+          sed -i "s/^Version:.*/Version: ${package_version}/" "$package_root/DEBIAN/control"
+          deb_path="$GITHUB_WORKSPACE/source/artifacts/pinsdaemon_${package_version}_${DEB_ARCH}.deb"
+          dpkg-deb --root-owner-group --build "$package_root" "$deb_path"
+          package_contents=$(dpkg-deb --fsys-tarfile "$deb_path" | tar -tf -)
+          for required_path in \
+            ./usr/local/bin/wifi-connect.sh \
+            ./usr/local/bin/pins-wifi-viability.py \
+            ./usr/local/bin/pins-wifi-profile.py \
+            ./usr/local/bin/pins-wifi-networks.py \
+            ./usr/local/bin/pins-wifi-watchdog.sh \
+            ./etc/NetworkManager/dispatcher.d/90-pins-wifi-recovery \
+            ./etc/systemd/system/pins-wifi-watchdog.timer \
+            ./etc/sudoers.d/sysupdate-api; do
+            grep -Fxq "$required_path" <<< "$package_contents"
+          done
+          popd >/dev/null
+          deb_path="artifacts/$(basename "$deb_path")"
+          sha256sum "$deb_path" > "$deb_path.sha256"
+          echo "$deb_path" >> artifacts/release-files.txt
+          echo "$deb_path.sha256" >> artifacts/release-files.txt
         }
 
         build_pins_package() {
@@ -464,6 +522,7 @@ jobs:
           echo "$deb_path.sha256" >> artifacts/release-files.txt
         }
 
+        build_pinsdaemon_package
         build_pins_package
         build_plugin_package "NINA.Plugins/ninaAPI/ninaAPI/ninaAPI.csproj" "ninaAPI" "pins-plugin-ninaapi"
 
@@ -488,9 +547,9 @@ jobs:
         echo "$ai_deb.sha256" >> artifacts/release-files.txt
 
         shopt -s nullglob
-        packages=(artifacts/pins_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-ai_*.deb artifacts/plugins/pins-plugin-luckycapture_*.deb)
-        if [ "${#packages[@]}" -ne 5 ]; then
-          echo "Expected PINS, ninaAPI, Touch-N-Stars, LuckyCapture and bundled AI packages." >&2
+        packages=(artifacts/pins_*.deb artifacts/pinsdaemon_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-ai_*.deb artifacts/plugins/pins-plugin-luckycapture_*.deb)
+        if [ "${#packages[@]}" -ne 6 ]; then
+          echo "Expected PINS, pinsdaemon, ninaAPI, Touch-N-Stars, LuckyCapture and bundled AI packages." >&2
           exit 1
         fi
         install_packages=()
@@ -517,7 +576,7 @@ jobs:
       with:
         tag_name: ${{ steps.meta.outputs.release_tag }}
         target_commitish: ${{ github.sha }}
-        name: PINS + ninaAPI + Touch-N-Stars + LuckyCapture + Local AI unstable ${{ steps.meta.outputs.release_tag }}
+        name: PINS + pinsdaemon + ninaAPI + Touch-N-Stars + LuckyCapture + Local AI unstable ${{ steps.meta.outputs.release_tag }}
         prerelease: true
         make_latest: 'false'
         fail_on_unmatched_files: true
@@ -525,6 +584,7 @@ jobs:
           Unstable Debian Trixie ARM64 packages built together from the PINS and plugin unstable branches, with the isolated frontend from acocalypso/Touch-N-Stars feat/luckycapture.
 
           PINS: https://github.com/nitr57/pins/commit/${{ steps.meta.outputs.pins_sha }}
+          pinsdaemon: https://github.com/Touch-N-Stars/pinsdaemon/commit/${{ steps.meta.outputs.pinsdaemon_sha }}
           ninaAPI: https://github.com/nitr57/ninaAPI/commit/${{ steps.meta.outputs.ninaapi_sha }}
 
           Touch-N-Stars plugin: https://github.com/nitr57/N.I.N.A-Plugin-for-Touch-N-Stars/commit/${{ steps.meta.outputs.touch_plugin_sha }}
@@ -532,13 +592,13 @@ jobs:
           LuckyCapture: https://github.com/acocalypso/pins.LuckyCapture/commit/${{ steps.meta.outputs.luckycapture_sha }}
           PINS AI: https://github.com/acocalypso/pins-ai/commit/${{ steps.meta.outputs.ai_sha }}
 
-          Install all five packages together. Plugins require the exact PINS version included in this release.
+          Install all six packages together. Plugins require the exact PINS version included in this release.
           LuckyCapture requires FFmpeg for lossless AVI capture.
           AI includes the diagnostic checkpoint-700 model/adapter, native runtime, hashes and licenses.
           Excluded System.Drawing.Common compatibility references are pinned to 10.0.12 for reproducible Linux restores.
           Install when PINS is idle: the core package stops/restarts the service during upgrade.
           Existing AI settings and MCP tokens are preserved; missing chat enablement is migrated.
-          Restart PINS after all five packages finish installing to load their final configuration.
+          Restart PINS after all six packages finish installing to load their final configuration.
         files: ${{ steps.build.outputs.release_files }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
