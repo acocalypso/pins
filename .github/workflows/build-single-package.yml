@@ -516,7 +516,8 @@ jobs:
                 git clone https://github.com/nitr57/nina.plugin.livestack NINA.Plugins/LiveStack
                 ;;
               plugin-ninaapi)
-                git clone https://github.com/nitr57/ninaAPI NINA.Plugins/ninaAPI
+                # acocalypso/ninaAPI is nitr57/ninaAPI (dev) plus the MLAstro RPA relay routes.
+                git clone --branch dev --single-branch https://github.com/acocalypso/ninaAPI NINA.Plugins/ninaAPI
                 ;;
               plugin-orbuculum)
                 git clone https://github.com/nitr57/nina.plugin.orbuculum NINA.Plugins/nina.plugin.orbuculum
@@ -544,6 +545,9 @@ jobs:
                 ;;
               plugin-luckycapture)
                 git clone --branch main --single-branch https://github.com/acocalypso/pins.LuckyCapture NINA.Plugins/pins.LuckyCapture
+                ;;
+              plugin-mlastrorpa)
+                git clone --branch main --single-branch https://github.com/acocalypso/pins-mlastro-rpa NINA.Plugins/pins-mlastro-rpa
                 ;;
               plugin-pins)
                 git clone https://github.com/nitr57/pins.plugin NINA.Plugins/pins.plugin
@@ -632,7 +636,7 @@ jobs:
             local -a perihelion_files=()
             local runtime_dependencies="${7:-}"
             local source_args=()
-            if [ "$deb_package" = "pins-plugin-luckycapture" ]; then
+            if [ "$deb_package" = "pins-plugin-luckycapture" ] || [ "$deb_package" = "pins-plugin-mlastrorpa" ]; then
               source_args=(-p:PinsRoot="$(pwd)")
             fi
 
@@ -653,9 +657,18 @@ jobs:
             if [ ! -f "$assembly_info" ]; then
               assembly_info=$(find "$plugin_dir" -name AssemblyInfo.cs | head -n 1)
             fi
+            local project_version=""
             if [ -z "$assembly_info" ] || [ ! -f "$assembly_info" ]; then
-              echo "AssemblyInfo.cs not found for ${deb_package}" >&2
-              return 1
+              # SDK-style plugins without AssemblyInfo.cs declare <Version> in
+              # the project file. A SemVer pre-release ("0.3.0-beta.2") becomes
+              # "0.3.0~beta.2" so the final release sorts above its betas.
+              project_version=$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' "$project_path" | head -n 1 | tr -d '\r\n')
+              if [ -z "$project_version" ]; then
+                echo "Neither AssemblyInfo.cs nor a project <Version> found for ${deb_package}" >&2
+                return 1
+              fi
+              project_version="${project_version//-/\~}"
+              assembly_info=/dev/null
             fi
 
             local assembly_version_line
@@ -679,6 +692,9 @@ jobs:
 
             local plugin_version
             plugin_version=$(echo "$assembly_version_line" | sed -E 's/.*"([^"]+)".*/\1/' | head -n 1 | tr -d '\r\n')
+            if [ -n "$project_version" ]; then
+              plugin_version="$project_version"
+            fi
             if [ -z "$plugin_version" ]; then
               echo "No supported assembly version attribute found in $assembly_info" >&2
               return 1
@@ -718,6 +734,10 @@ jobs:
               # All LuckyCapture references are provided by PINS. Do not ship
               # duplicate core assemblies when building a plugin by itself.
               rsync -a --include='/PINS.LuckyCapture.*' --exclude='*' "$tfm_dir/" "$install_root/"
+            elif [ "$deb_package" = "pins-plugin-mlastrorpa" ]; then
+              # The plugin is a single assembly: NINA, Newtonsoft.Json and
+              # System.IO.Ports are provided by PINS, and no PDB is shipped.
+              rsync -a --include='/NINA.Plugins.MLAstroRPA.Linux.dll' --exclude='*' "$tfm_dir/" "$install_root/"
             else
               echo "Core publish directory not found at $core_publish_dir; packaging plugin without core file exclusion."
               rsync -a "$tfm_dir/" "$install_root/"
@@ -767,6 +787,20 @@ jobs:
               done
             fi
 
+            if [ "$deb_package" = "pins-plugin-mlastrorpa" ]; then
+              if [ ! -s "$install_root/NINA.Plugins.MLAstroRPA.Linux.dll" ]; then
+                echo "MLAstro RPA plugin assembly was not produced" >&2
+                return 1
+              fi
+              # MPL-2.0: ship the licence and the upstream source baselines.
+              mlastro_doc_dir="$deb_root/usr/share/doc/${deb_package}"
+              mlastro_source_root="$(dirname "$(dirname "$plugin_dir")")"
+              mkdir -p "$mlastro_doc_dir"
+              install -m 0644 "$mlastro_source_root/LICENSE" "$mlastro_doc_dir/copyright"
+              install -m 0644 "$mlastro_source_root/UPSTREAM.md" "$mlastro_doc_dir/UPSTREAM.md"
+              install -m 0644 "$mlastro_source_root/QUICK-START.md" "$mlastro_doc_dir/QUICK-START.md"
+            fi
+
             control_dir="$deb_root/DEBIAN"
             mkdir -p "$control_dir"
             installed_size=$(du -sk "$deb_root${PLUGINS_INSTALL_BASE}" | cut -f1)
@@ -814,6 +848,23 @@ jobs:
                   return 1
                 fi
               done
+            fi
+
+            if [ "$deb_package" = "pins-plugin-mlastrorpa" ]; then
+              package_contents=$(dpkg-deb --fsys-tarfile "$deb_path" | tar -tf -)
+              mlastro_assembly=".${PLUGINS_INSTALL_BASE}/${install_folder}/NINA.Plugins.MLAstroRPA.Linux.dll"
+              for required_path in "$mlastro_assembly" "./usr/share/doc/${deb_package}/copyright"; do
+                if ! grep -Fxq "$required_path" <<< "$package_contents"; then
+                  echo "MLAstro RPA Debian package is missing $required_path" >&2
+                  return 1
+                fi
+              done
+              unexpected_assemblies=$(grep -E '\.(dll|pdb)$' <<< "$package_contents" | grep -Fvx "$mlastro_assembly" || true)
+              if [ -n "$unexpected_assemblies" ]; then
+                echo "MLAstro RPA Debian package ships host assemblies:" >&2
+                echo "$unexpected_assemblies" >&2
+                return 1
+              fi
             fi
 
             sha256sum "$deb_path" > "$deb_path.sha256"
@@ -896,6 +947,14 @@ jobs:
             plugin-luckycapture)
               clone_selected_plugin_repo
               build_plugin_package "NINA.Plugins/pins.LuckyCapture/src/PINS.LuckyCapture/PINS.LuckyCapture.csproj" "PINS.LuckyCapture" "pins-plugin-luckycapture" "" "no" "no" "pins (>= 3.3.0.1066), ffmpeg"
+              ;;
+            plugin-mlastrorpa)
+              clone_selected_plugin_repo
+              # Folder name matches upstream's bundle installer, so a bundle
+              # install and this package never load the plugin twice. The UI
+              # reaches the plugin through the ninaAPI relay, and automated
+              # alignment runs through TPPA (PolarAlignment).
+              build_plugin_package "NINA.Plugins/pins-mlastro-rpa/src/Pins.MLAstro.Plugin/Pins.MLAstro.Plugin.csproj" "MLAstroRPA.Linux" "pins-plugin-mlastrorpa" "" "no" "no" "pins (>= 3.3.0.1058), pins-plugin-ninaapi, pins-plugin-polaralignment, pins-plugin-touch-n-stars"
               ;;
             plugin-pins)
               clone_selected_plugin_repo

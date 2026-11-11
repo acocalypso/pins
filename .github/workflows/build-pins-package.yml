@@ -107,8 +107,9 @@ jobs:
           git clone https://github.com/nitr57/joko.nina.plugins "NINA.Plugins/joko.nina.plugins"
 
           # Clone ninaAPI -> NINA.Plugins/ninaAPI
+          # acocalypso/ninaAPI is nitr57/ninaAPI (dev) plus the MLAstro RPA relay routes.
           rm -rf "NINA.Plugins/ninaAPI"
-          git clone https://github.com/nitr57/ninaAPI "NINA.Plugins/ninaAPI"
+          git clone --branch dev --single-branch https://github.com/acocalypso/ninaAPI "NINA.Plugins/ninaAPI"
 
           # Clone nina.plugin.phd2tools -> NINA.Plugins/nina.plugin.phd2tools
           rm -rf "NINA.Plugins/nina.plugin.phd2tools"
