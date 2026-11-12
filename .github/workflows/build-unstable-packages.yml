@@ -138,6 +138,14 @@ jobs:
         ref: unstable
         path: source/NINA.Plugins/pins.LuckyCapture
         persist-credentials: false
+    # The MLAstro RPA plugin has no unstable branch; main is its only line of development.
+    - name: Checkout MLAstro RPA plugin
+      uses: actions/checkout@v4
+      with:
+        repository: acocalypso/pins-mlastro-rpa
+        ref: main
+        path: source/NINA.Plugins/pins-mlastro-rpa
+        persist-credentials: false
     - name: Checkout LiveStack plugin unstable
       uses: actions/checkout@v4
       with:
@@ -211,6 +219,7 @@ jobs:
         echo "touch_plugin_sha=$(git -C NINA.Plugins/Touch-N-Stars rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "luckycapture_sha=$(git -C NINA.Plugins/pins.LuckyCapture rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "livestack_sha=$(git -C NINA.Plugins/LiveStack rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "mlastro_sha=$(git -C NINA.Plugins/pins-mlastro-rpa rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "touch_frontend_sha=$(git -C "$GITHUB_WORKSPACE/frontend" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "ai_sha=$(git -C "$GITHUB_WORKSPACE/pins-ai" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
     - name: Prepare core linux-arm64 publish payload
@@ -425,7 +434,7 @@ jobs:
           local assembly_regex=""
           local runtime_dependencies="${4:-}"
           local source_args=()
-          if [ "$deb_package" = "pins-plugin-luckycapture" ]; then
+          if [ "$deb_package" = "pins-plugin-luckycapture" ] || [ "$deb_package" = "pins-plugin-mlastrorpa" ]; then
             source_args=(-p:PinsRoot="$(pwd)")
           fi
 
@@ -438,6 +447,11 @@ jobs:
           if [ "$deb_package" = "pins-plugin-livestack" ]; then
             # LiveStack generates assembly attributes from the evaluated project version.
             plugin_version=$(dotnet msbuild "$project_path" -nologo -getProperty:Version)
+          elif [ "$deb_package" = "pins-plugin-mlastrorpa" ]; then
+            # The project declares a SemVer <Version>. Its pre-release hyphen becomes a
+            # tilde ("0.3.0-beta.2" -> "0.3.0~beta.2") so the final release sorts above betas.
+            plugin_version=$(dotnet msbuild "$project_path" -nologo -getProperty:Version | tr -d '\r\n')
+            plugin_version="${plugin_version//-/\~}"
           else
             local assembly_info="$plugin_dir/Properties/AssemblyInfo.cs"
             if [ ! -f "$assembly_info" ]; then
@@ -498,6 +512,16 @@ jobs:
           if [ "$deb_package" = "pins-plugin-luckycapture" ]; then
             # PINS supplies the host assemblies; ship only this plugin's own files.
             rsync -a --include='/PINS.LuckyCapture.*' --exclude='*' "$tfm_dir/" "$install_root/"
+          elif [ "$deb_package" = "pins-plugin-mlastrorpa" ]; then
+            # A single assembly: NINA, Newtonsoft.Json and System.IO.Ports come from PINS.
+            rsync -a --include='/NINA.Plugins.MLAstroRPA.Linux.dll' --exclude='*' "$tfm_dir/" "$install_root/"
+            # MPL-2.0: ship the licence and the upstream source baselines.
+            mlastro_doc_dir="$deb_root/usr/share/doc/${deb_package}"
+            mlastro_source_root="$(dirname "$(dirname "$plugin_dir")")"
+            mkdir -p "$mlastro_doc_dir"
+            install -m 0644 "$mlastro_source_root/LICENSE" "$mlastro_doc_dir/copyright"
+            install -m 0644 "$mlastro_source_root/UPSTREAM.md" "$mlastro_doc_dir/UPSTREAM.md"
+            install -m 0644 "$mlastro_source_root/QUICK-START.md" "$mlastro_doc_dir/QUICK-START.md"
           elif [ -d "$core_publish_dir" ]; then
             exclude_list="$(pwd)/core_excludes.txt"
             (cd "$core_publish_dir" && find . -type f -printf '%P\n') > "$exclude_list"
@@ -584,6 +608,15 @@ jobs:
         livestack_install_root="${PLUGIN_DEB_BASE}/pins-plugin-livestack${PLUGINS_INSTALL_BASE}/LiveStack"
         test -s "$livestack_install_root/nina.plugin.livestack.dll"
 
+        # The folder name matches upstream's bundle installer. The page reaches the plugin
+        # through the ninaAPI relay. TPPA (pins-plugin-polaralignment) is needed for automated
+        # alignment but is not part of this release, so it cannot be a dependency here.
+        build_plugin_package "NINA.Plugins/pins-mlastro-rpa/src/Pins.MLAstro.Plugin/Pins.MLAstro.Plugin.csproj" "MLAstroRPA.Linux" "pins-plugin-mlastrorpa" "pins-plugin-ninaapi, pins-plugin-touch-n-stars"
+        mlastro_install_root="${PLUGIN_DEB_BASE}/pins-plugin-mlastrorpa${PLUGINS_INSTALL_BASE}/MLAstroRPA.Linux"
+        test -s "$mlastro_install_root/NINA.Plugins.MLAstroRPA.Linux.dll"
+        test "$(find "$mlastro_install_root" -type f | wc -l)" -eq 1
+        test -s "${PLUGIN_DEB_BASE}/pins-plugin-mlastrorpa/usr/share/doc/pins-plugin-mlastrorpa/copyright"
+
         # Build against the same host DLLs. This package includes verified model,
         # separate adapter, pinned ARM64 runtime and licenses; no install-time downloads.
         dotnet run --project "$GITHUB_WORKSPACE/pins-ai/plugin/tests/Mcp.GatewayTests" -c Release -- "$GITHUB_WORKSPACE/pins-ai/training/dataset/contracts/tools-list.json"
@@ -595,9 +628,9 @@ jobs:
         echo "$ai_deb.sha256" >> artifacts/release-files.txt
 
         shopt -s nullglob
-        packages=(artifacts/pins_*.deb artifacts/pinsdaemon_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-ai_*.deb artifacts/plugins/pins-plugin-luckycapture_*.deb artifacts/plugins/pins-plugin-livestack_*.deb)
-        if [ "${#packages[@]}" -ne 7 ]; then
-          echo "Expected PINS, pinsdaemon, ninaAPI, Touch-N-Stars, LuckyCapture, LiveStack and bundled AI packages." >&2
+        packages=(artifacts/pins_*.deb artifacts/pinsdaemon_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-ai_*.deb artifacts/plugins/pins-plugin-luckycapture_*.deb artifacts/plugins/pins-plugin-livestack_*.deb artifacts/plugins/pins-plugin-mlastrorpa_*.deb)
+        if [ "${#packages[@]}" -ne 8 ]; then
+          echo "Expected PINS, pinsdaemon, ninaAPI, Touch-N-Stars, LuckyCapture, LiveStack, MLAstro RPA and bundled AI packages." >&2
           exit 1
         fi
         install_packages=()
@@ -624,7 +657,7 @@ jobs:
       with:
         tag_name: ${{ steps.meta.outputs.release_tag }}
         target_commitish: ${{ github.sha }}
-        name: PINS + pinsdaemon + ninaAPI + Touch-N-Stars + LuckyCapture + LiveStack + Local AI unstable ${{ steps.meta.outputs.release_tag }}
+        name: PINS + pinsdaemon + ninaAPI + Touch-N-Stars + LuckyCapture + LiveStack + MLAstro RPA + Local AI unstable ${{ steps.meta.outputs.release_tag }}
         prerelease: true
         make_latest: 'false'
         fail_on_unmatched_files: true
@@ -639,15 +672,17 @@ jobs:
           Touch-N-Stars frontend: https://github.com/Touch-N-Stars/Touch-N-Stars/commit/${{ steps.meta.outputs.touch_frontend_sha }}
           LuckyCapture: https://github.com/acocalypso/pins.LuckyCapture/commit/${{ steps.meta.outputs.luckycapture_sha }}
           LiveStack: https://github.com/nitr57/nina.plugin.livestack/commit/${{ steps.meta.outputs.livestack_sha }}
+          MLAstro RPA: https://github.com/acocalypso/pins-mlastro-rpa/commit/${{ steps.meta.outputs.mlastro_sha }}
           PINS AI: https://github.com/acocalypso/pins-ai/commit/${{ steps.meta.outputs.ai_sha }}
 
-          Install all seven packages together. Plugins require the exact PINS version included in this release.
+          Install all eight packages together. Plugins require the exact PINS version included in this release.
           LuckyCapture requires FFmpeg for lossless AVI capture.
+          MLAstro RPA needs the MLAstro relay routes in ninaAPI and, for automated alignment, the PolarAlignment (TPPA) plugin, which is not part of this release.
           AI includes the diagnostic checkpoint-700 model/adapter, native runtime, hashes and licenses.
           Excluded System.Drawing.Common compatibility references are pinned to 10.0.12 for reproducible Linux restores.
           Install when PINS is idle: the core package stops/restarts the service during upgrade.
           Existing AI settings and MCP tokens are preserved; missing chat enablement is migrated.
-          Restart PINS after all seven packages finish installing to load their final configuration.
+          Restart PINS after all eight packages finish installing to load their final configuration.
         files: ${{ steps.build.outputs.release_files }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
