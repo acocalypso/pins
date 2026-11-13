@@ -358,7 +358,7 @@ jobs:
             existing_depends=$(sed -n 's/^Depends:[[:space:]]*//p' build/DEBIAN/control | head -n 1)
             package_depends=$(debian_merge_depends \
               "$existing_depends" \
-              "avahi-daemon, passwd, systemd, udev, util-linux")
+              "avahi-daemon, avahi-utils, passwd, systemd, udev, util-linux")
             debian_control_set_depends build/DEBIAN/control "$package_depends"
             dpkg-deb --root-owner-group --build build "$filename"
 

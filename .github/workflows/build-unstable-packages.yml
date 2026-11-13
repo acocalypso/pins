@@ -1,5 +1,5 @@
 # Combined unstable release using the upstream unstable core and plugin branches.
-name: Build PINS, pinsdaemon, plugins and local AI unstable packages
+name: Build PINS, pinsdaemon and plugin unstable packages
 'on':
   workflow_dispatch:
 permissions:
@@ -160,14 +160,6 @@ jobs:
         ref: develop
         path: frontend
         persist-credentials: false
-    - name: Checkout PINS AI plugin and asset manifest
-      uses: actions/checkout@v4
-      with:
-        repository: acocalypso/pins-ai
-        ref: main
-        path: pins-ai
-        lfs: true
-        persist-credentials: false
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
@@ -221,7 +213,6 @@ jobs:
         echo "livestack_sha=$(git -C NINA.Plugins/LiveStack rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "mlastro_sha=$(git -C NINA.Plugins/pins-mlastro-rpa rev-parse HEAD)" >> "$GITHUB_OUTPUT"
         echo "touch_frontend_sha=$(git -C "$GITHUB_WORKSPACE/frontend" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-        echo "ai_sha=$(git -C "$GITHUB_WORKSPACE/pins-ai" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
     - name: Prepare core linux-arm64 publish payload
       shell: bash
       run: |
@@ -617,20 +608,10 @@ jobs:
         test "$(find "$mlastro_install_root" -type f | wc -l)" -eq 1
         test -s "${PLUGIN_DEB_BASE}/pins-plugin-mlastrorpa/usr/share/doc/pins-plugin-mlastrorpa/copyright"
 
-        # Build against the same host DLLs. This package includes verified model,
-        # separate adapter, pinned ARM64 runtime and licenses; no install-time downloads.
-        dotnet run --project "$GITHUB_WORKSPACE/pins-ai/plugin/tests/Mcp.GatewayTests" -c Release -- "$GITHUB_WORKSPACE/pins-ai/training/dataset/contracts/tools-list.json"
-        bash "$GITHUB_WORKSPACE/pins-ai/plugin/scripts/build-debian.sh" \
-          "$(pwd)/${PUBLISH_DIRECTORY}/${TARGET_RUNTIME}" "$(get_core_version)" \
-          "$(pwd)/${PLUGIN_ARTIFACT_DIR}" "0.2.0~unstable+${CI_BUILD_NUMBER}"
-        ai_deb="${PLUGIN_ARTIFACT_DIR}/pins-plugin-ai_0.2.0~unstable+${CI_BUILD_NUMBER}_arm64.deb"
-        echo "$ai_deb" >> artifacts/release-files.txt
-        echo "$ai_deb.sha256" >> artifacts/release-files.txt
-
         shopt -s nullglob
-        packages=(artifacts/pins_*.deb artifacts/pinsdaemon_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-ai_*.deb artifacts/plugins/pins-plugin-luckycapture_*.deb artifacts/plugins/pins-plugin-livestack_*.deb artifacts/plugins/pins-plugin-mlastrorpa_*.deb)
-        if [ "${#packages[@]}" -ne 8 ]; then
-          echo "Expected PINS, pinsdaemon, ninaAPI, Touch-N-Stars, LuckyCapture, LiveStack, MLAstro RPA and bundled AI packages." >&2
+        packages=(artifacts/pins_*.deb artifacts/pinsdaemon_*.deb artifacts/plugins/pins-plugin-ninaapi_*.deb artifacts/plugins/pins-plugin-touch-n-stars_*.deb artifacts/plugins/pins-plugin-luckycapture_*.deb artifacts/plugins/pins-plugin-livestack_*.deb artifacts/plugins/pins-plugin-mlastrorpa_*.deb)
+        if [ "${#packages[@]}" -ne 7 ]; then
+          echo "Expected PINS, pinsdaemon, ninaAPI, Touch-N-Stars, LuckyCapture, LiveStack and MLAstro RPA packages." >&2
           exit 1
         fi
         install_packages=()
@@ -657,7 +638,7 @@ jobs:
       with:
         tag_name: ${{ steps.meta.outputs.release_tag }}
         target_commitish: ${{ github.sha }}
-        name: PINS + pinsdaemon + ninaAPI + Touch-N-Stars + LuckyCapture + LiveStack + MLAstro RPA + Local AI unstable ${{ steps.meta.outputs.release_tag }}
+        name: PINS + pinsdaemon + ninaAPI + Touch-N-Stars + LuckyCapture + LiveStack + MLAstro RPA unstable ${{ steps.meta.outputs.release_tag }}
         prerelease: true
         make_latest: 'false'
         fail_on_unmatched_files: true
@@ -673,16 +654,13 @@ jobs:
           LuckyCapture: https://github.com/acocalypso/pins.LuckyCapture/commit/${{ steps.meta.outputs.luckycapture_sha }}
           LiveStack: https://github.com/nitr57/nina.plugin.livestack/commit/${{ steps.meta.outputs.livestack_sha }}
           MLAstro RPA: https://github.com/acocalypso/pins-mlastro-rpa/commit/${{ steps.meta.outputs.mlastro_sha }}
-          PINS AI: https://github.com/acocalypso/pins-ai/commit/${{ steps.meta.outputs.ai_sha }}
 
-          Install all eight packages together. Plugins require the exact PINS version included in this release.
+          Install all seven packages together. Plugins require the exact PINS version included in this release.
           LuckyCapture requires FFmpeg for lossless AVI capture.
           MLAstro RPA needs the MLAstro relay routes in ninaAPI and, for automated alignment, the PolarAlignment (TPPA) plugin, which is not part of this release.
-          AI includes the diagnostic checkpoint-700 model/adapter, native runtime, hashes and licenses.
           Excluded System.Drawing.Common compatibility references are pinned to 10.0.12 for reproducible Linux restores.
           Install when PINS is idle: the core package stops/restarts the service during upgrade.
-          Existing AI settings and MCP tokens are preserved; missing chat enablement is migrated.
-          Restart PINS after all eight packages finish installing to load their final configuration.
+          Restart PINS after all seven packages finish installing to load their final configuration.
         files: ${{ steps.build.outputs.release_files }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

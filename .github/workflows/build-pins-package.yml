@@ -1590,7 +1590,7 @@ jobs:
                 required_depends="ca-certificates, libc6, libgcc-s1, libgssapi-krb5-2, libicu76, libssl3t64, libstdc++6, tzdata, indi-bin, procps, systemd"
                 ;;
               pinsdaemon)
-                required_depends="avahi-daemon, passwd, systemd, udev, util-linux"
+                required_depends="avahi-daemon, avahi-utils, passwd, systemd, udev, util-linux"
                 ;;
               pins-plugin-*)
                 required_depends="pins (>= 3.0.0)"
