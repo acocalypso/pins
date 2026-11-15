@@ -344,6 +344,7 @@ jobs:
             ./usr/local/bin/pins-wifi-profile.py \
             ./usr/local/bin/pins-wifi-networks.py \
             ./usr/local/bin/pins-wifi-watchdog.sh \
+            ./usr/local/bin/ensure-wayvnc-auth.sh \
             ./etc/NetworkManager/dispatcher.d/90-pins-wifi-recovery \
             ./etc/systemd/system/pins-wifi-watchdog.timer \
             ./etc/sudoers.d/sysupdate-api; do

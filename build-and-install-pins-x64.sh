@@ -1171,6 +1171,7 @@ build_pinsdaemon_package() {
   cp scripts/install-firmware.sh build/usr/local/bin/
   cp scripts/install-indi-package.sh build/usr/local/bin/
   cp scripts/ensure-astap-data-links.sh build/usr/local/bin/
+  cp scripts/ensure-wayvnc-auth.sh build/usr/local/bin/
 
   cp scripts/hotspot.sh build/home/$TARGET_USER/pins-scripts/
 

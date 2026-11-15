@@ -328,6 +328,7 @@ jobs:
             cp scripts/collect-diagnostics.sh build/usr/local/bin/
             cp scripts/install-astap-star-database.sh build/usr/local/bin/
             cp scripts/ensure-astap-data-links.sh build/usr/local/bin/
+            cp scripts/ensure-wayvnc-auth.sh build/usr/local/bin/
             cp scripts/pins-wifi-watchdog.sh build/usr/local/bin/
             cp scripts/pins-rig-name build/usr/local/bin/
             cp scripts/hotspot.sh build/home/pi/pins-scripts/
