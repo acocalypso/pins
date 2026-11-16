@@ -1,19 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using NINA.Astrometry;
+using NINA.Core.Enum;
+using NINA.Core.Utility;
+using NINA.Image.ImageData;
+using System;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 using static NINA.Image.FileFormat.FITS.CfitsioNative;
-using NINA.Image.ImageData;
-using System.Globalization;
-using NINA.Core.Enum;
-using NINA.Astrometry;
-using NINA.Core.Utility;
 
 namespace NINA.Image.FileFormat.FITS {
     public class CFitsioFITS {
-        private nint filePtr;
+        private readonly nint filePtr;
 
         private CFitsioFITS(string filePath, COMPRESSION compression) {
             CfitsioNative.fits_create_diskfile(out var ptr, filePath, out var status);
@@ -21,49 +18,77 @@ namespace NINA.Image.FileFormat.FITS {
             this.filePtr = ptr;
 
             if (compression != COMPRESSION.NOCOMPRESS) {
-                CfitsioNative.fits_set_compression_type(ptr, compression, out status);
-                CheckStatus("fits_set_compression_type", status);
+                CloseOnFailure(() => {
+                    CfitsioNative.fits_set_compression_type(ptr, compression, out status);
+                    CheckStatus("fits_set_compression_type", status);
+                });
             }
         }
 
         public CFitsioFITS(string filePath, ushort[] data, int width, int height, COMPRESSION compression = COMPRESSION.NOCOMPRESS) : this(filePath, compression) {
-            CfitsioNative.fits_create_img(filePtr, CfitsioNative.BITPIX.USHORT_IMG, 2, new int[] { width, height }, out var status);
-            CheckStatus("fits_create_img", status);
-            CfitsioNative.fits_write_img(filePtr, CfitsioNative.DATATYPE.TUSHORT, 1, width * height, data, out status);
-            CheckStatus("fits_write_img", status);
+            CloseOnFailure(() => {
+                CfitsioNative.fits_create_img(filePtr, CfitsioNative.BITPIX.USHORT_IMG, 2, new CLong[] { new(width), new(height) }, out var status);
+                CheckStatus("fits_create_img", status);
+                CfitsioNative.fits_write_img(filePtr, CfitsioNative.DATATYPE.TUSHORT, 1, width * height, data, out status);
+                CheckStatus("fits_write_img", status);
+            });
         }
 
         public CFitsioFITS(string filePath, uint[] data, int width, int height, COMPRESSION compression = COMPRESSION.NOCOMPRESS) : this(filePath, compression) {
-            CfitsioNative.fits_create_img(filePtr, CfitsioNative.BITPIX.ULONG_IMG, 2, new int[] { width, height }, out var status);
-            CheckStatus("fits_create_img", status);
-            CfitsioNative.fits_write_img_uint(filePtr, CfitsioNative.DATATYPE.TUINT, 1, width * height, data, out status);
-            CheckStatus("fits_write_img", status);
+            CloseOnFailure(() => {
+                CfitsioNative.fits_create_img(filePtr, CfitsioNative.BITPIX.ULONG_IMG, 2, new CLong[] { new(width), new(height) }, out var status);
+                CheckStatus("fits_create_img", status);
+                CfitsioNative.fits_write_img_uint(filePtr, CfitsioNative.DATATYPE.TUINT, 1, width * height, data, out status);
+                CheckStatus("fits_write_img", status);
+            });
         }
 
         public CFitsioFITS(string filePath, int[] data, int width, int height, COMPRESSION compression = COMPRESSION.NOCOMPRESS) : this(filePath, compression) {
-            CfitsioNative.fits_create_img(filePtr, CfitsioNative.BITPIX.LONG_IMG, 2, new int[] { width, height }, out var status);
-            CheckStatus("fits_create_img", status);
-            CfitsioNative.fits_write_img_int(filePtr, CfitsioNative.DATATYPE.TINT, 1, width * height, data, out status);
-            CheckStatus("fits_write_img", status);
+            CloseOnFailure(() => {
+                CfitsioNative.fits_create_img(filePtr, CfitsioNative.BITPIX.LONG_IMG, 2, new CLong[] { new(width), new(height) }, out var status);
+                CheckStatus("fits_create_img", status);
+                CfitsioNative.fits_write_img_int(filePtr, CfitsioNative.DATATYPE.TINT, 1, width * height, data, out status);
+                CheckStatus("fits_write_img", status);
+            });
         }
 
         public CFitsioFITS(string filePath, float[] data, int width, int height, COMPRESSION compression = COMPRESSION.NOCOMPRESS) : this(filePath, compression) {
-            CfitsioNative.fits_create_img(filePtr, CfitsioNative.BITPIX.FLOAT_IMG, 2, new int[] { width, height }, out var status);
-            CheckStatus("fits_create_img", status);
-            CfitsioNative.fits_write_img_float(filePtr, CfitsioNative.DATATYPE.TDOUBLE, 1, width * height, data, out status);
-            CheckStatus("fits_write_img", status);
+            CloseOnFailure(() => {
+                CfitsioNative.fits_create_img(filePtr, CfitsioNative.BITPIX.FLOAT_IMG, 2, new CLong[] { new(width), new(height) }, out var status);
+                CheckStatus("fits_create_img", status);
+                CfitsioNative.fits_write_img_float(filePtr, CfitsioNative.DATATYPE.TDOUBLE, 1, width * height, data, out status);
+                CheckStatus("fits_write_img", status);
+            });
         }
 
         public CFitsioFITS(string filePath, double[] data, int width, int height, COMPRESSION compression = COMPRESSION.NOCOMPRESS) : this(filePath, compression) {
-            CfitsioNative.fits_create_img(filePtr, CfitsioNative.BITPIX.DOUBLE_IMG, 2, new int[] { width, height }, out var status);
-            CheckStatus("fits_create_img", status);
-            CfitsioNative.fits_write_img_double(filePtr, CfitsioNative.DATATYPE.TDOUBLE, 1, width * height, data, out status);
-            CheckStatus("fits_write_img", status);
+            CloseOnFailure(() => {
+                CfitsioNative.fits_create_img(filePtr, CfitsioNative.BITPIX.DOUBLE_IMG, 2, new CLong[] { new(width), new(height) }, out var status);
+                CheckStatus("fits_create_img", status);
+                CfitsioNative.fits_write_img_double(filePtr, CfitsioNative.DATATYPE.TDOUBLE, 1, width * height, data, out status);
+                CheckStatus("fits_write_img", status);
+            });
+        }
+
+        // A constructor that throws hands no object to Close, so the file handle (and its descriptor) is
+        // closed here before the error goes on; the caller deletes the incomplete file.
+        private void CloseOnFailure(Action write) {
+            try {
+                write();
+            } catch {
+                CfitsioNative.fits_close_file(filePtr, out _);
+                throw;
+            }
         }
 
         public void AddHeader(string keyword, string value, string comment) {
             CfitsioNative.fits_update_key_str(filePtr, keyword, value, comment, out var status);
             LogErrorStatus("fits_update_key_str", status);
+        }
+
+        public void AddHeader(string keyword, uint value, string comment) {
+            CfitsioNative.fits_update_key_lng(filePtr, keyword, value, comment, out var status);
+            LogErrorStatus("fits_update_key_lng", status);
         }
 
         public void AddHeader(string keyword, int value, string comment) {
@@ -373,6 +398,9 @@ namespace NINA.Image.FileFormat.FITS {
                 switch (elem) {
                     case StringMetaDataHeader s:
                         AddHeader(s.Key, s.Value, s.Comment);
+                        break;
+                    case UIntMetaDataHeader u:
+                        AddHeader(u.Key, u.Value, u.Comment);
                         break;
                     case IntMetaDataHeader i:
                         AddHeader(i.Key, i.Value, i.Comment);

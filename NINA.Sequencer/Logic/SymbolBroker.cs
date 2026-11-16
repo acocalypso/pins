@@ -117,6 +117,7 @@ namespace NINA.Sequencer.Logic {
         private IWeatherDataMediator _weatherDataMediator;
         private IRotatorMediator _rotatorMediator;
         public static readonly char DELIMITER = '_';
+        public static readonly char QUALIFIED_DELIMITER = '.';
 
         /// <summary>
         /// Internal fallback for legacy expression construction paths that cannot receive
@@ -413,13 +414,13 @@ namespace NINA.Sequencer.Logic {
                     return list[0];
                 }
 
-                // 2) Parse prefix if key contains a delimiter (e.g., "prefix_key").
+                // 2) Prefer dot qualification, retaining underscores for legacy references.
                 string prefix = null;
-                int delimiterIndex = key.IndexOf(DELIMITER);
+                char delimiter = key.Contains(QUALIFIED_DELIMITER) ? QUALIFIED_DELIMITER : DELIMITER;
+                int delimiterIndex = key.IndexOf(delimiter);
 
                 if (delimiterIndex > 0) {
-                    // Split only once: "prefix_key" → ["prefix", "key"]
-                    var parts = key.Split(DELIMITER, 2);
+                    var parts = key.Split(delimiter, 2);
                     if (parts.Length == 2) {
                         prefix = parts[0];
                         key = parts[1]; // lookup is performed on the key part
@@ -460,8 +461,9 @@ namespace NINA.Sequencer.Logic {
                     return true;
                 }
 
-                if (key.IndexOf(DELIMITER) > 0) {
-                    string[] parts = key.Split(DELIMITER, 2);
+                char delimiter = key.Contains(QUALIFIED_DELIMITER) ? QUALIFIED_DELIMITER : DELIMITER;
+                if (key.IndexOf(delimiter) > 0) {
+                    string[] parts = key.Split(delimiter, 2);
                     if (parts.Length == 2) {
                         key = parts[1];
                         prefix = parts[0];
@@ -1153,18 +1155,24 @@ namespace NINA.Sequencer.Logic {
                 UninitializeAllSymbols("Mount", "Connected");
             }
         }
+
+        private static string GetSwitchExpressionName(ISwitch channel) {
+            var expressionName = (channel as ICompositeSwitchIdentity)?.ExpressionName;
+            return string.IsNullOrEmpty(expressionName) ? channel.Name : expressionName;
+        }
+
         public void UpdateDeviceInfo(SwitchInfo deviceInfo) {
             AddOrUpdateSymbol("Switch", "Connected", deviceInfo.Connected);
             if (deviceInfo.Connected) {
                 var readonlySwitches = deviceInfo.ReadonlySwitches ?? Enumerable.Empty<ISwitch>();
                 var writableSwitches = deviceInfo.WritableSwitches ?? Enumerable.Empty<IWritableSwitch>();
                 var readonlySymbols = readonlySwitches
-                    .Select(sw => SanitizeIdentifier(sw.Name))
+                    .Select(sw => SanitizeIdentifier(GetSwitchExpressionName(sw)))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(symbol => symbol, StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 var writableSymbols = writableSwitches
-                    .Select(sw => SanitizeIdentifier(sw.Name))
+                    .Select(sw => SanitizeIdentifier(GetSwitchExpressionName(sw)))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(symbol => symbol, StringComparer.OrdinalIgnoreCase)
                     .ToList();
@@ -1172,11 +1180,11 @@ namespace NINA.Sequencer.Logic {
                 RemoveAllSymbols("Gauge", readonlySymbols.ToArray());
                 RemoveAllSymbols("Switch", writableSymbols.Prepend("Connected").ToArray());
                 foreach (ISwitch sw in readonlySwitches) {
-                    string key = SanitizeIdentifier(sw.Name);
+                    string key = SanitizeIdentifier(GetSwitchExpressionName(sw));
                     AddOrUpdateSymbol("Gauge", key, sw.Value);
                 }
                 foreach (IWritableSwitch sw in writableSwitches) {
-                    string key = SanitizeIdentifier(sw.Name);
+                    string key = SanitizeIdentifier(GetSwitchExpressionName(sw));
                     AddOrUpdateSymbol("Switch", key, sw.Value);
                 }
 

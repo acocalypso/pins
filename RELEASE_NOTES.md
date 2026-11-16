@@ -19,14 +19,15 @@ This allows you to safely return to a stable release if needed.
 # Version 3.3 NIGHTLY
 
 ## General
-- PINS daemon package builds now include the helper for switching between stable and unstable APT repositories.
-- Added a manual workflow that builds PINS, ninaAPI and the Touch-N-Stars plugin from their upstream unstable branches, bundles the Touch-N-Stars develop frontend, and publishes all three ARM64 Debian packages in one prerelease.
 - The application now runs on .NET 10, bringing performance improvements and access to the latest runtime features.
 
 ## Bugfixes
-- PINS package installation checks now resolve pinsdaemon's raspi-config dependency against the signed Raspberry Pi OS Trixie repository.
-- PINS full and standalone pinsdaemon package builds now include the swap-size helper and validate its presence in the Debian package.
-- INDI v2.2.5 Debian Trixie package builds now tolerate upstream GCC maybe-uninitialized warnings while keeping the diagnostics visible.
+- Dropping a saved target onto a DSO container now reliably updates its coordinates and target details, including after the container has been open for some time.
+- Removed symbol containers and replaced sequences now release cached scopes and background condition checks. Symbols also register correctly when restored after deletion.
+- Validation issues for Loop, Loop While and Moon Illumination conditions now start with an empty list and notify the UI when validation results change.
+- Take Many Exposures now rejects invalid iteration expressions. Explicit subframe dimensions and absolute focuser moves now read current expression values when executed.
+- Sky Flats now honors retry and error settings when a predicted exposure exceeds the configured limits, and incomplete captures no longer count as completed frames.
+- Fixed missing synchronization in native QHY, ToupTek-family, FTDI, SBIG and Moravian SDK calls to prevent overlapping operations and premature handle release.
 - Dome parking now checks that the driver reports it is parked after movement stops and reports a failure if it is not. A fixed 10-minute timeout aborts parking if it does not complete.
 - ASCOM and Alpaca cameras now apply their reported Bayer X/Y offsets when automatically debayering previews, so non-RGGB phases display the correct colors while preserving the original image metadata.
 - The Connect All and Disconnect All commands can no longer run at the same time, preventing conflicting device operations during slow connections.
@@ -57,7 +58,12 @@ This allows you to safely return to a stable release if needed.
 - Canceling a native Nikon automatic shutter exposure no longer sends an unsupported Bulb termination command that could terminate N.I.N.A.
 
 ## Improvements
-- Perihelion can now be built and released as an installable PINS plugin package.
+- Plugins can now provide primary and blind plate solvers, including optional embedded settings. Profiles retain unavailable plugin selections and report an error only when those solvers are used.
+- **Equipment hubs**
+    - Combine multiple Safety Monitor, Switch or Weather devices by selecting a N.I.N.A. hub in the driver list. Choose its devices through the gear button and see their connection status and any errors on the equipment screen.
+    - The safety hub considers conditions safe only when every device is connected and reports safe. Each device's safety status is shown separately.
+    - The switch hub gathers all gauges and switches in one view, with names that identify their source device. Sequencer switch actions remember the selected device and channel even when their order changes.
+    - The weather hub lets you choose which device supplies each reading, such as temperature, humidity or wind speed. Devices without assigned readings stay disconnected and are marked as not used.
 - The advanced sequencer now keeps the last 100 configuration edits in memory with Undo, Redo and an Edit History sidebar tab showing affected items, their locations and before/after values. History remains available during unlocked execution and preserves sequence objects and unrelated progress. Standard plugin fields participate automatically; custom plugin editors can opt in through the editor history context. The history list keeps its rows stable during editing and replay. Entries name the edited item and show compact locations, position changes and readable selection labels. Full paths can be expanded without navigating history, and moves omit incidental shifts of neighboring items. Field edits inside compound instructions such as Smart Exposure use the visible instruction's name and position. Core editor coverage includes compound exposure and flat inputs, expression text and stepper controls, coordinate fields, time-provider changes and programmable meridian-flip action sets. Optional custom property and attachment-state providers let plugins capture configuration side effects through the same path as core entities; ordinary fields need no additional interface. Template-instance edits and custom editors now resolve the correct history independently of focus. Whole-target undo preserves the sign of zero declination. Replay keeps history available for retry when a failed edit has been fully rolled back.
 - "Cool Camera" now waits until the sensor enters the target temperature tolerance whether approaching from above or below.
 - The Legacy Sequencer can now reset progress for every target in the current Target Set with one confirmed action.
@@ -130,6 +136,7 @@ This allows you to safely return to a stable release if needed.
 - **Plugin support (opt-in)**
   - Expression support for plugin-provided sequence items is **opt-in** and requires plugin updates.
   - Plugins must explicitly adopt the new expression system to expose expression-enabled fields.
+  - The expression generator now reports invalid declarations, missing validator callbacks and malformed ranges at build time. New diagnostics help plugin authors compose validation, avoid discarded issues and prevent recursive proxy access. Cache-read warnings also cover inherited expressions and compound assignments. Generated sources support escaped default labels, special numeric constants and matching class names in different namespaces.
   - Plugins that are not updated continue to function normally, but their sequence items will not offer expression support.
 
 - **Sequencer**
@@ -161,8 +168,25 @@ This allows you to safely return to a stable release if needed.
   - While connecting the app will wait for the filter wheel homing to finish before proceeding
 - **Moravian Instruments Cameras and Integrated Filter Wheels**
   - Added native drivers for Moravian Instruments cameras and integrated filter wheels
+- **Finger Lakes Instrumentation Legacy CCD Driver**
+  - Substantial overhaul of the built-in driver for legacy FLI CCD cameras includes:
+    - Completely revamped pre-exposure RBI handling and expanded the available RBI options.
+    - The RBI settings for an exposure are recorded to image file headers.
+    - Exposure timestamps are more accurate and no longer include the time taken by RBI actions that precede an exposure.
+    - Introduced an option to include overscan and optical-black areas in the downloaded image.
+    - Connected FLI cameras are now identified by their serial number, enabling easier management in the case of multiple FLI cameras connected to the system.
+    - No longer creates an extra copy of image data in memory when downloading images, reducing memory usage and improving performance.
 
 ### **User Interface & Usability**
+- **Plugin Manager**
+  - Browse plugins in a resizable list with details alongside it. Installed opens first, while Available remains separate for discovering plugins.
+  - Search by name, author, description or tag and select multiple tags to narrow the list. Tag filters show counts for the current section, and list labels identify installed plugins and available updates.
+  - Configure installed plugins, read changelogs within N.I.N.A. and view screenshots in a gallery. Additional Info brings together installation guidance and project links.
+  - The Versions tab highlights the installed release and lets you switch to older or newer compatible versions where available, even when the latest release requires a newer N.I.N.A.
+  - Update all includes every available update, even when filters hide some plugins. Refresh and installation progress appear at the bottom alongside restart reminders that stay visible as you browse. Plugin changes take effect after restarting N.I.N.A.
+  - Plugin images and changelogs are saved between sessions for faster browsing and remain available if a refresh fails.
+- **Initialization Progress**
+  - Plugins, Imaging and Sequencer now use matching horizontal progress bars while loading.
 - **Sequencer**
   - Each intstruction container now has a colored border on the left side to better differentiate between them. This can be disabled in Options > Imaging > Sequence > Colored Container Borders
 - **Sky Atlas Improvements**  

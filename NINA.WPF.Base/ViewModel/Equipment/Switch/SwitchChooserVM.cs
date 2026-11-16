@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -37,6 +37,10 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Switch {
         public override async Task GetEquipment() {
             await lockObj.WaitAsync();
             try {
+                if (HubConfiguration?.Hub.IsSessionActive == true) {
+                    return;
+                }
+
                 var devices = new List<IDevice>();
 
                 devices.Add(new DummyDevice(Loc.Instance["LblNoSwitch"]));
@@ -77,6 +81,8 @@ namespace NINA.WPF.Base.ViewModel.Equipment.Switch {
                         Logger.Error(ex);
                     }
                 }
+
+                AddHub(devices, new CompositeSwitchHub(Loc.Instance["LblSwitchHub"]), profileService.ActiveProfile.SwitchSettings);
 
                 DetermineSelectedDevice(devices, profileService.ActiveProfile.SwitchSettings.Id, profileService.ActiveProfile.SwitchSettings.LastDeviceName);
 

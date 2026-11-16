@@ -1,3 +1,17 @@
+#region "copyright"
+
+/*
+    Copyright © 2025 Nico Trost <nico.trost57@gmail.com> and the PI.N.S. contributors
+
+    This file is part of PI 'N' Stars.
+
+    This Source Code Form is subject to the terms of the Mozilla Public
+    License, v. 2.0. If a copy of the MPL was not distributed with this
+    file, You can obtain one at http://mozilla.org/MPL/2.0/.
+*/
+
+#endregion "copyright"
+
 using NINA.Core.Utility;
 using System;
 using System.Collections.Generic;
@@ -63,8 +77,10 @@ namespace GPSDK {
             { "Sony Alpha 7C", (6000, 4000, 5.93, 5.93) },
         };
 
-        public static Dictionary<string, string> Enum() {
-            Dictionary<string, string> devices = [];
+        // Model name and port of each detected camera. A list, not a dictionary by name: two cameras of the same model
+        // have the same name, and the name has to stay as is, since libgphoto2 looks the model's abilities up by it.
+        public static List<KeyValuePair<string, string>> Enum() {
+            List<KeyValuePair<string, string>> devices = [];
 
             // Create context
             IntPtr ctx = GpContextNew();
@@ -120,7 +136,7 @@ namespace GPSDK {
                 }
 
                 // Add camera to list
-                devices.Add(name, path);
+                devices.Add(new KeyValuePair<string, string>(name, path));
             }
 
             // Clean up

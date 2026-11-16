@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright Â© 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -39,9 +39,14 @@ namespace NINA.Profile.Interfaces {
         int FileCameraDownloadDelay { get; set; }
         BayerPatternEnum BayerPattern { get; set; }
         bool FLIEnableFloodFlush { get; set; }
+        bool RBIBackgroundFlush { get; set; }
+        bool FLIEnableFlatFloodFlush { get; set; }
         bool FLIEnableSnapshotFloodFlush { get; set; }
+        bool FLIKeepShutterOpen { get; set; }
+        bool FLIIncludeOverscan { get; set; }
         double FLIFloodDuration { get; set; }
         uint FLIFlushCount { get; set; }
+        bool FLIFloodBinAuto { get; set; }
         BinningMode FLIFloodBin { get; set; }
         bool BitScaling { get; set; }
         bool SaveNativeCameraRaw { get; set; }

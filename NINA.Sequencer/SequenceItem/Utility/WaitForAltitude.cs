@@ -1,4 +1,4 @@
-﻿#region "copyright"
+#region "copyright"
 
 /*
     Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
@@ -47,6 +47,7 @@ namespace NINA.Sequencer.SequenceItem.Utility {
         public WaitForAltitude(IProfileService profileService) :base() {
             Data = new WaitLoopData(profileService, false, GetType().Name);
             Data.Offset = 30;
+            BindEffectiveCoordinates();
             AboveOrBelow = ">";
             ProfileService = profileService;
         }
@@ -57,20 +58,22 @@ namespace NINA.Sequencer.SequenceItem.Utility {
 
         public override object Clone() {
             WaitForAltitude clone = new WaitForAltitude(this);
-            clone.Data = Data.Clone();
+            var clonedData = Data.Clone();
             clone.AboveOrBelow = AboveOrBelow;
             UpdateExpressions(clone, this);
+            clone.Data = clonedData;
+            clone.Coordinates = clone.Data.Coordinates;
             return clone;
         }
 
         [OnDeserialized]
         public new void OnDeserialized(StreamingContext context) {
-            Coordinates = Data.Coordinates.Clone();
             if (OffsetExpression.Definition.Length == 0) {
                 OffsetExpression.Definition = Data.Offset.ToString(CultureInfo.InvariantCulture);
             }
-            base.OnDeserialized(context);
         }
+
+        protected override bool UsesDataCoordinates => true;
 
         public IProfileService ProfileService { get; set; }
         
@@ -95,15 +98,18 @@ namespace NINA.Sequencer.SequenceItem.Utility {
 
         public override async Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
             do {
-                var coordinates = Data.Coordinates.Coordinates;
-                var altaz = coordinates.Transform(Angle.ByDegree(Data.Latitude), Angle.ByDegree(Data.Longitude), Data.Elevation);
+                if (OffsetExpression.Definition.Length > 0) {
+                    _ = Offset;
+                }
+
+                var valid = Data.UpdateCurrentTargetPosition(Data.Coordinates.Coordinates.DateTime.Now);
                 progress?.Report(new ApplicationStatus() {
-                    Status = string.Format(Loc.Instance["Lbl_SequenceItem_Utility_WaitForAltitude_Progress"], Math.Round(altaz.Altitude.Degree, 2), Data.TargetAltitude)
+                    Status = string.Format(Loc.Instance["Lbl_SequenceItem_Utility_WaitForAltitude_Progress"], Math.Round(Data.CurrentAltitude, 2), Math.Round(Data.TargetAltitude, 2))
                 });
 
-                if (aboveOrBelow == ">" && altaz.Altitude.Degree >= Data.Offset) {
+                if (valid && aboveOrBelow == ">" && Data.CurrentAltitude >= Data.TargetAltitude) {
                     break;
-                } else if (aboveOrBelow == "<" && altaz.Altitude.Degree <= Data.Offset) {
+                } else if (valid && aboveOrBelow == "<" && Data.CurrentAltitude <= Data.TargetAltitude) {
                     break;
                 }
 
@@ -117,13 +123,16 @@ namespace NINA.Sequencer.SequenceItem.Utility {
         }
 
         public void CalculateExpectedTime() {
-            Data.CurrentAltitude = GetCurrentAltitude(DateTime.Now, Data.Observer);
-            CalculateExpectedTimeCommon(Data, until: true, 30, GetCurrentAltitude);
+            if (OffsetExpression.Definition.Length > 0) {
+                _ = Offset;
+            }
+
+            Data.CalculateTargetExpectedTime(DateTime.Now, aboveOrBelow == ">"
+                ? TargetCrossingComparison.AboveInclusive : TargetCrossingComparison.BelowInclusive);
         }
 
         public override void AfterParentChanged() {
             base.AfterParentChanged();
-            Data.Coordinates = Coordinates;
             Validate();
         }
 
@@ -132,10 +141,14 @@ namespace NINA.Sequencer.SequenceItem.Utility {
         }
 
         public bool Validate() {
+            ResolveEffectiveCoordinates();
+            if (OffsetExpression.Definition.Length > 0) {
+                _ = Offset;
+            }
             Issues.Clear();
 
-            double maxAlt = AstroUtil.GetAltitude(0, Data.Latitude, Data.Coordinates.DecDegrees);
-            double minAlt = AstroUtil.GetAltitude(180, Data.Latitude, Data.Coordinates.DecDegrees);
+            double maxAlt = AstroUtil.GetAltitude(0, Data.Latitude, Data.Coordinates.Coordinates.Dec);
+            double minAlt = AstroUtil.GetAltitude(180, Data.Latitude, Data.Coordinates.Coordinates.Dec);
 
             if (aboveOrBelow == ">") {
                 if (maxAlt < Data.TargetAltitude) {
@@ -151,7 +164,10 @@ namespace NINA.Sequencer.SequenceItem.Utility {
                 CalculateExpectedTime();
             }
 
-            Expression.ValidateExpressions(Issues, OffsetExpression, RaExpression, DecExpression);
+            Expression.ValidateExpressions(Issues, OffsetExpression);
+            if (!Inherited) {
+                Expression.ValidateExpressions(Issues, RaExpression, DecExpression);
+            }
 
             RaisePropertyChanged("Issues");
             return Issues.Count == 0;

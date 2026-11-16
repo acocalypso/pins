@@ -27,6 +27,9 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="View\Plugins\PluginImage.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="Database\Initial\initial_data.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
@@ -64,6 +67,13 @@
     <Content Include="LICENSE.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="3rd-party-licenses.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\NINA.GuideEngine\THIRD_PARTY_NOTICES.md">
+      <Link>THIRD_PARTY_NOTICES.md</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\observatory.png" />
@@ -80,6 +90,7 @@
     <ProjectReference Include="..\NINA.Plugin\NINA.Plugin.csproj" />
     <ProjectReference Include="..\NINA.Profile\NINA.Profile.csproj" />
     <ProjectReference Include="..\NINA.Sequencer\NINA.Sequencer.csproj" />
+    <ProjectReference Include="..\NINA.Mcp.Adapter\NINA.Mcp.Adapter.csproj" />
     <ProjectReference Include="..\NINA.WPF.Base\NINA.WPF.Base.csproj" />
   </ItemGroup>
   <ItemGroup>

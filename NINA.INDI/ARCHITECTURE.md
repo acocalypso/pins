@@ -15,7 +15,7 @@ This project is pins-specific; it does not exist in upstream NINA. It is consume
 ## Top-Level Structure
 
 - `INDIClient.cs`
-  The hub. A process-wide singleton (`INDIClient.Instance`) that starts/stops `indiserver`, maintains the TCP connection, parses inbound XML, owns the global property store and message log, loads/unloads drivers, and routes property updates to registered devices.
+  The hub. A process-wide singleton (`INDIClient.Instance`) that starts/stops `indiserver`, maintains the TCP connections (one main connection plus one image connection per camera, see Concurrency Notes), parses inbound XML, owns the global property store and message log, loads/unloads drivers, and routes property updates to registered devices.
 - `Protocol/`
   Wire-protocol layer. `INDIProperty.cs` (the number/switch/text/light/blob property + element model), `INDIProtocolParser.cs` (XML ⇄ model), and `INDISnapshot.cs` (immutable, JSON-friendly snapshots for the control panel).
 - `Devices/`
@@ -35,6 +35,15 @@ This project is pins-specific; it does not exist in upstream NINA. It is consume
 - Drivers are started/stopped by writing `start <driver>` / `stop <driver>` lines into the FIFO.
 - Readiness is exposed through `WaitForServerReadyAsync`; callers (e.g. device enumeration) wait on it with a bounded timeout so a missing/broken server never hangs the app.
 - `Dispose` / `CleanupServer` kill the server process and remove the FIFO.
+
+**Losing the server.** An uncancelled end of the main receive loop or the indiserver process's `Exited` event calls `HandleServerConnectionLost`, once for both (`_recovering`; a loss during a start or recovery is picked up by `FinishRecovery` afterwards):
+
+- The dead session is torn down (cancelled first, so it applies no buffered element), the image connections are closed and the property store is cleared.
+- Every registered `INDIDevice` gets `OnServerConnectionLost`: it is disconnected, fails its pending async operations, drops its properties and sets `ServerConnectionLost`, and `OnConnectionLost` releases type-specific waits. Waits ended that way throw (`ThrowIfServerConnectionLost`) instead of returning as completed. `ServerConnectionLost` stays set until the device is connected again, so the equipment layer does not take the `CONNECT=On` that a still-running server reports after the reconnect as connected: that session's image connection and `PostConnect` setup are gone.
+- Recovery: a server that still runs keeps its drivers, so only the connection is restored. A dead one is restarted under `_getDriversSemaphore` (so no `GetDevices` starts a driver in between): driver processes that outlived it get up to 5 s to exit and are then killed, and the drivers that ran under it are started again through `LoadDriver`, which waits until each has described itself. Readiness (`_serverReadyTcs`, replaced for the recovery) is only signalled after that. At most `MaxRecoveries` (3) within `RecoveryWindow` (10 minutes), then the client gives up and asks for a restart of pins.
+- Only a server that was ready once is recovered; a failed start stays a start error. A loss reported while a start or recovery runs is turned away and picked up by `FinishRecovery` through `_endedSession` (set before the loss is reported) or the process state.
+- Equipment is not reconnected automatically. `Dispose` and `Disconnect` are never treated as a loss.
+- Shutdown: `Program.cs` calls `BeginShutdown` first in `ApplicationStopping`, before the equipment disconnects and `WaitForDeviceDisconnects`. A loss from then on (indiserver ending on its own, or a unit that still stops it with pins) still tears the session down and marks the devices, so their disconnect waits end at once, but is neither recovered nor announced. `pins.service` uses `KillMode=mixed`, so systemd signals only pins and the server keeps running until `Dispose` ends it.
 
 This is inherently a Linux deployment story (`mkfifo`, `pkill`, an `indiserver` binary on `PATH`). It aligns with pins being a headless Linux fork — see "Runtime Model (pins fork)" in [`../AGENTS.md`](../AGENTS.md).
 
@@ -77,8 +86,12 @@ Subclasses override `GetRequiredConnectionProperties`, `OnPreConnect`, and the `
 - `_getDriversSemaphore` serializes `GetDevices` so concurrent enumerations can't race driver load/unload.
 - `_operationLock` serializes socket writes; per-device `_asyncOperationsLock` guards the pending-async-operation map.
 - `ProcessXmlMessage` processes elements strictly sequentially, in wire order. INDI is a stateful, ordered stream (a `defXxxVector` must be applied before the `setXxxVector` that follows it in the same batch; consecutive coordinate updates must apply oldest-first), so do not parallelize this loop.
+- Camera images do not travel on the main connection. `EnableBLOB(device)` opens a connection of the camera's own that sends only `<enableBLOB device="…">Only</enableBLOB>` (indiserver keeps the BLOB mode per connection, and naming the device registers the connection's interest in it); the main connection stays at indiserver's default, Never. So guide-pulse states, exposure states and mount positions never wait behind a multi-megabyte image, and one camera's image never waits behind another's. Each connection runs its own receive loop and scanner state (`XmlScanState`), still strictly in order within that connection.
+- Consequence: an image can be applied before or after the main-connection updates that surrounded it on the server. `INDICamera` completes an exposure on the image itself, not on `CCD_EXPOSURE`'s state; keep image handling independent of that order.
+- `ProcessElement` decodes image payloads (`INDIProtocolParser.DecodeBlobs`) **before** taking `_lock` and only applies them under it, so the main connection's updates never wait for a decode.
+- An image connection the server closes is reopened; one closed within `BlobConnectionMinLifetime` of opening, or one that can't be opened, falls back to `enableBLOB Also` on the main connection (the pre-split behavior) so the camera keeps working. Unloading a driver closes its devices' image connections; `Disconnect` closes all of them.
 
-When adding behavior, respect which lock owns which state; the comments in `INDIClient.cs` document several non-obvious invariants (e.g. why driver eviction is scoped per NINA device-type category even when two categories share an INDI interface bit).
+When adding behavior, respect which lock owns which state; the comments in `INDIClient.cs` document several non-obvious invariants (e.g. why driver eviction is scoped per NINA device-type category even when two categories share an INDI interface bit, and why a category's previous driver is only unloaded once no other category still uses it).
 
 ## Dependency Position
 
@@ -94,4 +107,5 @@ When adding behavior, respect which lock owns which state; the comments in `INDI
 - Maintain the `IINDIDevice` / per-type interfaces when adding capabilities; `NINA.Equipment` depends on them.
 - Do not add WPF or profile-setting dependencies here — keep the project portable and headless-friendly.
 - The server lifecycle assumes a Linux host with `indiserver`, `mkfifo`, and `pkill` available; treat that as a platform constraint.
+- Tests never let `INDIClient.Instance` create the real client: its first access starts `indiserver` after a `pkill`. They use `new INDIClient(port, startServer: false)` (whose `Dispose` leaves the machine's server alone) against `NINA.Test/INDI/FakeIndiServer`, swap it in with `INDIClient.SetInstanceForTests`, and on teardown restore the previous instance or keep the disposed test client, never null (`SetInstanceForTests` rejects null).
 - This project participates in the pins INDI control panel and INDI equipment integrations; cross-check the related pins project notes and `NINA.Equipment` when changing the property store or device adapters.

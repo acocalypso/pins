@@ -13,9 +13,9 @@ using FluentAssertions;
 using NINA.Astrometry;
 using NINA.Core.Enum;
 using NINA.Core.Utility;
+using NINA.Test.Database;
 using NUnit.Framework;
 using System;
-using System.Collections.Concurrent;
 using System.IO;
 using System.Reflection;
 
@@ -109,7 +109,8 @@ namespace NINA.Test.AstrometryTest {
 
         private static TempEarthRotationDatabase CreateEarthRotationDatabase(params (DateTime Date, double Ut1MinusUtc)[] rows) {
             string databasePath = Path.Combine(TestContext.CurrentContext.WorkDirectory, $"earth-rotation-{Guid.NewGuid():N}.sqlite");
-            string connectionString = $"Data Source={databasePath};";
+            EarthRotationTestDatabase.CreateEmpty(databasePath);
+            string connectionString = $"Data Source={databasePath};Pooling=False;";
             DatabaseInteraction databaseInteraction = new DatabaseInteraction(connectionString);
 
             using (var context = databaseInteraction.GetContext()) {
@@ -128,13 +129,7 @@ namespace NINA.Test.AstrometryTest {
         }
 
         private static void ClearDeltaUTCaches() {
-            typeof(AstroUtil).GetField("DeltaUTToday", BindingFlags.NonPublic | BindingFlags.Static)?.SetValue(null, null);
-            typeof(AstroUtil).GetField("DeltaUTYesterday", BindingFlags.NonPublic | BindingFlags.Static)?.SetValue(null, null);
-            typeof(AstroUtil).GetField("DeltaUTTomorrow", BindingFlags.NonPublic | BindingFlags.Static)?.SetValue(null, null);
-            typeof(AstroUtil).GetField("DeltaUTReference", BindingFlags.NonPublic | BindingFlags.Static)?.SetValue(null, default(DateTime));
-
-            FieldInfo cacheField = typeof(AstroUtil).GetField("DeltaUTCache", BindingFlags.NonPublic | BindingFlags.Static);
-            cacheField?.SetValue(null, new ConcurrentDictionary<DateTime, double>());
+            typeof(DatabaseInteraction).GetMethod("InvalidateEarthRotationCache", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, null);
         }
 
         private sealed class TempEarthRotationDatabase : IDisposable {

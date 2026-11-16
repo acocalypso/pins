@@ -71,10 +71,14 @@ namespace NINA.Core.Utility {
 
         private DateTimeOffset? lastSlowLogTime = null;
 
+        // Held by a poll and by UpdateNow, so a poll that read the device before UpdateNow can't apply its older values
+        // after it
+        private readonly SemaphoreSlim pollGate = new SemaphoreSlim(1, 1);
+
         public async Task Stop() {
             try { cts?.Cancel(); } catch { }
             while (!task?.IsCompleted == true) {
-                await Task.Delay(100);
+                await Task.Delay(100).ConfigureAwait(false);
             }
         }
 
@@ -82,7 +86,20 @@ namespace NINA.Core.Utility {
             var now = DateTimeOffset.UtcNow;
             var destination = now + TimeSpan.FromSeconds(Interval);
             while (!ct.IsCancellationRequested && !task?.IsCompleted == true && LastUpdate < destination) {
-                await Task.Delay(50, ct);
+                await Task.Delay(50, ct).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Reads and applies the device values once, now, in turn with the polls: a poll in progress finishes first.
+        /// For a caller that knows the device has just changed (a move that ended) and needs its values right away.
+        /// </summary>
+        public async Task UpdateNow(CancellationToken ct) {
+            await pollGate.WaitAsync(ct).ConfigureAwait(false);
+            try {
+                UpdateValuesFunc(GetValuesFunc());
+            } finally {
+                pollGate.Release();
             }
         }
 
@@ -97,13 +114,22 @@ namespace NINA.Core.Utility {
                 Dictionary<string, object> values = new Dictionary<string, object>();
                 try {
                     while (await timer.WaitForNextTickAsync(token) && !token.IsCancellationRequested) {
-                        var getStart = DateTimeOffset.UtcNow;                        
-                        values = GetValuesFunc();
+                        await pollGate.WaitAsync(token).ConfigureAwait(false);
+                        DateTimeOffset getStart;
+                        DateTimeOffset updateStart;
+                        DateTimeOffset updateEnd;
+                        try {
+                            getStart = DateTimeOffset.UtcNow;
+                            values = GetValuesFunc();
 
-                        var updateStart = DateTimeOffset.UtcNow;                        
-                        UpdateValuesFunc(values);
+                            updateStart = DateTimeOffset.UtcNow;
+                            UpdateValuesFunc(values);
 
-                        var updateEnd = DateTimeOffset.UtcNow;
+                            updateEnd = DateTimeOffset.UtcNow;
+                        } finally {
+                            pollGate.Release();
+                        }
+
                         var totalDuration = updateEnd - getStart;
                         if (Logger.IsEnabled(Enum.LogLevelEnum.TRACE)) {
                             Logger.Trace($"{Context} values have been updated. Poll start: {getStart:o}; Update start: {updateStart:o}; Update end: {updateEnd:o}; Poll duration {updateStart - getStart}; Update duration {updateEnd - updateStart}; Overall duration {totalDuration}");
@@ -127,7 +153,7 @@ namespace NINA.Core.Utility {
                     UpdateValuesFunc(values);
                 }
             });
-            await task;
+            await task.ConfigureAwait(false);
         }
     }
 }

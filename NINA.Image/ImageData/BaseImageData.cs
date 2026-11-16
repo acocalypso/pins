@@ -1,7 +1,7 @@
 #region "copyright"
 
 /*
-    Copyright ï¿½ 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
+    Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
 
     This file is part of N.I.N.A. - Nighttime Imaging 'N' Astronomy.
 
@@ -61,7 +61,7 @@ namespace NINA.Image.ImageData {
             MetaData = metaData;
             Properties = new ImageProperties(width: width, height: height, bitDepth: bitDepth, isBayered: isBayered, gain: metaData.Camera.Gain, offset: metaData.Camera.Offset);
             StarDetectionAnalysis = starDetection.CreateAnalysis();
-            Statistics = new Nito.AsyncEx.AsyncLazy<IImageStatistics>(async () => await Task.Run(() => ImageStatistics.Create(this)));
+            Statistics = new Nito.AsyncEx.AsyncLazy<IImageStatistics>(() => Task.FromResult(ImageStatistics.Create(this)));
             this.profileService = profileService;
             this.starDetection = starDetection;
             this.starAnnotator = starAnnotator;
@@ -329,7 +329,8 @@ namespace NINA.Image.ImageData {
             try {
                 if (pattern.Contains(ImagePatternKeys.SensorTemp) && double.IsNaN(MetaData.Camera.Temperature) && ShouldSaveNativeRaw(fileSaveInfo, forceFileType)) {
                     // For DSLRs we need to retrieve the temperature after the file is written. Hence we replace the pattern with this special placeholder
-                    pattern = pattern.Replace(ImagePatternKeys.SensorTemp, "$$DSLR_SENSORTEMP$$");
+                    // pins has no exiftool to fill the placeholder in afterwards, so the temperature stays empty like for any camera without one
+                    //pattern = pattern.Replace(ImagePatternKeys.SensorTemp, "$$DSLR_SENSORTEMP$$");
                 }
 
                 var imagePatterns = GetImagePatterns();
@@ -441,7 +442,7 @@ namespace NINA.Image.ImageData {
                 // Flush to disk so the write truly completes before returning.
                 // Without this, Linux write-back cache on network mounts signals completion
                 // immediately, providing no backpressure and leading to memory exhaustion.
-                fs.Flush(flushToDisk: true);
+                fs.Flush(flushToDisk: SaveDurability.NeedsFlushToDisk(uniquePath));
             }
             return uniquePath;
         }
@@ -489,7 +490,7 @@ namespace NINA.Image.ImageData {
                 var frame = BitmapFrame.Create(RenderBitmapSource(), null, metadata, null);
                 encoder.Frames.Add(frame);
                 encoder.Save(fs);
-                fs.Flush(flushToDisk: true);
+                fs.Flush(flushToDisk: SaveDurability.NeedsFlushToDisk(uniquePath));
             }
 
             return uniquePath;
@@ -525,7 +526,7 @@ namespace NINA.Image.ImageData {
 
                 using (FileStream fs = new FileStream(uniquePath, FileMode.Create)) {
                     f.Write(fs);
-                    fs.Flush(flushToDisk: true);
+                    fs.Flush(flushToDisk: SaveDurability.NeedsFlushToDisk(uniquePath));
                 }
                 return uniquePath;
             } else {
@@ -539,18 +540,41 @@ namespace NINA.Image.ImageData {
 
                 CFitsioFITS f = null;
                 try {
-                    if (Data.FlatArrayInt != null) {
-                        f = new CFitsioFITS(uniquePath, Data.FlatArrayInt, Properties.Width, Properties.Height, compression);
-                    } else {
-                        f = new CFitsioFITS(uniquePath, Data.FlatArray, Properties.Width, Properties.Height, compression);
+                    try {
+                        if (Data.FlatArrayInt != null) {
+                            f = new CFitsioFITS(uniquePath, Data.FlatArrayInt, Properties.Width, Properties.Height, compression);
+                        } else {
+                            f = new CFitsioFITS(uniquePath, Data.FlatArray, Properties.Width, Properties.Height, compression);
+                        }
+                        f.PopulateHeaderCards(MetaData);
+                    } catch {
+                        // Closed here, so that a close that fails as well can't hide why the write failed
+                        try {
+                            f?.Close();
+                        } catch (Exception ex) {
+                            Logger.Warning($"Could not close the FITS file {uniquePath} after the failed write: {ex.Message}");
+                        }
+
+                        throw;
                     }
-                    f.PopulateHeaderCards(MetaData);
-                } finally {
-                    f?.Close();
+
+                    f.Close();
+                } catch (Exception failure) when (failure is not CfitsioNative.cfitsioException { Op: "fits_create_diskfile" }) {
+                    // An incomplete file (e.g. a full disk) must not stay behind looking like a saved frame. When creating
+                    // it failed, the file was never this save's: another save may have taken the name first.
+                    try {
+                        File.Delete(uniquePath);
+                    } catch (Exception ex) {
+                        Logger.Warning($"Could not delete the incomplete FITS file {uniquePath}: {ex.Message}");
+                    }
+
+                    throw;
                 }
                 // cfitsio manages its own file handle; fsync after close via a short-lived write handle.
-                using (FileStream fsync = new FileStream(uniquePath, FileMode.Open, FileAccess.Write, FileShare.None)) {
-                    fsync.Flush(flushToDisk: true);
+                if (SaveDurability.NeedsFlushToDisk(uniquePath)) {
+                    using (FileStream fsync = new FileStream(uniquePath, FileMode.Open, FileAccess.Write, FileShare.None)) {
+                        fsync.Flush(flushToDisk: true);
+                    }
                 }
                 return uniquePath;
             }
@@ -579,7 +603,7 @@ namespace NINA.Image.ImageData {
 
             using (FileStream fs = new FileStream(uniquePath, FileMode.Create)) {
                 img.Save(fs);
-                fs.Flush(flushToDisk: true);
+                fs.Flush(flushToDisk: SaveDurability.NeedsFlushToDisk(uniquePath));
             }
 
             return uniquePath;

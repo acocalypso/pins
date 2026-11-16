@@ -34,6 +34,11 @@ namespace NINA.INDI.Devices {
             base.OnTextPropertyUpdated(p);
         }
 
+        // MoveAsync waits on IsMoving, which only a focus position update that is no longer Busy clears
+        protected override void OnConnectionLost() {
+            IsMoving = false;
+        }
+
         public override void OnNumberPropertyUpdated(INDINumberProperty p) {
             base.OnNumberPropertyUpdated(p);
 
@@ -219,6 +224,8 @@ namespace NINA.INDI.Devices {
                 }
                 await Task.Delay(100, ct);
             }
+
+            ThrowIfServerConnectionLost("Focuser move");
 
             Logger.Debug($"Focuser reached position {Position}");
         }

@@ -22,6 +22,44 @@ namespace NINA.Test.SystemWindowsCompat {
     [TestFixture]
     public class AccordFiltersTest {
 
+        // Accord/AForge: a factor f > 0 stretches [f, 255 - f] to [0, 255] (LevelsLinear, values truncated); NASASkySurvey
+        // uses it to raise the contrast of survey images
+        [TestCase(0, new byte[] { 0, 64, 128, 200, 255 }, new byte[] { 0, 64, 128, 200, 255 })]
+        [TestCase(55, new byte[] { 0, 55, 100, 128, 200, 255 }, new byte[] { 0, 0, 79, 128, 255, 255 })]
+        [TestCase(-64, new byte[] { 0, 128, 255 }, new byte[] { 64, 127, 191 })]
+        public void ContrastCorrection_StretchesLikeAccord(int factor, byte[] input, byte[] expected) {
+            var mat = new OpenCvSharp.Mat(1, input.Length, OpenCvSharp.MatType.CV_8UC1);
+            for (int i = 0; i < input.Length; i++) {
+                mat.Set(0, i, input[i]);
+            }
+
+            using var image = new Bitmap(mat);
+
+            new ContrastCorrection(factor).ApplyInPlace(image);
+
+            OpenCvSharp.Mat result = image;
+            var output = new byte[input.Length];
+            for (int i = 0; i < input.Length; i++) {
+                output[i] = result.Get<byte>(0, i);
+            }
+
+            Assert.That(output, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void ContrastCorrection_LeavesTheAlphaChannel() {
+            var mat = new OpenCvSharp.Mat(1, 1, OpenCvSharp.MatType.CV_8UC4);
+            mat.Set(0, 0, new OpenCvSharp.Vec4b(100, 100, 100, 77));
+            using var image = new Bitmap(mat);
+
+            new ContrastCorrection(55).ApplyInPlace(image);
+
+            OpenCvSharp.Mat result = image;
+            var pixel = result.Get<OpenCvSharp.Vec4b>(0, 0);
+            Assert.That(pixel.Item0, Is.EqualTo(79));
+            Assert.That(pixel.Item3, Is.EqualTo(77));
+        }
+
         [Test]
         public void Grayscale_AppliesCustomChannelWeights() {
             // BT.709 weights as used by NINA's image pipeline
@@ -37,6 +75,30 @@ namespace NINA.Test.SystemWindowsCompat {
             Assert.That(result.PixelFormat, Is.EqualTo(PixelFormat.Format8bppIndexed));
             // 0.2125*100 + 0.7154*150 + 0.0721*200 = 142.98
             Assert.That((int)result.GetPixel(0, 0).R, Is.EqualTo(143).Within(1));
+        }
+
+        // The 16-bit color path (Rgb48 star detection/annotation) must stay 16-bit and keep the
+        // weighted values, and must not touch its source.
+        [Test]
+        public void Grayscale_On48bppInput_ReturnsWeighted16BitGray() {
+            var filter = new Grayscale(0.2125, 0.7154, 0.0721);
+
+            var mat = new OpenCvSharp.Mat(1, 2, OpenCvSharp.MatType.CV_16UC3);
+            // OpenCV order is B, G, R
+            mat.Set(0, 0, new OpenCvSharp.Vec3w(1000, 2000, 3000));
+            mat.Set(0, 1, new OpenCvSharp.Vec3w(65535, 65535, 65535));
+            using var source = new Bitmap(mat);
+
+            using var result = filter.Apply(source);
+
+            Assert.That(result.PixelFormat, Is.EqualTo(PixelFormat.Format16bppGrayScale));
+            OpenCvSharp.Mat resultMat = result;
+            // 0.2125*3000 + 0.7154*2000 + 0.0721*1000 = 2140.1
+            Assert.That((int)resultMat.Get<ushort>(0, 0), Is.EqualTo(2140).Within(1));
+            Assert.That((int)resultMat.Get<ushort>(0, 1), Is.EqualTo(65535));
+
+            OpenCvSharp.Mat sourceMat = source;
+            Assert.That(sourceMat.Get<OpenCvSharp.Vec3w>(0, 0), Is.EqualTo(new OpenCvSharp.Vec3w(1000, 2000, 3000)));
         }
 
         [Test]

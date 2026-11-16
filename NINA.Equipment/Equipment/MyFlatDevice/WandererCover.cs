@@ -24,6 +24,7 @@ using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using static Wanderer.WandererCoverSDK;
 using System.Linq;
+using NINA.Equipment.Equipment.MyRotator;
 
 namespace NINA.Equipment.Equipment.MyFlatDevice {
 
@@ -73,6 +74,7 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
                     var openErr = CoverOpen(_uniqueId);
                     if (openErr == WC_ERROR_TYPE.WC_SUCCESS) {
                         DriverInfo = $"SDK: {DriverVersion}";
+                        communicationErrors.RecordSuccess();
                         Connected = true;
                         return true;
                     } else {
@@ -88,16 +90,37 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
         }
 
         public void Disconnect() {
+            // not connected first: a getter's error on the handle being closed was counted and could report the cover as
+            // lost (and close it again) while the user disconnected it
+            Connected = false;
             try {
                 _ = CoverClose(_uniqueId);
             } catch (Exception ex) {
                 Logger.Error($"WandererCover Disconnect crashed: {ex}");
-            } finally {
-                Connected = false;
             }
         }
 
-        private void DisconnectOnRemovedError() {
+        // A single failed read or write (a USB hiccup at dawn, during the flats) must not tear down the connection, as for
+        // the Wanderer rotator: the cover only counts as lost after 3 errors within 30 s with no successful exchange in
+        // between. The SDK has no separate code for a removed device (WC_ERROR_COMMUNICATION covers both), so every
+        // communication error counts; errors within a second count as one.
+        private readonly CommunicationErrorCounter communicationErrors = new(3, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(1));
+
+        /// <summary>
+        /// Counts a communication error and disconnects once there were too many in a short time. Returns true while the
+        /// connection is kept.
+        /// </summary>
+        private bool OnCommunicationError() {
+            // already disconnected (e.g. by another thread's error): nothing to count, and no second notification
+            if (!Connected) {
+                return false;
+            }
+
+            if (communicationErrors.RecordError(DateTime.UtcNow, out var count)) {
+                Logger.Warning($"WandererCover communication error {count}/{communicationErrors.MaxErrors} within {communicationErrors.Window.TotalSeconds:F0}s, keeping the connection");
+                return true;
+            }
+
             try {
                 Notification.ShowWarning(Loc.Instance["LblCoverConnectionLost"]);
                 Logger.Error($"WandererCover device was removed");
@@ -105,6 +128,30 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
             } catch (Exception ex) {
                 Logger.Error(ex);
             }
+
+            return false;
+        }
+
+        /// <summary>The result of one exchange with the cover: logged and counted when it failed. True when it worked.</summary>
+        private bool Succeeded(WC_ERROR_TYPE err, string what) {
+            if (err == WC_ERROR_TYPE.WC_SUCCESS) {
+                communicationErrors.RecordSuccess();
+                return true;
+            }
+
+            if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
+                Logger.Error($"WandererCover communication error to {what}: {err}");
+                OnCommunicationError();
+            } else {
+                Logger.Error($"WandererCover error to {what}: {err}");
+            }
+
+            return false;
+        }
+
+        private void Crashed(string what, Exception ex) {
+            Logger.Error($"WandererCover {what} crashed: {ex}");
+            OnCommunicationError();
         }
 
         public void SetupDialog() {
@@ -118,26 +165,19 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
                 try {
                     var err = CoverGetStatus(_uniqueId, out var status);
-                    if (err == WC_ERROR_TYPE.WC_SUCCESS) {
-                        return status.coverState switch {
-                            0 => CoverState.Closed,
-                            1 => CoverState.Open,
-                            2 => CoverState.NeitherOpenNorClosed,
-                            3 => CoverState.NeitherOpenNorClosed,
-                            _ => CoverState.Error
-                        };
-                    } else {
-                        if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
-                            Logger.Error($"WandererCover communication error to get brightness {err}");
-                            DisconnectOnRemovedError();
-                        } else {
-                            Logger.Error($"WandererCover error to get brightness {err}");
-                        }
+                    if (!Succeeded(err, "get the cover state")) {
                         return CoverState.Error;
                     }
+
+                    return status.coverState switch {
+                        0 => CoverState.Closed,
+                        1 => CoverState.Open,
+                        2 => CoverState.NeitherOpenNorClosed,
+                        3 => CoverState.NeitherOpenNorClosed,
+                        _ => CoverState.Error
+                    };
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover CoverState crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("CoverState", ex);
                     return CoverState.Error;
                 }
             }
@@ -146,82 +186,199 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
         public int MaxBrightness => 255;
         public int MinBrightness => 0;
 
+        // Cover states of WC_COVER_STATUS.coverState
+        private const int StateClosed = 0;
+        private const int StateOpen = 1;
+        private const int StateMoving = 3;
+
+        // The cover takes 16 to 19 s from one end to the other (two units, 2026-11-13)
+        private static readonly TimeSpan MoveTimeout = TimeSpan.FromSeconds(60);
+
+        // How long the end the cover is leaving still counts as "not moving yet". The SDK reports moving (3) as soon as
+        // the command is sent and clears it with the first status after the move, which the device only sends once it
+        // stopped. A status sent before the move but arriving after the SDK's 150 ms grace would clear it early and leave
+        // the old end reported for the whole move, so this is longer than one move (16 to 19 s).
+        private static readonly TimeSpan MotionStartGrace = TimeSpan.FromSeconds(30);
+
+        // How long a state that is neither an end nor moving has to stay before it counts as a stop. The SDK reports
+        // intermediate (2) while the cover stands with its angle more than 1° from both set angles, and the first status
+        // after a move can still be that far off: a close ended with 2 and was closed within 3 s (2026-11-13), which
+        // made a cover that had closed fail.
+        private static readonly TimeSpan StopConfirm = TimeSpan.FromSeconds(5);
+
         public async Task<bool> Open(CancellationToken ct, int delay = 300) {
+            return await MoveCover(CoverOpenCover, StateOpen, "open", ct, delay);
+        }
+
+        public async Task<bool> Close(CancellationToken ct, int delay = 300) {
+            return await MoveCover(CoverCloseCover, StateClosed, "close", ct, delay);
+        }
+
+        private async Task<bool> MoveCover(Func<int, WC_ERROR_TYPE> command, int targetState, string action, CancellationToken ct, int delay) {
             if (!Connected) return await Task.Run(() => false, ct);
             return await Task.Run(async () => {
                 try {
-                    var err = CoverOpenCover(_uniqueId);
-                    if (err != WC_ERROR_TYPE.WC_SUCCESS) {
-                        if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
-                            Logger.Error($"WandererCover communication error to open cover {err}");
-                            DisconnectOnRemovedError();
-                        } else {
-                            Logger.Error($"WandererCover error to open cover {err}");
-                        }
+                    if (!Succeeded(command(_uniqueId), $"{action} the cover")) {
                         return false;
                     }
-                    while (!ct.IsCancellationRequested) {
-                        await CoreUtil.Delay(delay, ct);
-                        _ = CoverGetStatus(_uniqueId, out var status);
-                        if (status.coverState == 3) {
-                            // Still moving
-                            continue;
-                        }
-                        if (status.coverState == 0) {
-                            // Return true on open state
+
+                    // the last status read without an error, for the angles of a failed move
+                    WC_COVER_STATUS lastStatus = default;
+                    var offEndLogged = false;
+
+                    // a failed status read is counted and the wait goes on while the connection is kept: one USB hiccup
+                    // made the whole open or close fail
+                    var (result, statusError, state) = await WaitForCoverStateAsync(
+                        () => {
+                            var statusErr = CoverGetStatus(_uniqueId, out var status);
+                            if (statusErr == WC_ERROR_TYPE.WC_SUCCESS) {
+                                communicationErrors.RecordSuccess();
+                                lastStatus = status;
+
+                                var offEnd = status.coverState != StateClosed && status.coverState != StateOpen && status.coverState != StateMoving;
+                                if (offEnd && !offEndLogged) {
+                                    // once per move, also when the cover then arrives: how far off and for how long shows
+                                    // whether StopConfirm fits
+                                    offEndLogged = true;
+                                    Logger.Info($"WandererCover reports cover state {status.coverState} while it should {action} ({Angles(status)}); that counts as a stop if it lasts {StopConfirm.TotalSeconds:F0}s");
+                                }
+                            }
+                            return (statusErr, status.coverState);
+                        },
+                        targetState,
+                        TimeSpan.FromMilliseconds(delay),
+                        MoveTimeout,
+                        MotionStartGrace,
+                        StopConfirm,
+                        ct,
+                        statusErr => {
+                            if (statusErr != WC_ERROR_TYPE.WC_ERROR_COMMUNICATION || !Connected) {
+                                return false;
+                            }
+
+                            Logger.Error($"WandererCover communication error to get the cover state while it should {action}: {statusErr}");
+                            return OnCommunicationError();
+                        });
+
+                    switch (result) {
+                        case CoverMoveResult.Reached:
                             return true;
-                        }
-                        return false;
+
+                        case CoverMoveResult.StatusError when statusError == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION:
+                            Logger.Error($"WandererCover lost while it should {action}");
+                            return false;
+
+                        case CoverMoveResult.StatusError:
+                            Logger.Error($"WandererCover error to get the cover state while it should {action} {statusError}");
+                            return false;
+
+                        case CoverMoveResult.TimedOut:
+                            Logger.Error($"WandererCover did not {action} within {MoveTimeout.TotalSeconds:F0}s (cover state {state}, {Angles(lastStatus)})");
+                            return false;
+
+                        default:
+                            Logger.Error($"WandererCover did not {action}: it stopped in cover state {state} ({Angles(lastStatus)})");
+                            return false;
                     }
-                    return false;
                 } catch (OperationCanceledException) {
-                    Logger.Info("WandererCover Open cancelled by user");
+                    Logger.Info($"WandererCover {action} cancelled by user");
                     return false;
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover Open crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed(action, ex);
                     return false;
                 }
             }, ct);
         }
 
-        public async Task<bool> Close(CancellationToken ct, int delay = 300) {
-            if (!Connected) return await Task.Run(() => false, ct);
-            return await Task.Run(async () => {
-                try {
-                    var err = CoverCloseCover(_uniqueId);
-                    if (err != WC_ERROR_TYPE.WC_SUCCESS) {
-                        if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
-                            Logger.Error($"WandererCover communication error to close cover {err}");
-                            DisconnectOnRemovedError();
-                        } else {
-                            Logger.Error($"WandererCover error to close cover {err}");
+        // The angles the SDK derives the cover state from: an end is within 1° of its set angle
+        private static string Angles(WC_COVER_STATUS status) {
+            return $"angle {status.currentPositionAngle:F1}°, closed at {status.closePositionAngle:F1}°, open at {status.openPositionAngle:F1}°";
+        }
+
+        internal enum CoverMoveResult {
+            Reached,
+            Stopped,
+            TimedOut,
+            StatusError
+        }
+
+        /// <summary>
+        /// Polls the cover until it reports <paramref name="targetState"/> (0 = closed, 1 = open). Within
+        /// <paramref name="startGrace"/> it may still report the end it is leaving, also after it was seen moving (3): a
+        /// status from before the move that arrives late clears the SDK's moving state, and the old end then stays
+        /// reported until the move is done. The old end once the grace is over means it stopped short; a cover that
+        /// really returns to its start is therefore only reported at the end of the grace. Any other state (2 =
+        /// intermediate) means it stopped short once the cover was seen moving or the grace is over, and only when it was
+        /// read without a break for <paramref name="stopConfirm"/>: the first status after a move can still be off the
+        /// end. A tolerated failed read in between is no break, and a stop is only reported on a successful read. Gives
+        /// up after <paramref name="timeout"/>. A failed status read ends the wait unless
+        /// <paramref name="keepPolling"/> says to go on (a transient communication error).
+        /// </summary>
+        internal static async Task<(CoverMoveResult Result, WC_ERROR_TYPE Error, int State)> WaitForCoverStateAsync(
+            Func<(WC_ERROR_TYPE Error, int State)> readStatus,
+            int targetState,
+            TimeSpan pollInterval,
+            TimeSpan timeout,
+            TimeSpan startGrace,
+            TimeSpan stopConfirm,
+            CancellationToken ct,
+            Func<WC_ERROR_TYPE, bool> keepPolling = null) {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var seenMoving = false;
+            var lastState = -1; // the last state read without an error, -1 before the first
+            var leavingState = targetState == StateOpen ? StateClosed : StateOpen;
+            TimeSpan? offEndSince = null; // since when a state that is neither an end nor moving is read without a break
+
+            while (true) {
+                await Task.Delay(pollInterval, ct);
+
+                var (error, state) = readStatus();
+                if (error != WC_ERROR_TYPE.WC_SUCCESS) {
+                    if (keepPolling?.Invoke(error) == true) {
+                        if (watch.Elapsed > timeout) {
+                            // the error was tolerated: the move took too long, the cover is not lost (the failed read's
+                            // state means nothing)
+                            return (CoverMoveResult.TimedOut, error, lastState);
                         }
-                        return false;
+
+                        continue;
                     }
-                    while (!ct.IsCancellationRequested) {
-                        await CoreUtil.Delay(delay, ct);
-                        _ = CoverGetStatus(_uniqueId, out var status);
-                        if (status.coverState == 3) {
-                            // Still moving
-                            continue;
-                        }
-                        if (status.coverState == 1) {
-                            // Return true on closed state
-                            return true;
-                        }
-                        return false;
-                    }
-                    return false;
-                } catch (OperationCanceledException) {
-                    Logger.Info("WandererCover Close cancelled by user");
-                    return false;
-                } catch (Exception ex) {
-                    Logger.Error($"WandererCover Close crashed: {ex}");
-                    DisconnectOnRemovedError();
-                    return false;
+
+                    return (CoverMoveResult.StatusError, error, state);
                 }
-            }, ct);
+
+                lastState = state;
+
+                if (state == targetState) {
+                    return (CoverMoveResult.Reached, error, state);
+                }
+
+                var elapsed = watch.Elapsed;
+
+                if (state == StateMoving) {
+                    seenMoving = true;
+                    offEndSince = null;
+                } else if (state == leavingState) {
+                    offEndSince = null;
+
+                    if (elapsed > startGrace) {
+                        return (CoverMoveResult.Stopped, error, state);
+                    }
+                } else {
+                    offEndSince ??= elapsed;
+
+                    var mayHaveStopped = seenMoving || elapsed > startGrace;
+                    var lasted = elapsed - offEndSince.Value >= stopConfirm;
+
+                    if (mayHaveStopped && lasted) {
+                        return (CoverMoveResult.Stopped, error, state);
+                    }
+                }
+
+                if (elapsed > timeout) {
+                    return (CoverMoveResult.TimedOut, error, state);
+                }
+            }
         }
 
         public bool LightOn {
@@ -232,34 +389,30 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
                 try {
                     var err = CoverGetConfig(_uniqueId, out var config);
-                    if (err == WC_ERROR_TYPE.WC_SUCCESS) {
-                        return config.brightness > 0;
-                    } else {
-                        if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
-                            Logger.Error($"WandererCover communication error to get brightness {err}");
-                            DisconnectOnRemovedError();
-                        } else {
-                            Logger.Error($"WandererCover error to get brightness {err}");
-                        }
+                    if (!Succeeded(err, "get the light state")) {
                         return false;
                     }
+
+                    return config.brightness > 0;
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover LightOn getter crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("LightOn getter", ex);
                     return false;
                 }
             }
             set {
+                if (!Connected) {
+                    return;
+                }
+
                 try {
                     WC_COVER_CONFIG config = new() {
                         mask = MASK_COVER_BRIGHTNESS,
                         brightness = value ? (lastBrightness != 0 ? lastBrightness : MaxBrightness) : 0
                     };
-                    _ = CoverSetConfig(_uniqueId, config);
+                    Succeeded(CoverSetConfig(_uniqueId, config), value ? "switch the light on" : "switch the light off");
                     RaisePropertyChanged(nameof(Brightness));
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover LightOn setter crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("LightOn setter", ex);
                 }
             }
         }
@@ -274,36 +427,34 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
                 try {
                     var err = CoverGetConfig(_uniqueId, out var config);
-                    if (err == WC_ERROR_TYPE.WC_SUCCESS) {
-                        return config.brightness;
-                    } else {
-                        if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
-                            Logger.Error($"WandererCover communication error to get brightness {err}");
-                            DisconnectOnRemovedError();
-                        } else {
-                            Logger.Error($"WandererCover error to get brightness {err}");
-                        }
+                    if (!Succeeded(err, "get brightness")) {
                         return -1;
                     }
+
+                    return config.brightness;
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover Brightness getter crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("Brightness getter", ex);
                     return -1;
                 }
             }
             set {
+                if (!Connected) {
+                    return;
+                }
+
                 try {
                     WC_COVER_CONFIG config = new() {
                         mask = MASK_COVER_BRIGHTNESS,
                         brightness = value
                     };
                     Logger.Info($"Setting brightness to {value}");
-                    _ = CoverSetConfig(_uniqueId, config);
-                    lastBrightness = value;
+                    // the brightness the light comes back on with is only taken when the cover took it
+                    if (Succeeded(CoverSetConfig(_uniqueId, config), "set the brightness")) {
+                        lastBrightness = value;
+                    }
                     RaisePropertyChanged(nameof(Brightness));
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover Brightness setter crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("Brightness setter", ex);
                 }
             }
         }
@@ -316,35 +467,31 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
                 try {
                     var err = CoverGetConfig(_uniqueId, out var config);
-                    if (err == WC_ERROR_TYPE.WC_SUCCESS) {
-                        return config.heaterPower;
-                    } else {
-                        if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
-                            Logger.Error($"WandererCover communication error to get heater power {err}");
-                            DisconnectOnRemovedError();
-                        } else {
-                            Logger.Error($"WandererCover error to get heater power {err}");
-                        }
+                    if (!Succeeded(err, "get heater power")) {
                         return 0;
                     }
+
+                    return config.heaterPower;
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover HeaterPower getter crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("HeaterPower getter", ex);
                     return 0;
                 }
             }
             set {
+                if (!Connected) {
+                    return;
+                }
+
                 try {
                     WC_COVER_CONFIG config = new() {
                         mask = MASK_COVER_HEATER_POWER,
                         heaterPower = Math.Max(0, Math.Min(3, value))
                     };
                     Logger.Info($"Setting heater power to {value}");
-                    _ = CoverSetConfig(_uniqueId, config);
+                    Succeeded(CoverSetConfig(_uniqueId, config), "set the heater power");
                     RaisePropertyChanged(nameof(HeaterPower));
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover HeaterPower setter crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("HeaterPower setter", ex);
                 }
             }
         }
@@ -357,35 +504,31 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
                 try {
                     var err = CoverGetStatus(_uniqueId, out var status);
-                    if (err == WC_ERROR_TYPE.WC_SUCCESS) {
-                        return status.openPositionAngle;
-                    } else {
-                        if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
-                            Logger.Error($"WandererCover communication error to get open position angle {err}");
-                            DisconnectOnRemovedError();
-                        } else {
-                            Logger.Error($"WandererCover error to get open position angle {err}");
-                        }
+                    if (!Succeeded(err, "get open position angle")) {
                         return float.NaN;
                     }
+
+                    return status.openPositionAngle;
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover OpenPositionAngle getter crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("OpenPositionAngle getter", ex);
                     return float.NaN;
                 }
             }
             set {
+                if (!Connected) {
+                    return;
+                }
+
                 try {
                     WC_COVER_CONFIG config = new() {
                         mask = MASK_COVER_OPEN_POSITION,
                         openPositionAngle = value
                     };
                     Logger.Info($"Setting open position angle to {value}");
-                    _ = CoverSetConfig(_uniqueId, config);
+                    Succeeded(CoverSetConfig(_uniqueId, config), "set the open position angle");
                     RaisePropertyChanged(nameof(OpenPositionAngle));
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover OpenPositionAngle setter crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("OpenPositionAngle setter", ex);
                 }
             }
         }
@@ -398,35 +541,31 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
                 try {
                     var err = CoverGetStatus(_uniqueId, out var status);
-                    if (err == WC_ERROR_TYPE.WC_SUCCESS) {
-                        return status.closePositionAngle;
-                    } else {
-                        if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
-                            Logger.Error($"WandererCover communication error to get close position angle {err}");
-                            DisconnectOnRemovedError();
-                        } else {
-                            Logger.Error($"WandererCover error to get close position angle {err}");
-                        }
+                    if (!Succeeded(err, "get close position angle")) {
                         return float.NaN;
                     }
+
+                    return status.closePositionAngle;
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover ClosePositionAngle getter crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("ClosePositionAngle getter", ex);
                     return float.NaN;
                 }
             }
             set {
+                if (!Connected) {
+                    return;
+                }
+
                 try {
                     WC_COVER_CONFIG config = new() {
                         mask = MASK_COVER_CLOSE_POSITION,
                         closePositionAngle = value
                     };
                     Logger.Info($"Setting close position angle to {value}");
-                    _ = CoverSetConfig(_uniqueId, config);
+                    Succeeded(CoverSetConfig(_uniqueId, config), "set the close position angle");
                     RaisePropertyChanged(nameof(ClosePositionAngle));
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover ClosePositionAngle setter crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("ClosePositionAngle setter", ex);
                 }
             }
         }
@@ -439,20 +578,13 @@ namespace NINA.Equipment.Equipment.MyFlatDevice {
 
                 try {
                     var err = CoverGetStatus(_uniqueId, out var status);
-                    if (err == WC_ERROR_TYPE.WC_SUCCESS) {
-                        return status.currentPositionAngle;
-                    } else {
-                        if (err == WC_ERROR_TYPE.WC_ERROR_COMMUNICATION) {
-                            Logger.Error($"WandererCover communication error to get current position angle {err}");
-                            DisconnectOnRemovedError();
-                        } else {
-                            Logger.Error($"WandererCover error to get current position angle {err}");
-                        }
+                    if (!Succeeded(err, "get current position angle")) {
                         return float.NaN;
                     }
+
+                    return status.currentPositionAngle;
                 } catch (Exception ex) {
-                    Logger.Error($"WandererCover CurrentPositionAngle crashed: {ex}");
-                    DisconnectOnRemovedError();
+                    Crashed("CurrentPositionAngle", ex);
                     return float.NaN;
                 }
             }

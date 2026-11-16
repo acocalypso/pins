@@ -12,6 +12,7 @@
 
 #endregion "copyright"
 
+using NINA.Core.Enum;
 using NINA.Core.Utility;
 using NINA.INDI.Enums;
 using NINA.INDI.Interfaces;
@@ -19,6 +20,7 @@ using NINA.INDI.Protocol;
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -46,6 +48,22 @@ namespace NINA.INDI.Devices {
         private static readonly TimeSpan StaleBlobDebounce = TimeSpan.FromMilliseconds(500);
         private DateTime? _lastAbortAt;
 
+        // A CCD_EXPOSURE Alert ends the exposure only as the driver's answer to this exposure's command: not before the
+        // command is sent (binning, gain and frame go out first), and not with the timestamp from before it (a repeated
+        // Alert of the previous failed exposure, or the answer to a refused abort). INDI timestamps have a resolution of
+        // one second, so an Alert after a Busy seen since the command counts as well.
+        private volatile bool _exposureCommandSent;
+        private volatile bool _exposureBusySeen;
+        private volatile string _exposurePreSendTimestamp;
+
+        // What CCD_FRAME read after the last full-frame reset. A driver whose full frame differs from CCD_INFO's size
+        // never reads back that size, so without this every frame sent the reset again (toupbase restarts its camera
+        // engine on each CCD_FRAME).
+        private (int X, int Y, int Width, int Height)? _fullFrameAsSet;
+
+        // How long StartExposure waits for the driver's answer to a CCD_FRAME change; internal so tests can shorten it
+        internal TimeSpan FrameAckTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
         // Profile values to apply the first time each switch property arrives.
         // Populated by IndiCamera.PostConnect() before properties are guaranteed
         // to have arrived; applied (and removed) in OnSwitchPropertyUpdated on
@@ -53,6 +71,92 @@ namespace NINA.INDI.Devices {
         private readonly ConcurrentDictionary<string, bool> _pendingProfileSwitches = new();
 
         public INDICamera(INDIDeviceInfo device) : base(device) {
+            _st4.TimedOut += (property, durationMs) => ReportSt4Problem(
+                $"[{DeviceName}] The camera did not report the end of a {durationMs} ms ST4 pulse on {property} within "
+                + $"{PulseGuideTracker.CompletionMargin.TotalMilliseconds:F0} ms of when it should have ended; treating it as finished");
+            _st4.Failed += failure => ReportSt4Problem(failure.Rejected
+                ? $"[{DeviceName}] The camera rejected a {failure.DurationMs} ms ST4 pulse on {failure.Property} (Alert after {failure.ElapsedMs:F0} ms)"
+                : $"[{DeviceName}] The camera reported the end of a {failure.DurationMs} ms ST4 pulse on {failure.Property} after {failure.ElapsedMs:F0} ms");
+        }
+
+        /// <summary>
+        /// Log the messages that repeat for every frame at Debug instead of Info: a guide camera takes a frame every few
+        /// seconds all night.
+        /// </summary>
+        public bool LogFramesAtDebug { get; init; }
+
+        // The ST4 port's pulses, tracked like the mount's (INDITelescope): the driver answers a pulse with Busy or Alert at
+        // once and with Ok when it ended. Initialized here: the base constructor already receives the driver's properties.
+        private readonly PulseGuideTracker _st4 = new();
+
+        // ST4 pulses that timed out, failed or ended early: one warning per interval, the rest at Debug (a guide camera
+        // pulses every few seconds all night)
+        private static readonly TimeSpan St4WarningInterval = TimeSpan.FromMinutes(10);
+        private readonly object _st4WarningLock = new();
+        private DateTime _lastSt4Warning = DateTime.MinValue;
+        private int _st4ProblemsSinceWarning;
+
+        public void St4PulseGuide(GuideDirections direction, int duration) {
+            // both elements of the axis, the opposite one as 0 (libindi keeps the last values, see INDITelescope.PulseGuide)
+            var (property, values) = direction switch {
+                GuideDirections.guideNorth => (PulseGuideTracker.NorthSouth, new[] { ("TIMED_GUIDE_N", (double)duration), ("TIMED_GUIDE_S", 0.0) }),
+                GuideDirections.guideSouth => (PulseGuideTracker.NorthSouth, new[] { ("TIMED_GUIDE_N", 0.0), ("TIMED_GUIDE_S", (double)duration) }),
+                GuideDirections.guideWest => (PulseGuideTracker.WestEast, new[] { ("TIMED_GUIDE_W", (double)duration), ("TIMED_GUIDE_E", 0.0) }),
+                GuideDirections.guideEast => (PulseGuideTracker.WestEast, new[] { ("TIMED_GUIDE_W", 0.0), ("TIMED_GUIDE_E", (double)duration) }),
+                _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
+            };
+
+            // marked before sending: the driver's Busy may arrive before SetNumberValues returns
+            _st4.PulseSending(property, duration);
+            try {
+                SetNumberValues(property, values);
+            } catch (ArgumentException ex) {
+                _st4.PulseNotSent(property);
+                throw new InvalidOperationException($"the camera has no ST4 port ({property}): {ex.Message}", ex);
+            } catch {
+                _st4.PulseNotSent(property);
+                throw;
+            }
+        }
+
+        public bool IsSt4PulseGuiding => _st4.IsPulseGuiding;
+
+        private void ReportSt4Problem(string message) {
+            bool warn;
+            int count;
+            lock (_st4WarningLock) {
+                count = ++_st4ProblemsSinceWarning;
+                var now = DateTime.UtcNow;
+                warn = now - _lastSt4Warning >= St4WarningInterval;
+                if (warn) {
+                    _lastSt4Warning = now;
+                    _st4ProblemsSinceWarning = 0;
+                }
+            }
+
+            if (warn) {
+                Logger.Warning($"{message}. The mount may not have moved as far as the guider assumes "
+                    + $"({count} such pulse(s) since the last warning; further ones are logged at Debug level for {St4WarningInterval.TotalMinutes:F0} minutes)");
+            } else {
+                Logger.Debug(message);
+            }
+        }
+
+        public string TakeRejectedSt4Pulse(GuideDirections direction) {
+            var property = direction is GuideDirections.guideNorth or GuideDirections.guideSouth
+                ? PulseGuideTracker.NorthSouth
+                : PulseGuideTracker.WestEast;
+            return _st4.TakeRejected(property) is { } failure
+                ? $"the camera rejected the {failure.DurationMs} ms ST4 pulse on {failure.Property}"
+                : null;
+        }
+
+        private void LogFrame(string message, [CallerMemberName] string memberName = "", [CallerFilePath] string sourceFilePath = "", [CallerLineNumber] int lineNumber = 0) {
+            if (LogFramesAtDebug) {
+                Logger.Debug(message, memberName, sourceFilePath, lineNumber);
+            } else {
+                Logger.Info(message, memberName, sourceFilePath, lineNumber);
+            }
         }
 
         protected override string[] GetRequiredConnectionProperties() {
@@ -63,7 +167,7 @@ namespace NINA.INDI.Devices {
             base.OnBlobPropertyUpdated(p);
             if (p.Name == "CCD1") {
                 var blob = p.Blobs.FirstOrDefault();
-                Logger.Info($"[{DeviceName}] BLOB received: name={p.Name} format={blob?.Format} size={blob?.Data?.Length}");
+                LogFrame($"[{DeviceName}] BLOB received: name={p.Name} format={blob?.Format} size={blob?.Data?.Length}");
                 if (blob != null && blob.Data?.Length > 0) {
                     // Residual-risk diagnostic: even after StartExposure's debounce, a BLOB
                     // arriving very shortly after an abort could still be leftover data from
@@ -147,7 +251,7 @@ namespace NINA.INDI.Devices {
         }
 
         public void StartExposure(double exposureTime, short binX, short binY, bool enableSubSample, int subSampleX, int subSampleY, int subSampleWidth, int subSampleHeight, int gain, int offset) {
-            Logger.Info($"[{DeviceName}] StartExposure called: {exposureTime}s");
+            LogFrame($"[{DeviceName}] StartExposure called: {exposureTime}s");
 
             // See StaleBlobDebounce: if we just aborted, wait out the remainder of the debounce
             // window before arming so an already-buffered stale BLOB from the aborted exposure
@@ -165,6 +269,7 @@ namespace NINA.INDI.Devices {
             // Order matters: clear the data before swapping the TCS so a late BLOB
             // arriving in between resolves the abandoned TCS, not the new one.
             _lastBlobData = null;
+            _exposureCommandSent = false;
             _exposureReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             // Apply the requested binning if it differs from the current driver state.
@@ -179,37 +284,41 @@ namespace NINA.INDI.Devices {
             }
 
             // Set offset if supported and explicitly requested
-            if (offset >= 0 && CanSetOffset) {
-                TrySetNumber("CCD_OFFSET", "OFFSET", offset);
+            if (offset >= 0 && OffsetElement is { } offsetElement) {
+                TrySetNumber(offsetElement.Property, offsetElement.Element, offset);
             }
 
-            // Set frame region — only send CCD_FRAME when actually sub-sampling AND the
-            // region changed. Drivers like toupbase restart the camera engine on any
-            // CCD_FRAME update, which can make the following exposure command fail, and
-            // a redundant full-frame reset even crashes indi_toupcam_ccd.
+            // Set the frame region: the subframe when sub-sampling, otherwise the full sensor.
+            // The driver keeps the last CCD_FRAME, so a full-frame exposure after a subframe
+            // (autofocus crop, Take Subframe Exposure) has to put it back explicitly.
+            // A subframe request with an empty rectangle (e.g. an autofocus crop of 0) gets the full frame too.
             if (enableSubSample && subSampleWidth > 0 && subSampleHeight > 0) {
-                var frameChanged =
-                    (int)(GetNumberPropertyValue("CCD_FRAME", "X") ?? -1) != subSampleX ||
-                    (int)(GetNumberPropertyValue("CCD_FRAME", "Y") ?? -1) != subSampleY ||
-                    (int)(GetNumberPropertyValue("CCD_FRAME", "WIDTH") ?? -1) != subSampleWidth ||
-                    (int)(GetNumberPropertyValue("CCD_FRAME", "HEIGHT") ?? -1) != subSampleHeight;
-                if (frameChanged) {
-                    try {
-                        SetNumberValues("CCD_FRAME",
-                            ("X", (double)subSampleX),
-                            ("Y", (double)subSampleY),
-                            ("WIDTH", (double)subSampleWidth),
-                            ("HEIGHT", (double)subSampleHeight));
-                    } catch (ArgumentException ex) {
-                        Logger.Debug($"[{DeviceName}] Cannot set CCD_FRAME: {ex.Message}");
+                ApplyFrame(subSampleX, subSampleY, subSampleWidth, subSampleHeight, out _);
+            } else if (CameraXSize > 0 && CameraYSize > 0 && (_fullFrameAsSet is not { } asSet || CurrentFrame() != asSet)) {
+                if (ApplyFrame(0, 0, CameraXSize, CameraYSize, out bool answered)) {
+                    Logger.Info($"[{DeviceName}] CCD_FRAME reset to full frame {CameraXSize}x{CameraYSize}");
+
+                    // Only the driver's answer tells its full frame. A refusal (Alert) usually comes with the old
+                    // values, which taken as the full frame would keep the subframe for every later frame; without
+                    // an answer the next full-frame exposure tries again.
+                    var after = answered ? CurrentFrame() : null;
+                    if (after is { } frame && frame != (0, 0, CameraXSize, CameraYSize)) {
+                        Logger.Warning($"[{DeviceName}] The driver set CCD_FRAME to {frame.Width}x{frame.Height} at {frame.X},{frame.Y} for the full sensor of {CameraXSize}x{CameraYSize} (CCD_INFO); taking that as its full frame");
                     }
+
+                    _fullFrameAsSet = after;
                 }
             }
 
+            EnsureImageReachesClient();
+
             // Send exposure duration — this triggers the capture
+            _exposurePreSendTimestamp = GetProperty("CCD_EXPOSURE")?.Timestamp;
+            _exposureBusySeen = false;
+            _exposureCommandSent = true;
             try {
                 SetNumberValue("CCD_EXPOSURE", "CCD_EXPOSURE_VALUE", exposureTime);
-                Logger.Info($"[{DeviceName}] Started INDI exposure: {exposureTime}s bin={binX}x{binY}");
+                LogFrame($"[{DeviceName}] Started INDI exposure: {exposureTime}s bin={binX}x{binY}");
             } catch (Exception ex) {
                 Logger.Error($"[{DeviceName}] Failed to set CCD_EXPOSURE: {ex.Message}");
                 // Fail fast, mirroring AbortExposure: no BLOB will ever arrive, so wake any
@@ -221,6 +330,94 @@ namespace NINA.INDI.Devices {
             }
         }
 
+        /// <summary>
+        /// Sends CCD_FRAME only when the driver's frame differs from the requested one. Drivers like
+        /// toupbase restart the camera engine on any CCD_FRAME update, which can make the following
+        /// exposure command fail, and a redundant full-frame reset even crashes indi_toupcam_ccd.
+        /// </summary>
+        /// <returns><c>true</c> when CCD_FRAME was sent; <paramref name="answered"/> whether the driver accepted it.</returns>
+        /// <remarks>
+        /// Waits (at most <see cref="FrameAckTimeout"/>) for the driver's answer: CCD_EXPOSURE went out right behind a
+        /// fire-and-forget CCD_FRAME, so a driver that restarts its engine on the change could refuse the exposure.
+        /// </remarks>
+        private bool ApplyFrame(int x, int y, int width, int height, out bool answered) {
+            answered = false;
+            if (CurrentFrame() is not { } current || current == (x, y, width, height)) {
+                return false;
+            }
+
+            // On the thread pool: StartExposure is synchronous, and its caller's synchronization context (if any)
+            // must not be needed to finish the wait it is blocked on
+            answered = Task.Run(() => SetNumberValuesAsync("CCD_FRAME", FrameAckTimeout,
+                ("X", (double)x),
+                ("Y", (double)y),
+                ("WIDTH", (double)width),
+                ("HEIGHT", (double)height))).GetAwaiter().GetResult();
+            if (!answered) {
+                Logger.Warning($"[{DeviceName}] The driver did not confirm CCD_FRAME {width}x{height} at {x},{y} within {FrameAckTimeout.TotalSeconds:F0} s; exposing anyway");
+            }
+
+            return true;
+        }
+
+        private (int X, int Y, int Width, int Height)? CurrentFrame() {
+            if (GetNumberProperty("CCD_FRAME") == null) {
+                return null;
+            }
+
+            return ((int)(GetNumberPropertyValue("CCD_FRAME", "X") ?? -1),
+                (int)(GetNumberPropertyValue("CCD_FRAME", "Y") ?? -1),
+                (int)(GetNumberPropertyValue("CCD_FRAME", "WIDTH") ?? -1),
+                (int)(GetNumberPropertyValue("CCD_FRAME", "HEIGHT") ?? -1));
+        }
+
+        /// <summary>
+        /// The frame only completes with a FITS BLOB. A driver set to upload locally sends none, and one set to its native
+        /// format (e.g. a DSLR's raw through indi_gphoto) or XISF sends a BLOB NINA can't decode: each frame then ran into
+        /// the camera timeout or a decode failure with no reason in the log. Sent only when wrong, so a driver set up
+        /// right gets no extra command before its exposure (toupbase restarts its engine on some updates).
+        /// </summary>
+        private void EnsureImageReachesClient() {
+            if (GetSwitchPropertyValue("UPLOAD_MODE", "UPLOAD_LOCAL") == true) {
+                Logger.Warning($"[{DeviceName}] The driver uploads images only locally (UPLOAD_MODE Local), so pins would get none: switching to Client");
+                TrySetSwitch("UPLOAD_MODE", "UPLOAD_CLIENT", true);
+            }
+
+            if (GetSwitchProperty("CCD_TRANSFER_FORMAT") is { } format
+                && format.Switches.Any(s => s.Name == "FORMAT_FITS")
+                && GetSwitchPropertyValue("CCD_TRANSFER_FORMAT", "FORMAT_FITS") != true) {
+                Logger.Warning($"[{DeviceName}] The driver's transfer format is not FITS, which pins can't decode: switching to FITS");
+                TrySetSwitch("CCD_TRANSFER_FORMAT", "FORMAT_FITS", true);
+            }
+        }
+
+        public override void OnNumberPropertyUpdated(INDINumberProperty p) {
+            base.OnNumberPropertyUpdated(p);
+
+            if (p.Name is PulseGuideTracker.NorthSouth or PulseGuideTracker.WestEast) {
+                _st4.Observe(p);
+                return;
+            }
+
+            // A failed or refused exposure: no BLOB will come, so end the wait now with no data (the download reports the
+            // failed frame) instead of at the camera timeout. Only an exposure in flight, and only its own Alert (see
+            // _exposureCommandSent): a driver sends a property again without a change too, e.g. with every message.
+            if (p.Name != "CCD_EXPOSURE" || !_exposureCommandSent) {
+                return;
+            }
+
+            if (p.State == PropertyState.Busy) {
+                _exposureBusySeen = true;
+            } else if (p.State == PropertyState.Alert && (_exposureBusySeen || p.Timestamp != _exposurePreSendTimestamp)) {
+                var pending = _exposureReady;
+                if (pending is { Task.IsCompleted: false }) {
+                    Logger.Error($"[{DeviceName}] The driver reported the exposure as failed (CCD_EXPOSURE Alert); no image will arrive");
+                    _exposureReady = null;
+                    pending.TrySetResult(true);
+                }
+            }
+        }
+
         public async Task WaitUntilExposureIsReady(CancellationToken token) {
             var ready = _exposureReady;
             if (ready == null) { return; }
@@ -229,6 +426,14 @@ namespace NINA.INDI.Devices {
 
         public byte[] GetLastBlobData() => _lastBlobData;
         public string GetLastBlobFormat() => _lastBlobFormat ?? ".fits";
+
+        // As in AbortExposure: no image arrives any more, so wake a waiting exposure now. It finds no image
+        // data and reports a failed download instead of waiting for the camera timeout.
+        protected override void OnConnectionLost() {
+            var pending = _exposureReady;
+            _exposureReady = null;
+            pending?.TrySetResult(true);
+        }
 
         public void AbortExposure() {
             // Drop the in-flight completion first so a BLOB that still trickles in from

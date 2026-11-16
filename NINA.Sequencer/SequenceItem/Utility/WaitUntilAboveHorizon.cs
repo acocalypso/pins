@@ -1,4 +1,4 @@
-﻿#region "copyright"
+#region "copyright"
 
 /*
     Copyright © 2016 - 2026 Stefan Berg <isbeorn86+NINA@googlemail.com> and the N.I.N.A. contributors
@@ -47,6 +47,7 @@ namespace NINA.Sequencer.SequenceItem.Utility {
         public WaitUntilAboveHorizon(IProfileService profileService) : base() {
             Data = new WaitLoopData(profileService, true, GetType().Name);
             Data.Offset = 30;
+            BindEffectiveCoordinates();
             ProfileService = profileService;
         }
 
@@ -58,30 +59,32 @@ namespace NINA.Sequencer.SequenceItem.Utility {
             WaitUntilAboveHorizon clone = new WaitUntilAboveHorizon(this);
             UpdateExpressions(clone, this);
             clone.Data = Data.Clone();
+            clone.Coordinates = clone.Data.Coordinates;
             return clone;
         }
         [OnDeserialized]
         public new void OnDeserialized(StreamingContext context) {
-            Coordinates = Data.Coordinates.Clone();
             if (OffsetExpression.Definition.Length == 0) {
                 OffsetExpression.Definition = Data.Offset.ToString(CultureInfo.InvariantCulture);
             }
-            base.OnDeserialized(context);
         }
+
+        protected override bool UsesDataCoordinates => true;
 
         public int UpdateInterval { get; set; } = 1;
 
         public override async Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
             do {
-                Data.SetTargetAltitudeWithHorizon();
+                if (OffsetExpression.Definition.Length > 0) {
+                    _ = Offset;
+                }
 
-                var altaz = Data.Coordinates.Coordinates.Transform(Angle.ByDegree(Data.Latitude), Angle.ByDegree(Data.Longitude), Data.Elevation);
-                Data.CurrentAltitude = altaz.Altitude.Degree;
+                var valid = Data.UpdateCurrentTargetPosition(Data.Coordinates.Coordinates.DateTime.Now);
                 progress?.Report(new ApplicationStatus() {
                     Status = string.Format(Loc.Instance["Lbl_SequenceItem_Utility_WaitUntilAboveHorizon_Progress"], Math.Round(Data.CurrentAltitude, 2), Math.Round(Data.TargetAltitude, 2))
                 });
 
-                if (Data.CurrentAltitude > Data.GetTargetAltitudeWithHorizon(DateTime.Now)) {
+                if (valid && Data.CurrentAltitude > Data.TargetAltitude) {
                     Logger.Info("WaitUntilAboveHorizon finished: " + Data.CurrentAltitude + " > " + Data.TargetAltitude + " Offset = " + Data.Offset);
                     break;
                 } else {
@@ -96,15 +99,16 @@ namespace NINA.Sequencer.SequenceItem.Utility {
         }
 
         public void CalculateExpectedTime() {
-            Data.CurrentAltitude = GetCurrentAltitude(DateTime.Now, Data.Observer);
-            CalculateExpectedTimeCommon(Data, until: true, 90, GetCurrentAltitude);
+            if (OffsetExpression.Definition.Length > 0) {
+                _ = Offset;
+            }
+
+            Data.CalculateTargetExpectedTime(DateTime.Now, TargetCrossingComparison.AboveStrict);
         }
 
 
         public override void AfterParentChanged() {
             base.AfterParentChanged();
-            Data.Coordinates = Coordinates;
-            Offset = Data.Offset;
             Validate();
         }
 
@@ -113,9 +117,13 @@ namespace NINA.Sequencer.SequenceItem.Utility {
         }
 
         public bool Validate() {
+            ResolveEffectiveCoordinates();
+            if (OffsetExpression.Definition.Length > 0) {
+                _ = Offset;
+            }
             Issues.Clear();
 
-            var maxAlt = AstroUtil.GetAltitude(0, Data.Latitude, Data.Coordinates.DecDegrees);
+            var maxAlt = AstroUtil.GetAltitude(0, Data.Latitude, Data.Coordinates.Coordinates.Dec);
             var minHorizonAlt = (Data.Horizon?.GetMinAltitude() ?? 0) + Data.Offset;
 
             if (maxAlt < minHorizonAlt) {
@@ -125,7 +133,10 @@ namespace NINA.Sequencer.SequenceItem.Utility {
                 CalculateExpectedTime();
             }
 
-            Expression.ValidateExpressions(Issues, OffsetExpression, RaExpression, DecExpression);
+            Expression.ValidateExpressions(Issues, OffsetExpression);
+            if (!Inherited) {
+                Expression.ValidateExpressions(Issues, RaExpression, DecExpression);
+            }
 
             RaisePropertyChanged("Issues");
             return Issues.Count == 0;

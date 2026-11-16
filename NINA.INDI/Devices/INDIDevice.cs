@@ -106,6 +106,9 @@ namespace NINA.INDI.Devices
         private bool _connectionAttemptFailed;  // Track if the last connection attempt failed
         private volatile Task _disconnectTask;  // In-flight graceful disconnect (see Disconnect/Dispose)
 
+        // The graceful disconnect still in flight, for a shutdown that has to let it finish
+        internal Task DisconnectTask => _disconnectTask ?? Task.CompletedTask;
+
         public bool Connected
         {
             get => _connected;
@@ -210,24 +213,40 @@ namespace NINA.INDI.Devices
             var number = prop.Numbers.FirstOrDefault(n => n.Name == elementName);
             if (number == null) return;
 
-            number.Value = value;
-            INDIClient.Instance.SendProperty(prop);
+            ChangeAndSend(prop, () => number.Value = value);
+        }
+
+        /// <summary>
+        /// Changes the stored copy of a property and serializes it as one step, under the lock the receive loop holds
+        /// while it writes driver updates into the same object: an update arriving meanwhile (e.g. the mount's position
+        /// while a goto target is set) can't mix into the vector that is sent. The send itself runs outside that lock.
+        /// </summary>
+        protected static void ChangeAndSend(INDIProperty prop, Action change)
+        {
+            System.Xml.Linq.XElement xml = null;
+            INDIClient.RunUnderPropertyLock(() =>
+            {
+                change();
+                xml = prop.ToXml();
+            });
+            INDIClient.Instance.SendElement(xml);
         }
 
         public void SetNumberValues(string propertyName, params (string elementName, double value)[] values)
         {
             var prop = GetNumberProperty(propertyName) ?? throw new ArgumentException($"Number property '{propertyName}' not found");
 
-            foreach (var (elementName, value) in values)
+            ChangeAndSend(prop, () =>
             {
-                var number = prop.Numbers.FirstOrDefault(n => n.Name == elementName);
-                if (number != null)
+                foreach (var (elementName, value) in values)
                 {
-                    number.Value = value;
+                    var number = prop.Numbers.FirstOrDefault(n => n.Name == elementName);
+                    if (number != null)
+                    {
+                        number.Value = value;
+                    }
                 }
-            }
-
-            INDIClient.Instance.SendProperty(prop);
+            });
         }
 
         public async Task<bool> SetNumberValuesAsync(string propertyName, TimeSpan timeout, params (string elementName, double value)[] values)
@@ -282,7 +301,9 @@ namespace NINA.INDI.Devices
                     var result = await tcs.Task;
                     if (!result)
                     {
-                        Logger.Error($"SetNumberValuesAsync ({propertyName}) - server rejected operation (Alert state)");
+                        Logger.Error(_serverConnectionLost
+                            ? $"SetNumberValuesAsync ({propertyName}) - the connection to the INDI server was lost"
+                            : $"SetNumberValuesAsync ({propertyName}) - server rejected operation (Alert state)");
                         return false;
                     }
 
@@ -375,7 +396,9 @@ namespace NINA.INDI.Devices
                     var result = await tcs.Task;
                     if (!result)
                     {
-                        Logger.Error($"SetSwitchValueAsync ({propertyName}) - server rejected operation (Alert state)");
+                        Logger.Error(_serverConnectionLost
+                            ? $"SetSwitchValueAsync ({propertyName}) - the connection to the INDI server was lost"
+                            : $"SetSwitchValueAsync ({propertyName}) - server rejected operation (Alert state)");
                         return false;
                     }
 
@@ -418,55 +441,56 @@ namespace NINA.INDI.Devices
                 return;
             }
 
-            // Handle switch rules
-            if (prop.Rule == SwitchRule.OneOfMany)
+            ChangeAndSend(prop, () =>
             {
-                // For OneOfMany, only allow setting one switch to true at a time
-                // First, turn off all switches
-                foreach (var sw in prop.Switches)
+                // Handle switch rules
+                if (prop.Rule == SwitchRule.OneOfMany)
                 {
-                    sw.Value = false;
-                }
-                // Then turn on only the requested one (if value is true)
-                if (value)
-                {
-                    var targetSw = prop.Switches.FirstOrDefault(s => s.Name == elementName);
-                    if (targetSw != null)
-                    {
-                        targetSw.Value = true;
-                    }
-                }
-            }
-            else if (prop.Rule == SwitchRule.AtMostOne)
-            {
-                if (value)
-                {
-                    // Turn off all other switches
+                    // For OneOfMany, only allow setting one switch to true at a time
+                    // First, turn off all switches
                     foreach (var sw in prop.Switches)
-                    {
-                        sw.Value = sw.Name == elementName;
-                    }
-                }
-                else
-                {
-                    // Just turn off this switch, leave others as is
-                    var sw = prop.Switches.FirstOrDefault(s => s.Name == elementName);
-                    if (sw != null)
                     {
                         sw.Value = false;
                     }
+                    // Then turn on only the requested one (if value is true)
+                    if (value)
+                    {
+                        var targetSw = prop.Switches.FirstOrDefault(s => s.Name == elementName);
+                        if (targetSw != null)
+                        {
+                            targetSw.Value = true;
+                        }
+                    }
                 }
-            }
-            else // AnyOfMany
-            {
-                var sw = prop.Switches.FirstOrDefault(s => s.Name == elementName);
-                if (sw != null)
+                else if (prop.Rule == SwitchRule.AtMostOne)
                 {
-                    sw.Value = value;
+                    if (value)
+                    {
+                        // Turn off all other switches
+                        foreach (var sw in prop.Switches)
+                        {
+                            sw.Value = sw.Name == elementName;
+                        }
+                    }
+                    else
+                    {
+                        // Just turn off this switch, leave others as is
+                        var sw = prop.Switches.FirstOrDefault(s => s.Name == elementName);
+                        if (sw != null)
+                        {
+                            sw.Value = false;
+                        }
+                    }
                 }
-            }
-
-            INDIClient.Instance.SendProperty(prop);
+                else // AnyOfMany
+                {
+                    var sw = prop.Switches.FirstOrDefault(s => s.Name == elementName);
+                    if (sw != null)
+                    {
+                        sw.Value = value;
+                    }
+                }
+            });
         }
 
         public void SetSwitchProperty(string propertyName, Dictionary<string, bool> values)
@@ -499,31 +523,32 @@ namespace NINA.INDI.Devices
             }
             // AnyOfMany has no restrictions
 
-            if ((prop.Rule == SwitchRule.OneOfMany || prop.Rule == SwitchRule.AtMostOne) && trueCount == 1)
+            ChangeAndSend(prop, () =>
             {
-                // Radio behavior: the single 'on' element defines the whole vector. Switch
-                // everything else off, including elements the caller didn't mention — the
-                // caller may not know the full element set, and leaving another element on
-                // would violate the rule.
-                var chosen = applicable.First(sw => values[sw.Name]).Name;
-                foreach (var sw in prop.Switches)
+                if ((prop.Rule == SwitchRule.OneOfMany || prop.Rule == SwitchRule.AtMostOne) && trueCount == 1)
                 {
-                    sw.Value = sw.Name == chosen;
-                }
-            }
-            else
-            {
-                // Apply the values
-                foreach (var sw in prop.Switches)
-                {
-                    if (values.TryGetValue(sw.Name, out bool value))
+                    // Radio behavior: the single 'on' element defines the whole vector. Switch
+                    // everything else off, including elements the caller didn't mention — the
+                    // caller may not know the full element set, and leaving another element on
+                    // would violate the rule.
+                    var chosen = applicable.First(sw => values[sw.Name]).Name;
+                    foreach (var sw in prop.Switches)
                     {
-                        sw.Value = value;
+                        sw.Value = sw.Name == chosen;
                     }
                 }
-            }
-
-            INDIClient.Instance.SendProperty(prop);
+                else
+                {
+                    // Apply the values
+                    foreach (var sw in prop.Switches)
+                    {
+                        if (values.TryGetValue(sw.Name, out bool value))
+                        {
+                            sw.Value = value;
+                        }
+                    }
+                }
+            });
         }
 
         public void SetTextValue(string propertyName, string elementName, string value)
@@ -533,8 +558,7 @@ namespace NINA.INDI.Devices
             var text = prop.Texts.FirstOrDefault(t => t.Name == elementName);
             if (text == null) return;
 
-            text.Value = value;
-            INDIClient.Instance.SendProperty(prop);
+            ChangeAndSend(prop, () => text.Value = value);
         }
 
         // Sends multiple elements of the same text vector in one update.
@@ -543,14 +567,15 @@ namespace NINA.INDI.Devices
         {
             var prop = GetTextProperty(propertyName) ?? throw new ArgumentException($"Text property '{propertyName}' not found");
 
-            foreach (var (elementName, value) in values)
+            ChangeAndSend(prop, () =>
             {
-                var text = prop.Texts.FirstOrDefault(t => t.Name == elementName);
-                if (text != null)
-                    text.Value = value;
-            }
-
-            INDIClient.Instance.SendProperty(prop);
+                foreach (var (elementName, value) in values)
+                {
+                    var text = prop.Texts.FirstOrDefault(t => t.Name == elementName);
+                    if (text != null)
+                        text.Value = value;
+                }
+            });
         }
 
         public async Task<bool> SetTextValueAsync(string propertyName, string elementName, string value, TimeSpan timeout, CancellationToken ct = default)
@@ -610,7 +635,9 @@ namespace NINA.INDI.Devices
                     var result = await tcs.Task;
                     if (!result)
                     {
-                        Logger.Error($"SetTextValueAsync ({propertyName}) - server rejected operation (Alert state)");
+                        Logger.Error(_serverConnectionLost
+                            ? $"SetTextValueAsync ({propertyName}) - the connection to the INDI server was lost"
+                            : $"SetTextValueAsync ({propertyName}) - server rejected operation (Alert state)");
                         return false;
                     }
 
@@ -660,6 +687,62 @@ namespace NINA.INDI.Devices
             }
         }
 
+        /// <summary>
+        /// Called by INDIClient when its connection to indiserver is gone (server died or the main
+        /// connection dropped). No update will arrive for this device any more, so it reports itself
+        /// disconnected, fails its pending operations at once instead of letting each run into its timeout,
+        /// and drops its properties: their last values are stale, and a stale CONNECT=On would let the
+        /// equipment layer fake a successful reconnect.
+        /// </summary>
+        internal void OnServerConnectionLost()
+        {
+            Logger.Warning($"[{DeviceName}] INDI server connection lost, marking the device disconnected");
+            _serverConnectionLost = true;
+
+            List<TaskCompletionSource<bool>> pending;
+            lock (_asyncOperationsLock)
+            {
+                pending = _pendingAsyncOperations.Values.Select(v => v.Tcs).ToList();
+            }
+
+            foreach (var tcs in pending)
+            {
+                tcs.TrySetResult(false);
+            }
+
+            // Properties first: whoever sees Connected turn false must already find no stale CONNECTION
+            RemoveAllProperties();
+            OnConnectionLost();
+            _connected = false;
+        }
+
+        // Set when the server connection was lost and cleared by the next Connect. A server that kept
+        // running sends CONNECT=On again after the reconnect, but this device's session (its image
+        // connection, PostConnect setup) is gone, so it only counts as connected once connected again.
+        private volatile bool _serverConnectionLost;
+
+        public bool ServerConnectionLost => _serverConnectionLost;
+
+        /// <summary>
+        /// Called after a wait that <see cref="OnConnectionLost"/> may have ended: a lost server connection
+        /// makes the operation fail instead of returning as if it had completed.
+        /// </summary>
+        protected void ThrowIfServerConnectionLost(string operation)
+        {
+            if (_serverConnectionLost)
+            {
+                throw new InvalidOperationException($"{operation} failed: the connection to the INDI server was lost");
+            }
+        }
+
+        /// <summary>
+        /// Lets a device type release waits that hang on state only a driver update would advance
+        /// (a cached moving flag, an armed exposure), after <see cref="OnServerConnectionLost"/>.
+        /// </summary>
+        protected virtual void OnConnectionLost()
+        {
+        }
+
         public Task<bool> Connect(CancellationToken ct)
         {
             return Task.Run(async () =>
@@ -669,6 +752,9 @@ namespace NINA.INDI.Devices
                     Logger.Warning($"Device '{DeviceName}' is already connected");
                     return true;
                 }
+
+                // A new session on the current server connection
+                _serverConnectionLost = false;
 
                 Logger.Info($"Connecting to INDI device: {DeviceName}");
 
@@ -724,7 +810,7 @@ namespace NINA.INDI.Devices
 
                         // Poll for properties with timeout
                         var propStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                        while (!HasProperties(requiredProps) && propStopwatch.Elapsed < TimeSpan.FromSeconds(20) && !ct.IsCancellationRequested)
+                        while (!HasProperties(requiredProps) && propStopwatch.Elapsed < TimeSpan.FromSeconds(20) && !ct.IsCancellationRequested && !_serverConnectionLost)
                         {
                             await CoreUtil.Wait(TimeSpan.FromMilliseconds(200), ct);
                         }
@@ -762,6 +848,16 @@ namespace NINA.INDI.Devices
 
                 Logger.Info($"[{DeviceName}] Setting Connected to {success}");
                 Connected = success;
+
+                // A loss during the connect leaves no session, also when the driver was already connected at the
+                // server and the final CONNECT check above was skipped. Checked after setting Connected: the loss
+                // sets its flag before it clears _connected, so a loss at any point ends disconnected.
+                if (success && _serverConnectionLost)
+                {
+                    Logger.Error($"[{DeviceName}] The connection to the INDI server was lost while connecting");
+                    _connected = false;
+                    success = false;
+                }
 
                 return success;
             });

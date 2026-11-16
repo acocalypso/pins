@@ -25,6 +25,7 @@ using NINA.Equipment.Interfaces.ViewModel;
 using NINA.Image.ImageAnalysis;
 using NINA.Image.Interfaces;
 using NINA.PlateSolving.Interfaces;
+using NINA.PlateSolving;
 using NINA.Plugin.Interfaces;
 using NINA.Plugin.ManifestDefinition;
 using NINA.Profile.Interfaces;
@@ -101,7 +102,9 @@ namespace NINA.Plugin {
                               ITwilightCalculator twilightCalculator,
                               IMessageBroker messageBroker,
                               ISymbolBroker symbolBroker,
-                              ITemplateLinkResolver templateLinkResolver) {
+                              ITemplateLinkResolver templateLinkResolver,
+                              IGuideCameraMediator guideCameraMediator,
+                              IAdvancedGuider internalGuider) {
             this.profileService = profileService;
             this.cameraMediator = cameraMediator;
             this.telescopeMediator = telescopeMediator;
@@ -142,6 +145,8 @@ namespace NINA.Plugin {
             this.messageBroker = messageBroker;
             this.symbolBroker = symbolBroker;
             this.templateLinkResolver = templateLinkResolver;
+            this.guideCameraMediator = guideCameraMediator;
+            this.internalGuider = internalGuider;
             DateTimeProviders = new List<IDateTimeProvider>() {
                 new Sequencer.Utility.DateTimeProvider.TimeProvider(nighttimeCalculator),
                 new SunsetProvider(nighttimeCalculator),
@@ -331,6 +336,8 @@ namespace NINA.Plugin {
                         await LoadPlugin(file, (i + 1) / (double)files.Count);
                     }
 
+                    PlateSolverFactory.RegisterProviders(plateSolverProviders);
+
                     initialized = true;
                     Logger.Debug($"Time to load all plugins {sw.Elapsed}");
                 } catch (Exception ex) {
@@ -370,6 +377,7 @@ namespace NINA.Plugin {
                         container.ComposeParts(manifestImport);
 
                         var manifest = manifestImport.PluginManifestImport;
+                        int providerCount = plateSolverProviders.Count;
 
                         try {
                             if (!PluginVersion.IsPluginCompatible(manifest.MinimumApplicationVersion, applicationVersion)) {
@@ -414,6 +422,8 @@ namespace NINA.Plugin {
 
                             Logger.Info($"Successfully loaded plugin {manifest.Name} version {manifest.Version} by {manifest.Author}");
                         } catch (Exception ex) {
+                            plateSolverProviders.RemoveRange(providerCount, plateSolverProviders.Count - providerCount);
+
                             //Manifest ok - plugin composition failed
                             var failedManifest = new PluginManifest {
                                 Author = manifest.Author,
@@ -559,11 +569,19 @@ namespace NINA.Plugin {
                 });
                 Upgraders = Upgraders.Concat(upgraderImports).ToList();
 
+                foreach (var export in parts.PlateSolverProviderImports) {
+                    try {
+                        plateSolverProviders.Add(export.Value);
+                    } catch (Exception ex) {
+                        Logger.Error($"Failed to construct a plate solver provider from '{pluginName}'", ex);
+                    }
+                }
             } catch (Exception ex) {
                 Logger.Error(ex);
                 throw;
             }
         }
+
         private CompositionContainer GetContainer(ComposablePartCatalog catalog) {
             var container = new CompositionContainer(catalog, CompositionOptions.DisableSilentRejection | CompositionOptions.IsThreadSafe);
             container.ComposeExportedValue(profileService);
@@ -607,9 +625,15 @@ namespace NINA.Plugin {
             container.ComposeExportedValue(messageBroker);
             container.ComposeExportedValue(symbolBroker);
             container.ComposeExportedValue(templateLinkResolver);
+            // pins: exported under its own contract only; ICameraMediator stays the imaging camera.
+            container.ComposeExportedValue<IGuideCameraMediator>(guideCameraMediator);
+            // pins: the internal guider, also while another guider is selected (e.g. for its incidents)
+            container.ComposeExportedValue<IAdvancedGuider>(internalGuider);
 
             return container;
         }
+
+        private readonly List<IPlateSolverProvider> plateSolverProviders = new List<IPlateSolverProvider>();
 
         private bool initialized = false;
         private readonly SemaphoreSlim semaphore = new SemaphoreSlim(1, 1);
@@ -627,6 +651,8 @@ namespace NINA.Plugin {
 
         private readonly IProfileService profileService;
         private readonly ICameraMediator cameraMediator;
+        private readonly IGuideCameraMediator guideCameraMediator;
+        private readonly IAdvancedGuider internalGuider;
         private readonly ITelescopeMediator telescopeMediator;
         private readonly IFocuserMediator focuserMediator;
         private readonly IFilterWheelMediator filterWheelMediator;
@@ -806,6 +832,9 @@ namespace NINA.Plugin {
     }
 
     public class PartsImport {
+
+        [ImportMany(typeof(IPlateSolverProvider))]
+        public IEnumerable<Lazy<IPlateSolverProvider>> PlateSolverProviderImports { get; private set; }
 
         [ImportMany(typeof(ISequenceItem))]
         public IEnumerable<Lazy<ISequenceItem, IDictionary<string, object>>> ItemImports { get; private set; }

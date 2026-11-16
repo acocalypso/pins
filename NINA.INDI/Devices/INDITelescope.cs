@@ -91,8 +91,19 @@ namespace NINA.INDI.Devices {
             base.OnTextPropertyUpdated(p);
         }
 
-        private bool _isPulseGuidingNS;
-        private bool _isPulseGuidingWE;
+        // Initialized here, not in the constructor: the base constructor already receives the driver's properties.
+        private readonly PulseGuideTracker _pulseGuide = new();
+
+        // A driver that never reports the end of its guide pulses times out on every pulse; warn at most this often.
+        private static readonly TimeSpan PulseGuideTimeoutWarningInterval = TimeSpan.FromMinutes(10);
+        private readonly object _pulseGuideTimeoutLock = new();
+        private DateTime _lastPulseGuideTimeoutWarning = DateTime.MinValue;
+        private int _pulseGuideTimeoutsSinceWarning;
+
+        // Rejected or early-ended pulses can come at every reversal; warn at most as often as for timeouts.
+        private readonly object _pulseGuideFailureLock = new();
+        private DateTime _lastPulseGuideFailureWarning = DateTime.MinValue;
+        private int _pulseGuideFailuresSinceWarning;
 
         // Coordinate-motion tracking for the Slewing property. Some firmwares (observed on
         // OnStep while homing) move the mount without reporting a slew on ANY property state,
@@ -125,11 +136,9 @@ namespace NINA.INDI.Devices {
             base.OnNumberPropertyUpdated(p);
 
             switch (p.Name) {
-                case "TELESCOPE_TIMED_GUIDE_NS":
-                    _isPulseGuidingNS = p.State == PropertyState.Busy;
-                    break;
-                case "TELESCOPE_TIMED_GUIDE_WE":
-                    _isPulseGuidingWE = p.State == PropertyState.Busy;
+                case PulseGuideTracker.NorthSouth:
+                case PulseGuideTracker.WestEast:
+                    _pulseGuide.Observe(p);
                     break;
                 case "EQUATORIAL_EOD_COORD":
                     Volatile.Read(ref _pendingGoto)?.Observe(p);
@@ -189,9 +198,81 @@ namespace NINA.INDI.Devices {
         }
 
         public INDITelescope(INDIDeviceInfo device) : base(device) {
+            _pulseGuide.TimedOut += ReportPulseGuideTimeout;
+            _pulseGuide.Failed += ReportPulseGuideFailure;
         }
 
-        public AlignmentMode AlignmentMode { get; }
+        private void ReportPulseGuideFailure(PulseGuideFailure failure) {
+            bool warn;
+            int count;
+            lock (_pulseGuideFailureLock) {
+                count = ++_pulseGuideFailuresSinceWarning;
+                var now = DateTime.UtcNow;
+                warn = now - _lastPulseGuideFailureWarning >= PulseGuideTimeoutWarningInterval;
+                if (warn) {
+                    _lastPulseGuideFailureWarning = now;
+                    _pulseGuideFailuresSinceWarning = 0;
+                }
+            }
+
+            var message = failure.Rejected
+                ? $"[{DeviceName}] The driver rejected a {failure.DurationMs} ms guide pulse on {failure.Property} (Alert after {failure.ElapsedMs:F0} ms)"
+                : $"[{DeviceName}] The driver reported the end of a {failure.DurationMs} ms guide pulse on {failure.Property} after {failure.ElapsedMs:F0} ms";
+            if (warn) {
+                Logger.Warning($"{message}. The mount may not have moved as far as the guider assumes "
+                    + $"({count} such pulse(s) since the last warning; further ones are logged at Debug level for {PulseGuideTimeoutWarningInterval.TotalMinutes:F0} minutes)");
+            } else {
+                Logger.Debug(message);
+            }
+        }
+
+        public string TakeRejectedPulse(GuideDirections direction) {
+            var property = direction is GuideDirections.guideNorth or GuideDirections.guideSouth
+                ? PulseGuideTracker.NorthSouth
+                : PulseGuideTracker.WestEast;
+            return _pulseGuide.TakeRejected(property) is { } failure
+                ? $"the driver rejected the {failure.DurationMs} ms pulse on {failure.Property}"
+                : null;
+        }
+
+        private void ReportPulseGuideTimeout(string property, int durationMs) {
+            bool warn;
+            int count;
+            lock (_pulseGuideTimeoutLock) {
+                count = ++_pulseGuideTimeoutsSinceWarning;
+                var now = DateTime.UtcNow;
+                warn = now - _lastPulseGuideTimeoutWarning >= PulseGuideTimeoutWarningInterval;
+                if (warn) {
+                    _lastPulseGuideTimeoutWarning = now;
+                    _pulseGuideTimeoutsSinceWarning = 0;
+                }
+            }
+
+            var message = $"[{DeviceName}] The driver did not report the end of a {durationMs} ms guide pulse on {property} "
+                + $"within {PulseGuideTracker.CompletionMargin.TotalMilliseconds:F0} ms of when it should have ended; treating it as finished";
+            if (warn) {
+                Logger.Warning($"{message}. With this driver the next guide exposure may start while the mount still moves "
+                    + $"({count} such pulse(s) since the last warning; further ones are logged at Debug level for {PulseGuideTimeoutWarningInterval.TotalMinutes:F0} minutes)");
+            } else {
+                Logger.Debug(message);
+            }
+        }
+
+        // From INDI's standard TELESCOPE_MOUNT_TYPE; a driver without it is taken for a German equatorial mount
+        public AlignmentMode AlignmentMode {
+            get {
+                if (GetSwitchPropertyValue("TELESCOPE_MOUNT_TYPE", "ALTAZ") == true) {
+                    return AlignmentMode.AltAz;
+                }
+
+                if (GetSwitchPropertyValue("TELESCOPE_MOUNT_TYPE", "EQ_FORK") == true) {
+                    return AlignmentMode.Polar;
+                }
+
+                return AlignmentMode.GermanPolar;
+            }
+        }
+
         public double Altitude {
             get {
                 var altitude = GetNumberPropertyValue("HORIZONTAL_COORD", "ALT");
@@ -287,10 +368,8 @@ namespace NINA.INDI.Devices {
                 SetNumberValue("GUIDE_RATE", "GUIDE_RATE_WE", value / SiderealDegPerSec);
             }
         }
-        // Tracked from TELESCOPE_TIMED_GUIDE_NS/WE Busy state (see OnNumberPropertyUpdated) —
-        // INDI has no dedicated "is guiding" flag, so a pulse counts as in-progress for exactly
-        // as long as the driver reports the corresponding guide vector as Busy.
-        public bool IsPulseGuiding => _isPulseGuidingNS || _isPulseGuidingWE;
+        // True from the moment PulseGuide sends a pulse until the driver reports its end, bounded (see PulseGuideTracker).
+        public bool IsPulseGuiding => _pulseGuide.IsPulseGuiding;
         public double RightAscension => GetNumberPropertyValue("EQUATORIAL_EOD_COORD", "RA") ?? double.NaN;
         public double RightAscensionRate { get; set; }
         public PierSide SideOfPier {
@@ -325,12 +404,21 @@ namespace NINA.INDI.Devices {
                 SetNumberValue("GEOGRAPHIC_COORD", "LAT", value);
             }
         }
+        // INDI states the longitude as 0..360° east (libindi GEOGRAPHIC_COORD.LONG), NINA as -180..180°. Passed through
+        // unchanged, a site west of Greenwich read 355 against the profile's -5: the sync prompt came at every connect,
+        // "to application" wrote 355 into the profile, and "to telescope" sent a value outside INDI's range.
         public double SiteLongitude {
-            get => GetNumberPropertyValue("GEOGRAPHIC_COORD", "LONG") ?? double.NaN;
+            get => ToNinaLongitude(GetNumberPropertyValue("GEOGRAPHIC_COORD", "LONG") ?? double.NaN);
             set {
-                SetNumberValue("GEOGRAPHIC_COORD", "LONG", value);
+                SetNumberValue("GEOGRAPHIC_COORD", "LONG", ToIndiLongitude(value));
             }
         }
+
+        internal static double ToNinaLongitude(double indiLongitude) =>
+            indiLongitude > 180 ? indiLongitude - 360 : indiLongitude;
+
+        internal static double ToIndiLongitude(double ninaLongitude) =>
+            ninaLongitude < 0 ? ninaLongitude + 360 : ninaLongitude;
         public int SlewSettleTime { get; }
         public bool Slewing {
             get {
@@ -516,7 +604,7 @@ namespace NINA.INDI.Devices {
                     //
                     // INDI convention: OFFSET = hours EAST of UTC (e.g. +2 for CEST).
                     // The LX200 sign inversion is handled inside the driver.
-                    var utcString = value.ToString("yyyy-MM-ddTHH:mm:ss");
+                    var utcString = value.ToString("yyyy-MM-ddTHH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
                     var utcOffsetHours = TimeZoneInfo.Local.GetUtcOffset(value).TotalHours;
                     var offsetString = utcOffsetHours.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                     SetTextValues("TIME_UTC", ("UTC", utcString), ("OFFSET", offsetString));
@@ -621,11 +709,12 @@ namespace NINA.INDI.Devices {
             }
 
             int clamped = Math.Max(0, Math.Min(index, prop.Switches.Count - 1));
-            foreach (var sw in prop.Switches) {
-                sw.Value = false;
-            }
-            prop.Switches[clamped].Value = true;
-            INDIClient.Instance.SendProperty(prop);
+            ChangeAndSend(prop, () => {
+                foreach (var sw in prop.Switches) {
+                    sw.Value = false;
+                }
+                prop.Switches[clamped].Value = true;
+            });
             Logger.Debug($"SetSlewRateIndex: selected {clamped}/{prop.Switches.Count - 1} '{prop.Switches[clamped].Label}'");
         }
 
@@ -681,10 +770,11 @@ namespace NINA.INDI.Devices {
                     var targetSwitch = slewRateProp.Switches[targetIndex];
                     Logger.Debug($"SetSlewRateForMotion: {absRate}°/s → switch {targetIndex}/{slewRateProp.Switches.Count - 1} '{targetSwitch.Label}' ({targetSwitch.Name})");
 
-                    foreach (var sw in slewRateProp.Switches) {
-                        sw.Value = (sw.Name == targetSwitch.Name);
-                    }
-                    INDIClient.Instance.SendProperty(slewRateProp);
+                    ChangeAndSend(slewRateProp, () => {
+                        foreach (var sw in slewRateProp.Switches) {
+                            sw.Value = (sw.Name == targetSwitch.Name);
+                        }
+                    });
                     Task.Delay(100).Wait();
                     return;
                 }
@@ -734,28 +824,24 @@ namespace NINA.INDI.Devices {
                             // Set the direction switch
                             var prop = GetSwitchProperty("TELESCOPE_MOTION_WE");
                             if (prop != null) {
-                                if (rate < 0) {
-                                    // Negative rate = West
+                                // Negative rate = West, positive rate = East
+                                var direction = rate < 0 ? "MOTION_WEST" : "MOTION_EAST";
+                                ChangeAndSend(prop, () => {
                                     foreach (var sw in prop.Switches) {
-                                        sw.Value = (sw.Name == "MOTION_WEST");
+                                        sw.Value = (sw.Name == direction);
                                     }
-                                } else {
-                                    // Positive rate = East
-                                    foreach (var sw in prop.Switches) {
-                                        sw.Value = (sw.Name == "MOTION_EAST");
-                                    }
-                                }
-                                INDIClient.Instance.SendProperty(prop);
+                                });
                             }
                         } else {
                             // Stop motion - only send if actually moving
                             var prop = GetSwitchProperty("TELESCOPE_MOTION_WE");
                             if (prop != null) {
                                 if (prop.Switches.Any(sw => sw.Value)) {
-                                    foreach (var sw in prop.Switches) {
-                                        sw.Value = false;
-                                    }
-                                    INDIClient.Instance.SendProperty(prop);
+                                    ChangeAndSend(prop, () => {
+                                        foreach (var sw in prop.Switches) {
+                                            sw.Value = false;
+                                        }
+                                    });
                                 }
                             }
                         }
@@ -769,28 +855,24 @@ namespace NINA.INDI.Devices {
                             // Set the direction switch
                             var prop = GetSwitchProperty("TELESCOPE_MOTION_NS");
                             if (prop != null) {
-                                if (rate > 0) {
-                                    // Positive rate = North
+                                // Positive rate = North, negative rate = South
+                                var direction = rate > 0 ? "MOTION_NORTH" : "MOTION_SOUTH";
+                                ChangeAndSend(prop, () => {
                                     foreach (var sw in prop.Switches) {
-                                        sw.Value = (sw.Name == "MOTION_NORTH");
+                                        sw.Value = (sw.Name == direction);
                                     }
-                                } else {
-                                    // Negative rate = South
-                                    foreach (var sw in prop.Switches) {
-                                        sw.Value = (sw.Name == "MOTION_SOUTH");
-                                    }
-                                }
-                                INDIClient.Instance.SendProperty(prop);
+                                });
                             }
                         } else {
                             // Stop motion - only send if actually moving
                             var prop = GetSwitchProperty("TELESCOPE_MOTION_NS");
                             if (prop != null) {
                                 if (prop.Switches.Any(sw => sw.Value)) {
-                                    foreach (var sw in prop.Switches) {
-                                        sw.Value = false;
-                                    }
-                                    INDIClient.Instance.SendProperty(prop);
+                                    ChangeAndSend(prop, () => {
+                                        foreach (var sw in prop.Switches) {
+                                            sw.Value = false;
+                                        }
+                                    });
                                 }
                             }
                         }
@@ -820,10 +902,11 @@ namespace NINA.INDI.Devices {
                 if (sign == 0) {
                     // Stop this axis — only send if it was actually moving.
                     if (prop.Switches.Any(sw => sw.Value)) {
-                        foreach (var sw in prop.Switches) {
-                            sw.Value = false;
-                        }
-                        INDIClient.Instance.SendProperty(prop);
+                        ChangeAndSend(prop, () => {
+                            foreach (var sw in prop.Switches) {
+                                sw.Value = false;
+                            }
+                        });
                     }
                     return;
                 }
@@ -832,33 +915,39 @@ namespace NINA.INDI.Devices {
                 string target = axis == TelescopeAxes.Primary
                     ? (sign > 0 ? "MOTION_EAST" : "MOTION_WEST")
                     : (sign > 0 ? "MOTION_NORTH" : "MOTION_SOUTH");
-                foreach (var sw in prop.Switches) {
-                    sw.Value = (sw.Name == target);
-                }
-                INDIClient.Instance.SendProperty(prop);
+                ChangeAndSend(prop, () => {
+                    foreach (var sw in prop.Switches) {
+                        sw.Value = (sw.Name == target);
+                    }
+                });
             } catch (ArgumentException ex) {
                 throw new NotImplementedException(ex.Message, ex);
             }
         }
 
         public void PulseGuide(GuideDirections direction, int duration) {
+            // Send both elements of the axis, the opposite one as 0. libindi's GuiderInterface
+            // pulses N (or W) whenever that value is non-zero, and GuideComplete never resets the
+            // values, so a lone S (or E) after an N (or W) pulse would be sent with the stale N
+            // still in the cached vector and guide the wrong way.
+            var (property, values) = direction switch {
+                GuideDirections.guideNorth => (PulseGuideTracker.NorthSouth, new[] { ("TIMED_GUIDE_N", (double)duration), ("TIMED_GUIDE_S", 0.0) }),
+                GuideDirections.guideSouth => (PulseGuideTracker.NorthSouth, new[] { ("TIMED_GUIDE_N", 0.0), ("TIMED_GUIDE_S", (double)duration) }),
+                GuideDirections.guideWest => (PulseGuideTracker.WestEast, new[] { ("TIMED_GUIDE_W", (double)duration), ("TIMED_GUIDE_E", 0.0) }),
+                GuideDirections.guideEast => (PulseGuideTracker.WestEast, new[] { ("TIMED_GUIDE_W", 0.0), ("TIMED_GUIDE_E", (double)duration) }),
+                _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
+            };
+
+            // Mark the axis before sending: the driver's Busy may arrive before SetNumberValues returns.
+            _pulseGuide.PulseSending(property, duration);
             try {
-                switch (direction) {
-                    case GuideDirections.guideNorth:
-                        SetNumberValue("TELESCOPE_TIMED_GUIDE_NS", "TIMED_GUIDE_N", duration);
-                        break;
-                    case GuideDirections.guideSouth:
-                        SetNumberValue("TELESCOPE_TIMED_GUIDE_NS", "TIMED_GUIDE_S", duration);
-                        break;
-                    case GuideDirections.guideWest:
-                        SetNumberValue("TELESCOPE_TIMED_GUIDE_WE", "TIMED_GUIDE_W", duration);
-                        break;
-                    case GuideDirections.guideEast:
-                        SetNumberValue("TELESCOPE_TIMED_GUIDE_WE", "TIMED_GUIDE_E", duration);
-                        break;
-                }
+                SetNumberValues(property, values);
             } catch (ArgumentException ex) {
+                _pulseGuide.PulseNotSent(property);
                 throw new NotImplementedException(ex.Message, ex);
+            } catch {
+                _pulseGuide.PulseNotSent(property);
+                throw;
             }
         }
 
@@ -867,6 +956,18 @@ namespace NINA.INDI.Devices {
         // caller polling forever with only its own cancellation token as a way out — the
         // same hardening the dome/focuser/rotator/filter-wheel MoveTimeout fixes applied.
         private static readonly TimeSpan MotionTimeout = TimeSpan.FromMinutes(5);
+
+        // Park phase limits; internal so tests can shorten them.
+        internal TimeSpan ParkAcknowledgeTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+        internal TimeSpan ParkMotionStartTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+        internal TimeSpan ParkCompletionTimeout { get; set; } = MotionTimeout;
+
+        internal TimeSpan ParkConfirmTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+        // How long a goto may run before it counts as failed; internal so tests can shorten it.
+        internal TimeSpan SlewCompletionTimeout { get; set; } = MotionTimeout;
 
         public async Task ParkAsync(CancellationToken ct = default) {
             // Preserve the NotImplementedException contract for mounts without park support —
@@ -890,7 +991,7 @@ namespace NINA.INDI.Devices {
             // Acknowledged send (mirrors INDIDome.Park): the previous fire-and-forget write
             // plus a fixed 100ms grace could return before a slow mount even flipped the
             // property to Busy, reporting "parked" while the mount was still moving.
-            if (!await SetSwitchValueAsync("TELESCOPE_PARK", "PARK", true, TimeSpan.FromSeconds(10))) {
+            if (!await SetSwitchValueAsync("TELESCOPE_PARK", "PARK", true, ParkAcknowledgeTimeout)) {
                 Logger.Warning($"[{DeviceName}] TELESCOPE_PARK was not acknowledged — polling for park completion anyway");
             }
 
@@ -903,15 +1004,13 @@ namespace NINA.INDI.Devices {
             // A mount already at the park position legitimately never moves — that case
             // falls through after the timeout. A timestamp-fresh Alert means the driver
             // reported the park attempt as FAILED.
-            var motionStartTimeout = TimeSpan.FromSeconds(10);
+            var motionStartTimeout = ParkMotionStartTimeout;
             var started = DateTime.UtcNow;
             var parkProp = GetProperty("TELESCOPE_PARK");
             while (!ct.IsCancellationRequested) {
                 parkProp = GetProperty("TELESCOPE_PARK");
-                if (parkProp?.State == PropertyState.Alert && parkProp.Timestamp != preSendTimestamp) {
-                    Logger.Error($"[{DeviceName}] Mount reported the park attempt as failed (TELESCOPE_PARK Alert)");
-                    throw new InvalidOperationException("Mount reported the park attempt as failed");
-                }
+                ThrowIfParkReportedFailed(parkProp, preSendTimestamp);
+
                 var pos = SampleRaDec();
                 if (Slewing || parkProp?.State == PropertyState.Busy || PositionMoved(lastPos, pos)) {
                     break;
@@ -929,15 +1028,51 @@ namespace NINA.INDI.Devices {
             // Busy on drivers that manage it properly.
             started = DateTime.UtcNow;
             while ((Slewing == true || parkProp?.State == PropertyState.Busy) && !ct.IsCancellationRequested) {
-                if (DateTime.UtcNow - started > MotionTimeout) {
-                    Logger.Warning($"[{DeviceName}] Mount did not report park completion within {MotionTimeout.TotalSeconds:F0}s — giving up waiting");
-                    break;
+                ThrowIfParkReportedFailed(parkProp, preSendTimestamp);
+
+                if (DateTime.UtcNow - started > ParkCompletionTimeout) {
+                    Logger.Error($"[{DeviceName}] Mount did not report park completion within {ParkCompletionTimeout.TotalSeconds:F0}s");
+                    throw new TimeoutException($"Mount did not finish parking within {ParkCompletionTimeout.TotalSeconds:F0}s");
                 }
+
                 await Task.Delay(200, ct);
                 parkProp = GetProperty("TELESCOPE_PARK");
             }
 
+            ct.ThrowIfCancellationRequested();
+            ThrowIfServerConnectionLost("Park");
+
+            // Confirmation: the driver has to report PARK=On in an update after the command.
+            // SetSwitchValue already set PARK=On in the local copy when sending, so that value
+            // only counts with a timestamp newer than the one before the send. Without this a
+            // mount that refused or lost the command, or stopped short of its park position,
+            // was reported as parked.
+            started = DateTime.UtcNow;
+            while (true) {
+                parkProp = GetProperty("TELESCOPE_PARK");
+                ThrowIfParkReportedFailed(parkProp, preSendTimestamp);
+
+                if (parkProp?.Timestamp != preSendTimestamp && GetSwitchPropertyValue("TELESCOPE_PARK", "PARK") == true) {
+                    break;
+                }
+
+                if (DateTime.UtcNow - started > ParkConfirmTimeout) {
+                    Logger.Error($"[{DeviceName}] Mount stopped but did not report TELESCOPE_PARK PARK=On within {ParkConfirmTimeout.TotalSeconds:F0}s");
+                    throw new InvalidOperationException("Mount did not report that it is parked");
+                }
+
+                await Task.Delay(200, ct);
+            }
+
             atHome = false;
+        }
+
+        // A timestamp-fresh Alert means the driver reported the park attempt as failed.
+        private void ThrowIfParkReportedFailed(INDIProperty parkProp, string preSendTimestamp) {
+            if (parkProp?.State == PropertyState.Alert && parkProp.Timestamp != preSendTimestamp) {
+                Logger.Error($"[{DeviceName}] Mount reported the park attempt as failed (TELESCOPE_PARK Alert)");
+                throw new InvalidOperationException("Mount reported the park attempt as failed");
+            }
         }
 
         public async Task UnparkAsync(CancellationToken ct = default) {
@@ -971,6 +1106,8 @@ namespace NINA.INDI.Devices {
                 await Task.Delay(200, ct);
                 parkProp = GetProperty("TELESCOPE_PARK");
             }
+
+            ThrowIfServerConnectionLost("Unpark");
         }
 
         public void SetPark() {
@@ -1143,19 +1280,39 @@ namespace NINA.INDI.Devices {
                         LogSlewWaitOutcome(ra, dec, started, polls, coordState);
                         break;
                     }
-                    if (DateTime.UtcNow - started > MotionTimeout) {
-                        Logger.Warning($"[{DeviceName}] Mount did not report slew completion within {MotionTimeout.TotalSeconds:F0}s — giving up waiting");
-                        break;
+                    if (DateTime.UtcNow - started > SlewCompletionTimeout) {
+                        // Not a success: the sequence would expose wherever the mount is. A mount still moving
+                        // is stopped, since the sequence goes on with its next step
+                        AbortSlewQuietly("Slew", "timed out");
+                        throw new TimeoutException($"The mount did not report the end of the slew within {SlewCompletionTimeout.TotalSeconds:F0} s");
                     }
 
                     ++polls;
                     await Task.Delay(500, ct);
                 }
+
+                // the loop also ends on cancellation, which must not count as an arrival
+                ct.ThrowIfCancellationRequested();
+                ThrowIfServerConnectionLost("Slew");
+            } catch (OperationCanceledException) {
+                // A cancelled sequence must not leave the mount driving to the old target
+                AbortSlewQuietly("Slew");
+                throw;
             } catch (ArgumentException ex) {
                 throw new NotImplementedException(ex.Message, ex);
             } catch (Exception ex) {
                 Logger.Error($"Error in SlewToCoordinatesTaskAsync: {ex.Message}");
                 throw;
+            }
+        }
+
+        // Stops the mount after a cancelled or timed out slew; a failure is only logged, the cancellation or timeout goes on.
+        private void AbortSlewQuietly(string what, string ending = "cancelled") {
+            try {
+                Logger.Info($"[{DeviceName}] {what} {ending}, aborting the mount's motion");
+                AbortSlew();
+            } catch (Exception ex) {
+                Logger.Warning($"[{DeviceName}] Could not abort the mount's motion after the {what} {ending}: {ex.Message}");
             }
         }
 
@@ -1298,14 +1455,20 @@ namespace NINA.INDI.Devices {
                     if (state != PropertyState.Busy) {
                         break;
                     }
-                    if (DateTime.UtcNow - started > MotionTimeout) {
-                        Logger.Warning($"[{DeviceName}] Mount did not report AltAz slew completion within {MotionTimeout.TotalSeconds:F0}s — giving up waiting");
-                        break;
+                    if (DateTime.UtcNow - started > SlewCompletionTimeout) {
+                        AbortSlewQuietly("AltAz slew", "timed out");
+                        throw new TimeoutException($"The mount did not report the end of the AltAz slew within {SlewCompletionTimeout.TotalSeconds:F0} s");
                     }
 
                     await Task.Delay(500, ct);
                     coordProp = GetProperty("HORIZONTAL_COORD");
                 }
+
+                ct.ThrowIfCancellationRequested();
+                ThrowIfServerConnectionLost("Slew");
+            } catch (OperationCanceledException) {
+                AbortSlewQuietly("AltAz slew");
+                throw;
             } catch (ArgumentException ex) {
                 throw new NotImplementedException(ex.Message, ex);
             } catch (Exception ex) {
@@ -1459,6 +1622,8 @@ namespace NINA.INDI.Devices {
                 // A cancelled wait is not a completed homing run either.
                 if (ct.IsCancellationRequested) return;
 
+                ThrowIfServerConnectionLost("Homing");
+
                 Logger.Debug($"Reached home");
                 atHome = true;
             } catch (ArgumentException ex) {
@@ -1475,12 +1640,6 @@ namespace NINA.INDI.Devices {
                 default:
                     return false;
             }
-        }
-
-        public PierSide DestinationSideOfPier(double ra, double dec) {
-            // INDI doesn't provide a standard way to predict pier side
-            // Return unknown/current pier side as best guess
-            return SideOfPier;
         }
     }
 }

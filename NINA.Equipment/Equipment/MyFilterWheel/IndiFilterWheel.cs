@@ -39,10 +39,18 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
 
         public string[] Names => GetProperty(nameof(IINDIFilterWheel.Names), new string[] { });
 
+        // FilterWheelVM waits while the position reads -1 and then checks it against the target, after resuming the
+        // guiding it stopped. A change that the lost INDI server connection ended reads as no slot from then on (without
+        // properties the device would read slot 0), also once the lost device was disposed, until the next change or
+        // connect: the check then fails instead of a setter exception skipping the guiding.
+        private const short NoSlotAfterLostServer = -2;
+        private volatile bool changeEndedByLostServer;
+
         public short Position {
-            get => (short)(device?.Position ?? -1);
+            get => changeEndedByLostServer ? NoSlotAfterLostServer : (short)(device?.Position ?? -1);
             set {
                 if (device != null && ShouldBeConnected) {
+                    changeEndedByLostServer = false;
                     device.Position = (int)value;
                     WaitForReadyState();
                     InvalidatePropertyCache();
@@ -50,12 +58,32 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
             }
         }
 
-        private Task<bool> WaitForReadyState(CancellationToken ct = default) {
-            do {
-                CoreUtil.Wait(TimeSpan.FromMilliseconds(100), ct);
-            } while (device.IsMoving);
+        // IsMoving is only cleared by a FILTER_SLOT update that is no longer Busy, so a driver
+        // or indiserver that stops answering mid-move would otherwise block the setter, and
+        // with it FilterWheelVM's filter-change semaphore, for the rest of the night. After
+        // the limit the setter returns and FilterWheelVM's position check reports the failure.
+        private static readonly TimeSpan MoveTimeout = TimeSpan.FromMinutes(1);
 
-            return Task.FromResult(true);
+        private void WaitForReadyState() {
+            var deadline = DateTime.UtcNow + MoveTimeout;
+
+            while (device.IsMoving) {
+                if (DateTime.UtcNow > deadline) {
+                    Logger.Warning($"Filter wheel did not report move completion within {MoveTimeout.TotalSeconds:F0}s - giving up waiting");
+                    // Without any answer the position still reads the target that was sent, which would pass
+                    // FilterWheelVM's position check and turn a retry to the same filter into a no-op
+                    device.AbandonMove();
+                    return;
+                }
+
+                Thread.Sleep(100);
+            }
+
+            // The wait also ends when the INDI server connection is lost
+            if (device.ServerConnectionLost) {
+                Logger.Error("Filter change failed: the connection to the INDI server was lost");
+                changeEndedByLostServer = true;
+            }
         }
 
         private IProfileService profileService;
@@ -79,7 +107,29 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
             return Task.CompletedTask;
         }
 
-        protected override Task PostConnect() {
+        /// <summary>
+        /// How long PostConnect waits for FILTER_NAME. Connect waits only for FILTER_SLOT, and some drivers define the
+        /// names later (after an indiserver recovery, or once they know the slot count).
+        /// </summary>
+        internal TimeSpan FilterNamesWait { get; set; } = TimeSpan.FromSeconds(5);
+
+        private static readonly TimeSpan FilterNamesPollInterval = TimeSpan.FromMilliseconds(100);
+
+        protected override async Task PostConnect() {
+            changeEndedByLostServer = false;
+
+            // Without names the import below would take the wheel for one without filters: it removed every filter of the
+            // profile (names, focus offsets, autofocus and flat settings) and saved the empty list
+            var waitUntil = DateTime.UtcNow + FilterNamesWait;
+            while (device.Names.Length == 0 && ShouldBeConnected && DateTime.UtcNow < waitUntil) {
+                await Task.Delay(FilterNamesPollInterval);
+            }
+
+            if (device.Names.Length == 0) {
+                Logger.Warning($"{Name}: the driver reported no filter names (FILTER_NAME) within {FilterNamesWait.TotalSeconds:0} s of connecting; the filter list of the profile is left as it is");
+                return;
+            }
+
             var filtersList = profileService.ActiveProfile.FilterWheelSettings.FilterWheelFilters;
 
             // Find duplicate positions due to data corruption and remove duplicates
@@ -126,7 +176,6 @@ namespace NINA.Equipment.Equipment.MyFilterWheel {
                 }
             }
             profileService.ActiveProfile.FilterWheelSettings.FilterWheelFilters = filtersList;
-            return Task.CompletedTask;
         }
 
         protected override IINDIFilterWheel GetInstance() {

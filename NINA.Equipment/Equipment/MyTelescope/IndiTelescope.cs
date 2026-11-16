@@ -32,9 +32,7 @@ using NINA.INDI.Devices;
 namespace NINA.Equipment.Equipment.MyTelescope {
 
     internal class IndiTelescope : IndiDevice<IINDITelescope>, ITelescope, IDisposable {
-        private static readonly TimeSpan MERIDIAN_FLIP_SLEW_RETRY_WAIT = TimeSpan.FromMinutes(1);
         private const int MERIDIAN_FLIP_SLEW_RETRY_ATTEMPTS = 20;
-        private const double TRACKING_RATE_EPSILON = 0.000001;
 
         public IndiTelescope(INDIDeviceInfo info, IProfileService profileService) : base(info) {
             this.profileService = profileService;
@@ -82,7 +80,12 @@ namespace NINA.Equipment.Equipment.MyTelescope {
         private bool canPulseGuide = true;
         public bool CanPulseGuide => canPulseGuide;
 
-        private bool canSetDeclinationRate = true;
+        // No custom tracking rates over INDI: INDITelescope never wrote TELESCOPE_TRACK_RATE, so a comet or asteroid
+        // tracked at the sidereal rate without an error. Writing it is not safe either: the telescope simulator takes
+        // TRACK_RATE_DE as a Dec axis rate whose sign flips with the pier side, other drivers are untested, and
+        // lx200_OnStep/lx200_proxisky send the rates as OnStepX guide rates. Without these, TrackingModes offers no
+        // Custom and SetCustomTrackingRate fails visibly; the native OnStepX driver has custom rates.
+        private bool canSetDeclinationRate = false;
         public bool CanSetDeclinationRate => canSetDeclinationRate;
 
         private bool canSetGuideRates = true;
@@ -93,10 +96,15 @@ namespace NINA.Equipment.Equipment.MyTelescope {
         private bool canSetPark = true;
         public bool CanSetPark => canSetPark;
 
-        private bool canSetPierSide = true;
+        // INDI's TELESCOPE_PIER_SIDE is read-only (and INDITelescope.SideOfPier has no setter), so a meridian flip slews
+        // instead; before, every flip logged an error trying to set it and waited 2 s
+        private bool canSetPierSide = false;
         public bool CanSetPierSide => canSetPierSide;
 
-        private bool canSetRightAscensionRate = true;
+        internal TimeSpan MeridianFlipSlewRetryWait { get; set; } = TimeSpan.FromMinutes(1);
+
+        // see canSetDeclinationRate
+        private bool canSetRightAscensionRate = false;
         public bool CanSetRightAscensionRate => canSetRightAscensionRate;
 
 
@@ -202,7 +210,9 @@ namespace NINA.Equipment.Equipment.MyTelescope {
             get {
                 try {
                     if (CanPulseGuide) {
-                        return GetProperty(nameof(IINDITelescope.IsPulseGuiding), false);
+                        // Not cached: a guider waits on this for the end of every pulse, and the value is pins' own
+                        // in-memory pulse tracker, so a fresh read costs nothing and a cached one delays the next pulse.
+                        return GetProperty(nameof(IINDITelescope.IsPulseGuiding), false, TimeSpan.Zero);
                     } else {
                         return false;
                     }
@@ -353,6 +363,8 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                 while (Slewing) {
                     await CoreUtil.Wait(TimeSpan.FromSeconds(profileService.ActiveProfile.ApplicationSettings.DevicePollingInterval));
                 }
+
+                ThrowIfServerConnectionLost("Setting the pier side");
                 return true;
             } catch (Exception ex) {
                 Logger.Error("Failed to flip side of pier", ex);
@@ -411,7 +423,14 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                     }
                     // Keep attempting slews as well, in case that's what it takes to flip to the other side of pier
                     Logger.Info($"Slewing to coordinates {targetCoordinates}. Attempt {retries + 1} / {MERIDIAN_FLIP_SLEW_RETRY_ATTEMPTS}");
-                    slewSuccess = await SlewToCoordinates(targetCoordinates, token);
+                    try {
+                        slewSuccess = await SlewToCoordinates(targetCoordinates, token);
+                    } catch (Exception ex) when (ex is InvalidOperationException or TimeoutException && Connected) {
+                        // A refused or timed out goto (e.g. the meridian limit not passed yet) is what the retries are
+                        // for; a lost INDI server ends the flip through the outer catch
+                        Logger.Warning($"Meridian flip goto failed: {ex.Message}");
+                        slewSuccess = false;
+                    }
 
                     if (checkAndSetPierSideAfterFirstSlew) {
                         if (SideOfPier != targetSideOfPier) {
@@ -434,11 +453,11 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                         } else {
                             var jsnowCoordinates = targetCoordinates.Transform(Epoch.JNOW);
                             var topocentricCoordinates = jsnowCoordinates.Transform(latitude: Angle.ByDegree(SiteLatitude), longitude: Angle.ByDegree(SiteLongitude), SiteElevation);
-                            Logger.Warning($"Failed to slew for Meridian Flip. Retry {retries} of {MERIDIAN_FLIP_SLEW_RETRY_ATTEMPTS} times with a {MERIDIAN_FLIP_SLEW_RETRY_WAIT} wait between each.  " +
+                            Logger.Warning($"Failed to slew for Meridian Flip. Retry {retries} of {MERIDIAN_FLIP_SLEW_RETRY_ATTEMPTS} times with a {MeridianFlipSlewRetryWait} wait between each.  " +
                                 $"SideOfPier: {SideOfPier}, RA: {jsnowCoordinates.RAString}, Dec: {jsnowCoordinates.DecString}, Azimuth: {topocentricCoordinates.Azimuth}");
 
-                            Notification.ShowWarning(string.Format(Loc.Instance["LblMeridianFlipRetry"], MERIDIAN_FLIP_SLEW_RETRY_WAIT.TotalSeconds, retries, MERIDIAN_FLIP_SLEW_RETRY_ATTEMPTS));
-                            await Task.Delay(MERIDIAN_FLIP_SLEW_RETRY_WAIT, token);
+                            Notification.ShowWarning(string.Format(Loc.Instance["LblMeridianFlipRetry"], MeridianFlipSlewRetryWait.TotalSeconds, retries, MERIDIAN_FLIP_SLEW_RETRY_ATTEMPTS));
+                            await Task.Delay(MeridianFlipSlewRetryWait, token);
                         }
                     }
                 } while (!success);
@@ -549,19 +568,58 @@ namespace NINA.Equipment.Equipment.MyTelescope {
             }
         }
 
+        /// <summary>
+        /// A guide pulse for the internal guider (MountPulseOutput): the checks of <see cref="PulseGuide"/>, but a failure
+        /// reaches the caller, which counts it towards its limit of failed pulses. PulseGuide logged it and showed a
+        /// notification for every pulse, and the guider counted the pulse as sent.
+        /// </summary>
+        internal void PulseGuideForGuider(GuideDirections direction, int duration) {
+            if (!ShouldBeConnected || device is null) {
+                throw new InvalidOperationException("mount not connected");
+            }
+
+            if (!CanPulseGuide) {
+                throw new InvalidOperationException("the mount cannot pulse guide");
+            }
+
+            if (AtPark) {
+                throw new InvalidOperationException("mount is parked");
+            }
+
+            try {
+                device.PulseGuide(direction, duration);
+            } catch (NotImplementedException e) {
+                throw new InvalidOperationException($"the mount has no timed guide property: {e.Message}", e);
+            }
+
+            InvalidatePropertyCache();
+        }
+
+        /// <summary>
+        /// Why the driver rejected the last pulse on this direction's axis, or null; taken once. The internal guider asks
+        /// after each pulse, so that a pulse the mount did not carry out is not counted as a move.
+        /// </summary>
+        internal string TakeRejectedPulse(GuideDirections direction) {
+            try {
+                return device?.TakeRejectedPulse(direction);
+            } catch (Exception e) {
+                Logger.Debug($"Could not read the outcome of the last guide pulse: {e.Message}");
+                return null;
+            }
+        }
+
         public async Task Park(CancellationToken token) {
             try {
                 if (CanPark) {
+                    // A failed park (driver Alert, timeout, no PARK=On) propagates, so TelescopeVM
+                    // reports "failed to park" with the reason and a Park Scope step fails instead
+                    // of the sequence going on with an unparked mount.
                     try {
                         await device.ParkAsync(token);
-                        InvalidatePropertyCache();
-                    } catch (OperationCanceledException) {
-                        throw;
                     } catch (NotImplementedException) {
                         canPark = false;
-                    } catch (Exception e) {
-                        Logger.Error(e);
-                        Notification.ShowExternalError(e.Message, Loc.Instance["LblASCOMDriverError"]);
+                    } finally {
+                        InvalidatePropertyCache();
                     }
                 }
             } catch (NotImplementedException) {
@@ -623,6 +681,8 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                         while (Slewing) {
                             await CoreUtil.Wait(TimeSpan.FromSeconds(profileService.ActiveProfile.ApplicationSettings.DevicePollingInterval), token);
                         }
+
+                        ThrowIfServerConnectionLost("Slew");
                     }
 
                     // Some AltAz mount INDI drivers reset tracking state when a SLEW goto
@@ -639,6 +699,9 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                 } catch (Exception e) {
                     Logger.Error(e);
                     Notification.ShowExternalError(e.Message, Loc.Instance["LblASCOMDriverError"]);
+                    // TelescopeVM ignores false: without the exception a refused or timed out slew counts as done, and
+                    // the sequence exposes wherever the mount is (as OnStepXTelescope does)
+                    throw;
                 } finally {
                     TargetCoordinates = null;
                 }
@@ -660,6 +723,8 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                         while (Slewing) {
                             await CoreUtil.Wait(TimeSpan.FromSeconds(profileService.ActiveProfile.ApplicationSettings.DevicePollingInterval), token);
                         }
+
+                        ThrowIfServerConnectionLost("Slew");
                     }
 
                     return true;
@@ -670,6 +735,9 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                 } catch (Exception e) {
                     Logger.Error(e);
                     Notification.ShowExternalError(e.Message, Loc.Instance["LblASCOMDriverError"]);
+                    // TelescopeVM ignores false: without the exception a refused or timed out slew counts as done, and
+                    // the sequence exposes wherever the mount is (as OnStepXTelescope does)
+                    throw;
                 } finally {
                     TargetCoordinates = null;
                 }
@@ -724,6 +792,7 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                 } catch (Exception e) {
                     Logger.Error(e);
                     Notification.ShowExternalError(e.Message, Loc.Instance["LblASCOMDriverError"]);
+                    throw;
                 }
             }
         }
@@ -736,9 +805,12 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                         InvalidatePropertyCache();
                     } catch (OperationCanceledException) {
                         throw;
+                    } catch (NotImplementedException) {
+                        throw;
                     } catch (Exception e) {
                         Logger.Error(e);
                         Notification.ShowExternalError(e.Message, Loc.Instance["LblASCOMDriverError"]);
+                        throw;
                     }
                 }
             } catch (NotImplementedException) {
@@ -932,6 +1004,13 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                 // Get the supported modes from the INDI device
                 var supportedModes = device.GetSupportedTrackingModes();
                 foreach (var mode in supportedModes) {
+                    // King would select TRACK_CUSTOM at whatever rate the driver holds: pins writes no
+                    // TELESCOPE_TRACK_RATE (see canSetDeclinationRate), so it would track sidereal or at another
+                    // client's rate while showing "King"
+                    if (mode == INDI.Enums.TrackingMode.King) {
+                        continue;
+                    }
+
                     trackingModes.Add(GetNINATrackingMode(mode));
                 }
 
@@ -978,16 +1057,14 @@ namespace NINA.Equipment.Equipment.MyTelescope {
                     // Get the current tracking mode from the INDI device
                     var mode = device.GetTrackingMode();
 
-                    // If custom mode, check for custom rates
+                    // TRACK_CUSTOM runs at a rate pins didn't set (another client's, or the driver's default), so it is
+                    // shown as what it is, not as King
                     if (mode == INDI.Enums.TrackingMode.King || mode == INDI.Enums.TrackingMode.Custom) {
-                        if (Math.Abs(DeclinationRate) >= TRACKING_RATE_EPSILON || Math.Abs(RightAscensionRate) >= TRACKING_RATE_EPSILON) {
-                            return new TrackingRate() {
-                                TrackingMode = TrackingMode.Custom,
-                                CustomRightAscensionRate = RightAscensionRate,
-                                CustomDeclinationRate = DeclinationRate
-                            };
-                        }
-                        return new TrackingRate() { TrackingMode = TrackingMode.King };
+                        return new TrackingRate() {
+                            TrackingMode = TrackingMode.Custom,
+                            CustomRightAscensionRate = RightAscensionRate,
+                            CustomDeclinationRate = DeclinationRate
+                        };
                     }
 
                     return new TrackingRate() { TrackingMode = GetNINATrackingMode(mode) };
@@ -1003,6 +1080,13 @@ namespace NINA.Equipment.Equipment.MyTelescope {
             set {
                 if (value == TrackingMode.Custom) {
                     throw new ArgumentException("TrackingMode cannot be set to Custom. Use SetCustomTrackingRate");
+                }
+
+                // Not offered (see GetTrackingModes), but reachable through the API's tracking mode number
+                if (value == TrackingMode.King) {
+                    Logger.Warning("King tracking is not available for INDI mounts: pins can't set the King rate");
+                    Notification.ShowWarning("King tracking is not available for INDI mounts");
+                    return;
                 }
 
                 if (ShouldBeConnected && CanSetTrackingEnabled) {
@@ -1075,18 +1159,35 @@ namespace NINA.Equipment.Equipment.MyTelescope {
             EquatorialSystem = Epoch.JNOW;
             trackingModes = GetTrackingModes();
             CheckMountTime();
+            NormalizeProfileLongitude();
 
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Before INDITelescope converted INDI's 0..360° east longitude, a location sync "to application" wrote a site
+        /// west of Greenwich into the profile as e.g. 355 instead of -5. Left there, "to telescope" reported a failed
+        /// sync at every connect (it sends 355 and reads back -5). Runs before the mount's location sync.
+        /// </summary>
+        private void NormalizeProfileLongitude() {
+            var longitude = profileService.ActiveProfile.AstrometrySettings.Longitude;
+            if (longitude <= 180 || longitude > 360) {
+                return;
+            }
+
+            var normalized = longitude - 360;
+            Logger.Warning($"The profile's longitude {longitude}° is in INDI's 0..360° form, written by an earlier version; changing it to {normalized}°");
+            profileService.ChangeLongitude(normalized);
         }
 
         protected override IINDITelescope GetInstance() {
             return device ??= new INDITelescope(_device);
         }
 
-        public PierSide DestinationSideOfPier(Coordinates coordinates) {
-            coordinates = coordinates.Transform(EquatorialSystem);
-            var pierSide = device.DestinationSideOfPier(coordinates.RA, coordinates.Dec);
-            return (PierSide)pierSide;
-        }
+        // INDI has no property for the pier side a goto ends on: the side a German mount normally takes for the hour angle,
+        // as TelescopeVM computes it for a mount that cannot tell. The current side would be wrong for every goto across
+        // the meridian, e.g. for the dome's position
+        public PierSide DestinationSideOfPier(Coordinates coordinates) =>
+            Astrometry.MeridianFlip.ExpectedPierSide(coordinates.Transform(Epoch.JNOW), Angle.ByHours(SiderealTime));
     }
 }

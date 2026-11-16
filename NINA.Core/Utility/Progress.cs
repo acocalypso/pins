@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using NINA.Core.Model;
 using NINA.Core.SignalR;
@@ -31,55 +32,109 @@ namespace NINA.Core.Utility {
         private static readonly Dictionary<string, string> lastStatusText = new Dictionary<string, string>();
         private static readonly int throttleIntervalMs = 500;
 
+        // The newest update a throttle held back per source, sent when the interval is over unless a newer message went
+        // out first: otherwise the last tick of a progress (e.g. 100 %) could be the one that never arrives
+        private static readonly Dictionary<string, (ProgressMessage Message, Timer Timer)> held = new();
+
+        // Guards the throttle state and the order of the sends. The broadcaster is invoked under it, in the order the
+        // messages were published: out of order, an update could reach the clients (and the broadcaster's list of active
+        // progresses, which new clients get) after the delete of its source and leave a progress bar that never goes away.
+        // The sends are not awaited: one client that stopped reading (a phone that lost the WLAN) held every later
+        // message back for everyone until SignalR dropped it (~30 s). The order per client is kept by SignalR, which
+        // starts the write to every connection inside SendAsync and queues the writes of a connection in order.
+        // The broadcaster's synchronous part therefore runs on the publishing thread, under the gate: it must not block.
+        private static readonly object gate = new();
+
+        // Under gate
         private static void BroadcastProgress(ProgressMessage message) {
+            var broadcaster = Broadcaster;
+            if (broadcaster == null) {
+                return;
+            }
+
+            Task send;
             try {
-                var task = Broadcaster?.Invoke(message);
-                if (task != null) {
-                    _ = task; // fire and forget
-                }
+                send = broadcaster(message);
             } catch (Exception ex) {
                 Logger.Error($"Failed to broadcast progress: {ex}");
+                return;
             }
+
+            send?.ContinueWith(
+                t => Logger.Error($"Failed to broadcast progress: {t.Exception}"),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
 
+        // Under gate
         private static bool ShouldThrottle(string source, string status) {
             if (string.IsNullOrEmpty(source)) {
                 return false;
             }
 
-            lock (lastSendTime) {
-                // Always send when the status text itself has changed
-                if (!lastStatusText.TryGetValue(source, out var prevStatus) || prevStatus != status) {
-                    lastSendTime[source] = DateTime.UtcNow;
-                    lastStatusText[source] = status;
-                    return false;
+            // Always send when the status text itself has changed
+            if (!lastStatusText.TryGetValue(source, out var prevStatus) || prevStatus != status) {
+                lastSendTime[source] = DateTime.UtcNow;
+                lastStatusText[source] = status;
+                return false;
+            }
+
+            // Same status text — apply time-based throttle to suppress rapid progress ticks
+            if (!lastSendTime.ContainsKey(source)) {
+                lastSendTime[source] = DateTime.UtcNow;
+                return false;
+            }
+
+            var timeSinceLastSend = DateTime.UtcNow - lastSendTime[source];
+            if (timeSinceLastSend.TotalMilliseconds >= throttleIntervalMs) {
+                lastSendTime[source] = DateTime.UtcNow;
+                return false;
+            }
+
+            return true; // Same status, not enough time has passed — throttle this message
+        }
+
+        // Under gate
+        private static void Hold(ProgressMessage message) {
+            if (held.TryGetValue(message.Source, out var existing)) {
+                held[message.Source] = (message, existing.Timer);
+                return;
+            }
+
+            var due = TimeSpan.FromMilliseconds(throttleIntervalMs) - (DateTime.UtcNow - lastSendTime[message.Source]);
+            var timer = new Timer(SendHeld, message.Source, due < TimeSpan.Zero ? TimeSpan.Zero : due, Timeout.InfiniteTimeSpan);
+            held[message.Source] = (message, timer);
+        }
+
+        private static void SendHeld(object state) {
+            var source = (string)state;
+            lock (gate) {
+                if (!held.Remove(source, out var entry)) {
+                    return;
                 }
 
-                // Same status text — apply time-based throttle to suppress rapid progress ticks
-                if (!lastSendTime.ContainsKey(source)) {
-                    lastSendTime[source] = DateTime.UtcNow;
-                    return false;
-                }
-
-                var timeSinceLastSend = DateTime.UtcNow - lastSendTime[source];
-                if (timeSinceLastSend.TotalMilliseconds >= throttleIntervalMs) {
-                    lastSendTime[source] = DateTime.UtcNow;
-                    return false;
-                }
-
-                return true; // Same status, not enough time has passed — throttle this message
+                entry.Timer.Dispose();
+                lastSendTime[source] = DateTime.UtcNow;
+                BroadcastProgress(entry.Message);
             }
         }
 
+        // Under gate: a newer message of the source supersedes what was held back
+        private static void DropHeld(string source) {
+            if (!string.IsNullOrEmpty(source) && held.Remove(source, out var entry)) {
+                entry.Timer.Dispose();
+            }
+        }
+
+        // Under gate
         private static void ClearThrottleForSource(string source) {
             if (string.IsNullOrEmpty(source)) {
                 return;
             }
 
-            lock (lastSendTime) {
-                lastSendTime.Remove(source);
-                lastStatusText.Remove(source);
-            }
+            lastSendTime.Remove(source);
+            lastStatusText.Remove(source);
         }
 
         public static void PublishNewStatus(ApplicationStatus status) {
@@ -100,15 +155,13 @@ namespace NINA.Core.Utility {
                 State = "create",
                 Timestamp = DateTime.UtcNow,
             };
-            BroadcastProgress(message);
+            lock (gate) {
+                DropHeld(status.Source);
+                BroadcastProgress(message);
+            }
         }
 
         public static void PublishUpdateStatus(ApplicationStatus status) {
-            // Throttle only when the same status text repeats rapidly (e.g. progress ticks)
-            if (ShouldThrottle(status.Source, status.Status)) {
-                return;
-            }
-
             ProgressMessage message = new ProgressMessage {
                 Source = status.Source,
                 Status = status.Status,
@@ -126,20 +179,31 @@ namespace NINA.Core.Utility {
                 State = "update",
                 Timestamp = DateTime.UtcNow,
             };
-            BroadcastProgress(message);
+            lock (gate) {
+                // Throttle only when the same status text repeats rapidly (e.g. progress ticks); the newest is sent later
+                if (ShouldThrottle(status.Source, status.Status)) {
+                    Hold(message);
+                    return;
+                }
+
+                DropHeld(status.Source);
+                BroadcastProgress(message);
+            }
         }
         
         public static void PublishRemoveStatus(ApplicationStatus status) {
-            // Clear throttle tracking for this source when removing
-            ClearThrottleForSource(status.Source);
-
             ProgressMessage message = new ProgressMessage {
                 Source = status.Source,
                 Status = string.Empty,
                 State = "delete",
                 Timestamp = DateTime.UtcNow,
             };
-            BroadcastProgress(message);
+            lock (gate) {
+                // Clear throttle tracking for this source when removing; nothing held back may follow the delete
+                ClearThrottleForSource(status.Source);
+                DropHeld(status.Source);
+                BroadcastProgress(message);
+            }
         }
     }
 }
