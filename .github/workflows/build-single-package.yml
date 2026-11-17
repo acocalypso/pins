@@ -529,8 +529,9 @@ jobs:
                 git clone https://github.com/nitr57/nina.plugin.livestack NINA.Plugins/LiveStack
                 ;;
               plugin-ninaapi)
-                # acocalypso/ninaAPI is nitr57/ninaAPI (dev) plus the MLAstro RPA relay routes.
-                git clone --branch dev --single-branch https://github.com/acocalypso/ninaAPI NINA.Plugins/ninaAPI
+                # Build from nitr57/ninaAPI directly (dev carries the MLAstro RPA relay
+                # since #6), so no fork has to be kept in sync.
+                git clone --branch dev --single-branch https://github.com/nitr57/ninaAPI NINA.Plugins/ninaAPI
                 ;;
               plugin-orbuculum)
                 git clone https://github.com/nitr57/nina.plugin.orbuculum NINA.Plugins/nina.plugin.orbuculum
