@@ -345,11 +345,21 @@ jobs:
             ./usr/local/bin/pins-wifi-networks.py \
             ./usr/local/bin/pins-wifi-watchdog.sh \
             ./usr/local/bin/ensure-wayvnc-auth.sh \
+            ./usr/local/bin/system-upgrade.sh \
+            ./usr/local/bin/pins-upgrade-report.py \
+            ./usr/local/bin/ensure-required-packages.sh \
+            ./etc/systemd/system/pins-ensure-required-packages.service \
             ./etc/NetworkManager/dispatcher.d/90-pins-wifi-recovery \
             ./etc/systemd/system/pins-wifi-watchdog.timer \
             ./etc/sudoers.d/sysupdate-api; do
             grep -Fxq "$required_path" <<< "$package_contents"
           done
+          # Legacy pinsdaemon updaters keep back a pinsdaemon with a new Depends or
+          # Recommends; avahi-utils is installed at runtime instead.
+          if dpkg-deb -f "$deb_path" Depends Recommends | grep -w avahi-utils >/dev/null; then
+            echo "pinsdaemon must not Depend on/Recommend avahi-utils" >&2
+            return 1
+          fi
           popd >/dev/null
           deb_path="artifacts/$(basename "$deb_path")"
           sha256sum "$deb_path" > "$deb_path.sha256"
